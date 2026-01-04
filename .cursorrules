@@ -1,0 +1,316 @@
+# Cursor AI Rules for Assistant Package
+
+## General Principles
+
+1. **Strict Typing**: All code must have complete type hints
+2. **Explicitness**: Clear and explicit code over clever shortcuts
+3. **Documentation**: All public APIs must have docstrings
+4. **Testing**: Write tests for all new functionality
+5. **Agent-Friendly**: Code should be easily understood by AI agents
+
+## Python Version
+
+- Target: Python 3.13+
+- Use modern Python features (match statements, union types with |, etc.)
+
+## Type Hints
+
+### Required
+- All function signatures must have complete type hints
+- All class attributes must be typed
+- Use `typing` module for complex types
+- Avoid `Any` unless absolutely necessary
+
+### Examples
+```python
+from typing import Optional, List, Dict
+
+def process_data(
+    items: List[str],
+    config: Dict[str, Any],
+    timeout: Optional[int] = None
+) -> Dict[str, List[str]]:
+    """Process items according to configuration."""
+    ...
+```
+
+## Code Style
+
+### Formatter: Black
+- Line length: 100 characters
+- Target: Python 3.13
+
+### Linter: Ruff
+- All rules enabled (see pyproject.toml)
+- Fix issues automatically when possible
+
+### Type Checker: mypy
+- Strict mode enabled
+- No untyped definitions allowed
+
+## Docstrings
+
+### Format: Google Style
+```python
+def function_name(param1: str, param2: int) -> bool:
+    """Brief description of function.
+
+    Extended description if needed. Explain the purpose and behavior.
+
+    Args:
+        param1: Description of param1.
+        param2: Description of param2.
+
+    Returns:
+        Description of return value.
+
+    Raises:
+        ValueError: Description of when this is raised.
+
+    Example:
+        >>> function_name("test", 42)
+        True
+    """
+    ...
+```
+
+### Required Sections
+- Brief summary (always)
+- Args (for all parameters)
+- Returns (if not None)
+- Raises (for public APIs)
+- Example (encouraged for public APIs)
+
+## Naming Conventions
+
+- Functions/Variables: `snake_case`
+- Classes: `PascalCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Private: `_leading_underscore`
+- Type Variables: `T`, `K`, `V` (single uppercase letter or short PascalCase)
+
+## Import Organization
+
+1. Standard library (alphabetical)
+2. Third-party packages (alphabetical)
+3. Local application imports (alphabetical)
+
+Separate groups with a blank line.
+
+```python
+import os
+import sys
+from typing import List, Optional
+
+import numpy as np
+import pandas as pd
+
+from assistant.core import BaseClass
+from assistant.utils import helper_function
+```
+
+## Error Handling
+
+### Use Specific Exceptions
+```python
+# Good
+raise ValueError("Invalid input: must be positive")
+
+# Bad
+raise Exception("Invalid input")
+```
+
+### Custom Exceptions
+Create custom exception hierarchy in `assistant.exceptions`:
+```python
+class AssistantError(Exception):
+    """Base exception for assistant package."""
+    pass
+
+class ConfigurationError(AssistantError):
+    """Configuration-related errors."""
+    pass
+```
+
+### Document Exceptions
+Always document exceptions in docstrings.
+
+## Function Design
+
+### Prefer Pure Functions
+- No side effects when possible
+- Deterministic behavior
+- Easy to test
+
+### Single Responsibility
+- Each function does one thing
+- Keep functions small and focused
+- Extract complex logic into helper functions
+
+### Dependency Injection
+```python
+# Good - dependencies passed as parameters
+def process(data: List[str], validator: Validator) -> List[str]:
+    ...
+
+# Avoid - hard-coded dependencies
+def process(data: List[str]) -> List[str]:
+    validator = DefaultValidator()  # Hard-coded
+    ...
+```
+
+## Class Design
+
+### Use Dataclasses
+For simple data containers:
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Config:
+    """Configuration settings."""
+    api_key: str
+    timeout: int = 30
+```
+
+### Use Protocols
+For interfaces/duck typing:
+```python
+from typing import Protocol
+
+class Processor(Protocol):
+    """Processor interface."""
+
+    def process(self, data: str) -> str:
+        """Process data."""
+        ...
+```
+
+## Testing
+
+### File Naming
+- Test files: `test_*.py`
+- Match structure: `tests/` mirrors `src/assistant/`
+
+### Test Functions
+```python
+def test_function_name_with_description() -> None:
+    """Test that function_name does X when Y."""
+    # Arrange
+    input_data = [1, 2, 3]
+
+    # Act
+    result = process(input_data)
+
+    # Assert
+    assert result == expected
+```
+
+### Use Fixtures
+```python
+import pytest
+
+@pytest.fixture
+def sample_data() -> List[int]:
+    """Provide sample data for tests."""
+    return [1, 2, 3, 4, 5]
+```
+
+## Documentation
+
+### When Adding/Modifying Code
+
+1. Update docstrings in the code
+2. Update module documentation in `docs/modules/`
+3. Create ADR if making architectural decision
+4. Update README if changing public API
+
+### Architecture Decisions
+
+Create ADR in `docs/adr/` for:
+- Major architectural changes
+- Technology choices
+- Design pattern decisions
+- Breaking changes
+
+## Anti-Patterns to Avoid
+
+### Mutable Default Arguments
+```python
+# Bad
+def append_to(item: str, items: List[str] = []) -> List[str]:
+    ...
+
+# Good
+def append_to(item: str, items: Optional[List[str]] = None) -> List[str]:
+    if items is None:
+        items = []
+    ...
+```
+
+### Bare Except Clauses
+```python
+# Bad
+try:
+    risky_operation()
+except:
+    pass
+
+# Good
+try:
+    risky_operation()
+except (ValueError, KeyError) as e:
+    logger.error(f"Operation failed: {e}")
+```
+
+### Implicit Type Conversions
+```python
+# Bad
+def process(value: Any) -> str:
+    return str(value)
+
+# Good
+def process(value: Union[str, int, float]) -> str:
+    return str(value)
+```
+
+## Project Structure
+
+```
+src/assistant/          # Main package
+tests/                  # Tests (mirror src structure)
+docs/
+  ├── architecture/     # High-level architecture
+  ├── adr/             # Architecture Decision Records
+  ├── modules/         # Per-module documentation
+  └── agents/          # Agent-specific guides
+```
+
+## Before Committing
+
+1. Run type checker: `mypy src/`
+2. Run linter: `ruff check src/`
+3. Run formatter: `black src/`
+4. Run tests: `pytest`
+5. Update documentation
+6. Ensure all TODOs are addressed or documented
+
+## AI Agent Instructions
+
+When working with this codebase:
+
+1. **Read First**: Check `docs/agents/` for guidelines
+2. **Type Everything**: Never omit type hints
+3. **Document Changes**: Update relevant docs
+4. **Test Coverage**: Write tests for new code
+5. **Follow Patterns**: Use established patterns from `docs/agents/common-patterns.md`
+6. **ADRs for Big Decisions**: Document architectural choices
+7. **Stay Consistent**: Match existing code style
+
+## Questions or Clarifications
+
+If something is unclear:
+1. Check `docs/agents/working-with-this-codebase.md`
+2. Review `docs/agents/coding-conventions.md`
+3. Look at existing code for examples
+4. Check relevant ADR in `docs/adr/`
