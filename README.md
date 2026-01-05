@@ -2,9 +2,17 @@
 
 An AI agent that organizes your knowledge from multiple sources and summarizes topics.
 
+Assistant reads your notes from the sources you configure, it ingests your
+knowledge base from different sources, it processes and it generates summaries
+of topics you ask for.
+
+It is also able to keep track of a list of blogs and feeds you configure and
+include them in the summary as sources.
+
 ## Overview
 
-My overview here
+...
+
 
 ## Installation
 
