@@ -1,5 +1,14 @@
 # Main TODO list
 
+This is isting tasks for humans, not for agents.
+
+## Architecture and planning
+
+- Write a high level architecture document
+- Clean up the agents file
+- Ensure the coding standard are defined somewhere
+- Put together the first modules
+
 ## Evernote integration
 
 - Prepare python modules
