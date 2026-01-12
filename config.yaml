@@ -1,0 +1,21 @@
+# Assistant Configuration
+
+# Database connection parameters
+database:
+  host: localhost
+  port: 5432
+  user: assistant
+  password: assistant
+  name: assistant
+  # Alternative: use DATABASE_URL environment variable to override all above
+  # DATABASE_URL: postgresql://assistant:assistant@localhost:5432/assistant
+
+# Document storage path (can be overridden with DOCUMENT_STORAGE_PATH env var)
+document_storage_path: data/documents
+
+# External source configurations
+external_sources:
+  fake:
+    # Fake provider configuration for testing
+    enabled: true
+    # Add any fake-specific configuration here

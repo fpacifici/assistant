@@ -8,8 +8,7 @@ Welcome to the assistant package documentation!
 docs/
 ├── architecture/        # High-level system architecture
 ├── adr/                # Architecture Decision Records
-├── modules/            # Per-module documentation
-└── agents/             # AI agent working guidelines
+└── modules/            # Per-module documentation
 ```
 
 ## Documentation Types
@@ -32,11 +31,6 @@ Records of significant architectural decisions, including context, alternatives 
 
 Detailed documentation for each module in the package. Includes public APIs, usage examples, and implementation notes.
 
-### Agent Documentation (`agents/`)
-**Audience**: AI agents (Claude, Cursor, etc.)
-**Purpose**: Guide AI agents working with the codebase
-
-Specific guidelines, conventions, and patterns for AI agents. Human developers will also find this useful for understanding coding standards.
 
 ## Quick Start Guides
 
