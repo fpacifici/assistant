@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import uuid
+import uuid as uuid_module
 from datetime import datetime  # noqa: TC003
 from enum import Enum
-from typing import ClassVar
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -37,12 +36,12 @@ class Document(Base):
     """
 
     __tablename__ = "documents"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "assistant"}
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
 
-    uuid: Mapped[uuid.UUID] = mapped_column(
+    uuid: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid_module.uuid4,
         nullable=False,
     )
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -59,7 +58,7 @@ class Document(Base):
         String(20),
         nullable=False,
     )
-    source_id: Mapped[uuid.UUID] = mapped_column(
+    source_id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("external_sources.id"),
         nullable=False,
@@ -83,12 +82,12 @@ class ExternalSource(Base):
     """
 
     __tablename__ = "external_sources"
-    __table_args__: ClassVar[dict[str, str]] = {"schema": "assistant"}
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
 
-    id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid_module.uuid4,
     )
     provider: Mapped[str] = mapped_column(String(100), nullable=False)
     provider_query: Mapped[str] = mapped_column(Text, nullable=True)

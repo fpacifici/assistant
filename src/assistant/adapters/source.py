@@ -15,6 +15,14 @@ class ExternalSource(ABC):
     documents from external systems.
     """
 
+    def __init__(self, config: dict[str, Any]) -> None:
+        """Initialize the external source implementation.
+
+        Args:
+            config: Provider-specific configuration dictionary.
+        """
+        self._config = config
+
     @abstractmethod
     def get_document(self, external_id: str) -> DocumentContent:
         """Fetch a document by its external ID.
