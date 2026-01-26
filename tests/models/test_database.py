@@ -35,9 +35,13 @@ def test_get_database_url_from_config(tmp_path: Path) -> None:
     # Mock the Config class import inside get_database_url
     with patch("assistant.config.Config") as mock_config_class:
         mock_config_instance = mock_config_class.return_value
-        mock_config_instance.get_database_url.return_value = (
-            "postgresql://testuser:testpass@testhost:5433/testdb"
-        )
+        mock_config_instance.get_database_config.return_value = {
+            "host": "testhost",
+            "port": 5433,
+            "user": "testuser",
+            "password": "testpass",
+            "name": "testdb",
+        }
 
         url = get_database_url()
         assert "testuser" in url
@@ -53,7 +57,14 @@ def test_get_database_url_from_env() -> None:
     # Mock the Config class import inside get_database_url
     with patch("assistant.config.Config") as mock_config_class:
         mock_config_instance = mock_config_class.return_value
-        mock_config_instance.get_database_url.return_value = test_url
+        mock_config_instance.get_database_config.return_value = {
+            "host": "localhost",
+            "port": 5432,
+            "user": "assistant",
+            "password": "assistant",
+            "name": "assistant",
+            "url": test_url,
+        }
 
         url = get_database_url()
         assert url == test_url

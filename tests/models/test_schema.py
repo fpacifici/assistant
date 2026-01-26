@@ -2,10 +2,12 @@
 
 from datetime import UTC, datetime
 
+from sqlalchemy.orm import Session
+
 from assistant.models.schema import Document, DocumentFormat, ExternalSource
 
 
-def test_external_source_creation(db_session) -> None:
+def test_external_source_creation(db_session: Session) -> None:
     """Test creating an ExternalSource."""
     source = ExternalSource(
         provider="fake",
@@ -19,7 +21,7 @@ def test_external_source_creation(db_session) -> None:
     assert source.provider_query == '{"notebook": "test"}'
 
 
-def test_document_creation(db_session) -> None:
+def test_document_creation(db_session: Session) -> None:
     """Test creating a Document."""
     source = ExternalSource(provider="fake")
     db_session.add(source)
@@ -43,7 +45,7 @@ def test_document_creation(db_session) -> None:
     assert doc.source_id == source.id
 
 
-def test_document_external_source_relationship(db_session) -> None:
+def test_document_external_source_relationship(db_session: Session) -> None:
     """Test relationship between Document and ExternalSource."""
     source = ExternalSource(provider="fake")
     db_session.add(source)
@@ -65,7 +67,7 @@ def test_document_external_source_relationship(db_session) -> None:
     assert doc in source.documents
 
 
-def test_document_format_enum(db_session) -> None:
+def test_document_format_enum(db_session: Session) -> None:
     """Test DocumentFormat enum values."""
     source = ExternalSource(provider="fake")
     db_session.add(source)

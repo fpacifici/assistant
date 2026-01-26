@@ -14,7 +14,7 @@ def get_database_url() -> str:
     """Get database connection URL from configuration.
 
     Uses the Config class to read database connection parameters from
-    config.yaml file, with support for DATABASE_URL environment variable override.
+    config.yaml file, with support for environment-variable overrides.
 
     Returns:
         Database connection URL string.
@@ -25,7 +25,13 @@ def get_database_url() -> str:
     from assistant.config import Config
 
     config = Config()
-    return config.get_database_url()
+    db_config = config.get_database_config()
+    if "url" in db_config:
+        return db_config["url"]
+    return (
+        f"postgresql://{db_config['user']}:{db_config['password']}@"
+        f"{db_config['host']}:{db_config['port']}/{db_config['name']}"
+    )
 
 
 def get_engine() -> Engine:

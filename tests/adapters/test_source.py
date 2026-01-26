@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 import pytest
 
 from assistant.adapters.content import DocumentContent
-from assistant.adapters.source import ExternalSource
+from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 
 
 def test_external_source_is_abstract() -> None:
     """Test that ExternalSource cannot be instantiated directly."""
     with pytest.raises(TypeError):
-        ExternalSource()  # type: ignore[abstract]
+        ExternalSource(ExternalSourceInstanceConfig(provider_config={}, query_params={}))  # type: ignore[abstract]
 
 
 def test_external_source_interface_methods() -> None:
@@ -29,7 +29,7 @@ def test_fake_external_source_implements_interface() -> None:
     """Test that FakeExternalSource implements the interface."""
     from assistant.adapters.plugins.fake import FakeExternalSource
 
-    fake = FakeExternalSource({})
+    fake = FakeExternalSource(ExternalSourceInstanceConfig(provider_config={}, query_params={}))
 
     # Should be able to call the methods
     assert isinstance(fake, ExternalSource)
@@ -38,7 +38,7 @@ def test_fake_external_source_implements_interface() -> None:
 
     # Should be able to list documents
     since = datetime.min.replace(tzinfo=UTC)
-    doc_ids = fake.list_documents(since, {})
+    doc_ids = fake.list_documents(since)
     assert isinstance(doc_ids, list)
     assert len(doc_ids) > 0
 

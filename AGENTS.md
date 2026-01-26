@@ -33,6 +33,10 @@ assistant/
 
 ## Quick Start
 
+> [!NOTE]
+> All development operations have to be done inside a virtual environment
+> See the instructions below to know how to setup the venv
+
 ### Setup Development Environment
 
 #### Quick Setup (Recommended)
@@ -69,7 +73,7 @@ pre-commit install
 
 ```bash
 # Run all tests
-pytest
+make test
 
 # Run with coverage
 pytest --cov=assistant --cov-report=term-missing
@@ -108,26 +112,6 @@ black --check src/
 # Auto-fix issues
 ruff check --fix src/
 black src/
-```
-
-## Project Structure
-
-```
-/Users/filippopacifici/code/assistant/
-├── src/
-│   └── assistant/          # Main package
-│       └── __init__.py
-├── tests/                  # Test files (mirror src structure)
-├── docs/
-│   ├── architecture/       # High-level architecture docs
-│   ├── adr/               # Architecture Decision Records
-│   ├── modules/           # Per-module documentation
-│   └── agents/            # AI agent-specific docs
-├── .claude/               # Claude-specific configurations
-├── .cursorrules           # Cursor AI code style rules
-├── pyproject.toml         # Project configuration and dependencies
-├── README.md              # User-facing documentation
-└── LICENSE                # Project license
 ```
 
 ## Development Workflow
