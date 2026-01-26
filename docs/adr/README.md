@@ -41,4 +41,4 @@ ADRs should be named: `XXXX-short-title.md` where XXXX is a sequential number (e
 
 ## Index
 
-Add the list of ADR here
+- `0001-session-ownership.md` - Session ownership and dependency injection

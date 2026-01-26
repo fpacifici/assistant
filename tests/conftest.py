@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from assistant.config import Config
 from assistant.models.database import Base
+from assistant.models.schema import Document, ExternalSource
 
 
 @pytest.fixture
@@ -120,8 +121,6 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
 
     # SQLite doesn't support schemas, so we temporarily modify Base.metadata
     # to remove schemas from table definitions
-    from assistant.models.schema import Document, ExternalSource
-
     # Get the original table objects
     doc_table = Document.__table__
     source_table = ExternalSource.__table__

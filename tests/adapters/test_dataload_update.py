@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
+import assistant.adapters.registry as registry_module
 from assistant.adapters.dataload import load_data
 from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.registry import get_registry
@@ -22,8 +23,8 @@ def test_load_data_updates_existing_document(
 ) -> None:
     """Test that load_data updates existing documents."""
 
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source
     source = ExternalSource(provider="fake", provider_query="{}")
@@ -82,6 +83,7 @@ def test_load_data_handles_provider_error(
     document_storage_dir: Path,  # noqa: ARG001
 ) -> None:
     """Test that load_data handles provider errors gracefully."""
+    registry_module._registry = None
     registry = get_registry()
 
     # Create a mock provider that raises an error
@@ -90,10 +92,10 @@ def test_load_data_handles_provider_error(
             msg = "Provider error"
             raise RuntimeError(msg)
 
-    registry.register("error", ErrorProvider)
+    registry._providers["fake"] = ErrorProvider
 
     # Create an external source with error provider
-    source = ExternalSource(provider="error", provider_query="{}")
+    source = ExternalSource(provider="fake", provider_query="{}")
     db_session.add(source)
     db_session.commit()
 
@@ -127,8 +129,8 @@ def test_load_data_filters_by_since_datetime(
     document_storage_dir: Path,  # noqa: ARG001
 ) -> None:
     """Test that load_data only fetches documents updated since the most recent one."""
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source
     source = ExternalSource(provider="fake", provider_query="{}")

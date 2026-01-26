@@ -61,6 +61,10 @@ def load_data(config: Config | None = None) -> None:
                     registry=registry,
                     storage_path=storage_path,
                 )
+            except (ExternalSourceNotFoundError, ProviderDisabledError, ValueError):
+                # These indicate a configuration / registry / DB consistency issue and should fail
+                # the whole run so the operator can fix it.
+                raise
             except Exception:
                 logger.exception(
                     "Error loading data from source %s",
@@ -97,18 +101,10 @@ def _load_source_data(
 
     since = most_recent[0] if most_recent else datetime.min.replace(tzinfo=UTC)
 
-    # Get provider instance
-    try:
-        provider = registry.get_provider(external_source.id, session=session)
-    except ProviderDisabledError:
-        logger.info("Skipping disabled provider type: %s", external_source.provider)
-        return
-    except ExternalSourceNotFoundError:
-        logger.warning("External source %s not found", external_source.id)
-        return
-    except ValueError:
-        logger.exception("Provider type '%s' not registered", external_source.provider)
-        return
+    # Ensure provider instance is registered for this source id, then retrieve it.
+    # Any registry/config/db consistency issues should bubble up to fail the whole run.
+    registry.register(external_source.id, session=session)
+    provider = registry.get_provider(external_source.id)
 
     # List documents updated since the most recent one
     try:

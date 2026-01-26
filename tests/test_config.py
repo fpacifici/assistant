@@ -115,8 +115,8 @@ def test_config_get_external_source_config(tmp_path: Path) -> None:
     assert missing_config == {}
 
 
-def test_config_get_database_url_from_config(tmp_path: Path) -> None:
-    """Test getting database URL from config file."""
+def test_config_get_database_config_from_components(tmp_path: Path) -> None:
+    """Test getting database config components from YAML."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
         "database:\n"
@@ -128,17 +128,19 @@ def test_config_get_database_url_from_config(tmp_path: Path) -> None:
     )
 
     config = Config(config_path=config_file)
-    url = config.get_database_url()
+    db_config = config.get_database_config()
 
-    assert url == "postgresql://testuser:testpass@testhost:5433/testdb"
-    assert "testuser" in url
-    assert "testhost" in url
-    assert "5433" in url
-    assert "testdb" in url
+    assert db_config == {
+        "host": "testhost",
+        "port": 5433,
+        "user": "testuser",
+        "password": "testpass",
+        "name": "testdb",
+    }
 
 
-def test_config_get_database_url_from_env(tmp_path: Path) -> None:
-    """Test that DATABASE_URL env var overrides config."""
+def test_config_get_database_config_from_env_url(tmp_path: Path) -> None:
+    """Test that DATABASE_URL env var yields url-only database config."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
         "database:\n"
@@ -153,11 +155,10 @@ def test_config_get_database_url_from_env(tmp_path: Path) -> None:
 
     env_url = "postgresql://envuser:envpass@envhost:5434/envdb"
     with patch.dict(os.environ, {"DATABASE_URL": env_url}):
-        url = config.get_database_url()
-        assert url == env_url
+        assert config.get_database_config() == {"url": env_url}
 
 
-def test_config_get_database_url_missing_config(tmp_path: Path) -> None:
+def test_config_get_database_config_missing_config(tmp_path: Path) -> None:
     """Test that missing database config raises ValueError."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text("other_key: value\n")
@@ -165,24 +166,19 @@ def test_config_get_database_url_missing_config(tmp_path: Path) -> None:
     config = Config(config_path=config_file)
 
     with pytest.raises(ValueError, match="Database configuration not found"):
-        config.get_database_url()
+        config.get_database_config()
 
 
-def test_config_get_database_url_defaults(tmp_path: Path) -> None:
-    """Test that database config uses defaults for missing values."""
+def test_config_get_database_config_has_no_defaults(tmp_path: Path) -> None:
+    """Test that get_database_config does not apply defaults for missing keys."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
         "database:\n  host: customhost\n  name: customdb\n",
     )
 
     config = Config(config_path=config_file)
-    url = config.get_database_url()
-
-    # Should use defaults for port, user, password
-    assert "customhost" in url
-    assert "customdb" in url
-    assert ":5432" in url  # default port
-    assert "assistant" in url  # default user
+    with pytest.raises(ValueError, match="missing required keys"):
+        _ = config.get_database_config()
 
 
 def test_config_get_env_override_even_when_key_exists(tmp_path: Path) -> None:
@@ -213,7 +209,7 @@ def test_config_get_external_sources_env_override_type_coercion(tmp_path: Path) 
         assert config.get("external_sources.fake.timeout") == 31
 
 
-def test_config_get_database_url_from_database_url_key(tmp_path: Path) -> None:
+def test_config_get_database_config_from_database_url_key(tmp_path: Path) -> None:
     """Test that database.url in YAML is used as the connection string."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
@@ -221,7 +217,9 @@ def test_config_get_database_url_from_database_url_key(tmp_path: Path) -> None:
     )
 
     config = Config(config_path=config_file)
-    assert config.get_database_url() == "postgresql://yamluser:yamlpass@yamlhost:5432/yamldb"
+    assert config.get_database_config() == {
+        "url": "postgresql://yamluser:yamlpass@yamlhost:5432/yamldb",
+    }
 
 
 def test_config_get_database_config_overridden(tmp_path: Path) -> None:
@@ -246,26 +244,7 @@ def test_config_get_database_config_overridden(tmp_path: Path) -> None:
         assert db_config["name"] == "configdb"
 
 
-def test_config_get_database_url_from_nested_env_overrides(tmp_path: Path) -> None:
-    """Test that DATABASE_HOST/PORT/etc override the assembled URL."""
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text(
-        "database:\n"
-        "  host: confighost\n"
-        "  port: 5432\n"
-        "  user: configuser\n"
-        "  password: configpass\n"
-        "  name: configdb\n",
-    )
-
-    config = Config(config_path=config_file)
-
-    with patch.dict(os.environ, {"DATABASE_HOST": "envhost", "DATABASE_PORT": "5434"}):
-        url = config.get_database_url()
-        assert url == "postgresql://configuser:configpass@envhost:5434/configdb"
-
-
-def test_config_get_database_url_missing_yaml_but_env_components_present(tmp_path: Path) -> None:
+def test_config_get_database_config_env_components_without_yaml(tmp_path: Path) -> None:
     """Test that env-only database configuration works without YAML section."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text("other_key: value\n")
@@ -282,7 +261,13 @@ def test_config_get_database_url_missing_yaml_but_env_components_present(tmp_pat
             "DATABASE_NAME": "envdb",
         },
     ):
-        assert config.get_database_url() == "postgresql://envuser:envpass@envhost:5433/envdb"
+        assert config.get_database_config() == {
+            "host": "envhost",
+            "port": 5433,
+            "user": "envuser",
+            "password": "envpass",
+            "name": "envdb",
+        }
 
 
 def test_config_env_override_invalid_int_raises(tmp_path: Path) -> None:

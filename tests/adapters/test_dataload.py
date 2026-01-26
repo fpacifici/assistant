@@ -6,8 +6,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
+import assistant.adapters.registry as registry_module
+from assistant.adapters.content import read_content
 from assistant.adapters.dataload import load_data
-from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.registry import get_registry
 from assistant.config import Config
 from assistant.models.schema import Document, ExternalSource
@@ -15,8 +16,8 @@ from assistant.models.schema import Document, ExternalSource
 
 def test_load_data_with_no_sources(test_config: Config, db_session: Session) -> None:
     """Test load_data with no external sources."""
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Mock the session factory to use our test session
     class SessionContext:
@@ -40,10 +41,8 @@ def test_load_data_with_no_sources(test_config: Config, db_session: Session) -> 
 @pytest.mark.usefixtures("document_storage_dir")
 def test_load_data_creates_documents(test_config: Config, db_session: Session) -> None:
     """Test that load_data creates documents in the database."""
-    from assistant.adapters.registry import get_registry
-
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source in the database
     source = ExternalSource(provider="fake", provider_query="{}")
@@ -86,11 +85,8 @@ def test_load_data_stores_content(
     document_storage_dir: Path,
 ) -> None:
     """Test that load_data stores document content in filesystem."""
-    from assistant.adapters.content import read_content
-    from assistant.adapters.registry import get_registry
-
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source
     source = ExternalSource(provider="fake", provider_query="{}")

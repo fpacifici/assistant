@@ -19,10 +19,24 @@ class FakeExternalSource(ExternalSource):
         Args:
             config: Instance configuration (mostly unused by fake provider).
         """
-        super().__init__(config)
+        # NOTE: do not assume the base class has a concrete constructor contract.
+        # This fake plugin stores config locally; real plugins may ignore it or validate it.
+        self._config = config
         # Store mock documents
         self._documents: dict[str, tuple[datetime, bytes]] = {}
         self._initialize_mock_documents()
+
+    @classmethod
+    def build(cls, config: ExternalSourceInstanceConfig) -> "FakeExternalSource":
+        """Build a FakeExternalSource instance.
+
+        Args:
+            config: Instance configuration (mostly unused by fake provider).
+
+        Returns:
+            A FakeExternalSource instance.
+        """
+        return cls(config)
 
     def _initialize_mock_documents(self) -> None:
         """Initialize some mock documents for testing."""

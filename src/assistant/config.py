@@ -7,25 +7,30 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import NotRequired, TypedDict, TypeVar, cast, overload
+from typing import TypedDict, TypeVar, cast, overload
 
 import yaml
 
 _MISSING: object = object()
 
 
-class DatabaseConfig(TypedDict):
-    """Database configuration section.
+class DatabaseUrlConfig(TypedDict):
+    """Database configuration that provides a full connection URL."""
 
-    This config is always returned in a fully-resolved form by `get_database_config()`.
-    """
+    url: str
+
+
+class DatabaseComponentsConfig(TypedDict):
+    """Database configuration expressed as connection components."""
 
     host: str
     port: int
     user: str
     password: str
     name: str
-    url: NotRequired[str]
+
+
+DatabaseConfig = DatabaseUrlConfig | DatabaseComponentsConfig
 
 
 class ExternalSourceProviderConfig(TypedDict, total=False):
@@ -147,7 +152,7 @@ class Config:
             return
 
         # We load YAML dynamically; typing is enforced at the access boundaries.
-        self._config = cast(AssistantConfig, loaded)
+        self._config = cast("AssistantConfig", loaded)
 
     def _get_from_config(self, key: str) -> object:
         """Get a value from the YAML config without env-var overrides."""
@@ -182,6 +187,43 @@ class Config:
 
         return str
 
+    def _get_typed_value(self, *, key: str, expected_type: type[T]) -> T | None:
+        """Get a scalar config value with env-var override and strict typing.
+
+        This is used for structured config sections (like `database.*`) where defaults are not
+        applied, but env-var overrides still need correct type coercion.
+
+        Args:
+            key: Dotted config key.
+            expected_type: Expected scalar type.
+
+        Returns:
+            The configured value, or None if the key is absent in both YAML and env.
+
+        Raises:
+            ValueError: If an env var override cannot be coerced, or if the YAML value type is
+                invalid.
+        """
+
+        env_key = _env_var_name(key)
+        env_value = os.getenv(env_key)
+        if env_value is not None:
+            coerced = _coerce_env_value(
+                key=key,
+                env_key=env_key,
+                raw=env_value,
+                expected_type=expected_type,
+            )
+            return cast("T", coerced)
+
+        value = self._get_from_config(key)
+        if value is _MISSING:
+            return None
+        if not isinstance(value, expected_type):
+            msg = f"Invalid configuration type for {key!r} (expected {expected_type.__name__})"
+            raise ValueError(msg)  # noqa: TRY004
+        return value
+
     @overload
     def get(self, key: str) -> object | None: ...
 
@@ -215,7 +257,7 @@ class Config:
             coerced = _coerce_env_value(
                 key=key, env_key=env_key, raw=env_value, expected_type=expected_type
             )
-            return cast(T, coerced) if default is not None else coerced
+            return cast("T", coerced) if default is not None else coerced
 
         value = self._get_from_config(key)
         if value is _MISSING:
@@ -241,7 +283,7 @@ class Config:
             Configuration dictionary for the provider.
         """
         config_key = f"external_sources.{provider}"
-        result = self.get(config_key, {})
+        result: object = self.get(config_key, {})
         if not isinstance(result, dict):
             return {}
         return result
@@ -256,20 +298,14 @@ class Config:
             - `database.host` -> `DATABASE_HOST`
             - etc.
 
-        Defaults are applied for the component fields used to assemble a URL:
-            - host: "localhost"
-            - port: 5432
-            - user: "assistant"
-            - password: "assistant"
-            - name: "assistant"
-
         Returns:
-            A `DatabaseConfig` TypedDict with overrides applied.
+            A `DatabaseConfig` mapping, either as a full URL or as connection components.
 
         Raises:
             ValueError: If neither the YAML `database` section nor any `DATABASE_*` env vars are
                 present.
-            TypeError: If the resulting database configuration has invalid types.
+            ValueError: If the resulting database configuration is missing required keys or has
+                invalid types.
         """
 
         database_section = self._get_from_config("database")
@@ -288,58 +324,43 @@ class Config:
             msg = "Database configuration not found in config file"
             raise ValueError(msg)
 
-        url = self.get("database.url", None)
+        url = self._get_typed_value(key="database.url", expected_type=str)
+        if url:
+            return {"url": url}
 
-        host = self.get("database.host", "localhost")
-        port = self.get("database.port", 5432)
-        user = self.get("database.user", "assistant")
-        password = self.get("database.password", "assistant")
-        name = self.get("database.name", "assistant")
+        host = self._get_typed_value(key="database.host", expected_type=str)
+        port = self._get_typed_value(key="database.port", expected_type=int)
+        user = self._get_typed_value(key="database.user", expected_type=str)
+        password = self._get_typed_value(key="database.password", expected_type=str)
+        name = self._get_typed_value(key="database.name", expected_type=str)
 
-        if not isinstance(host, str):
-            msg = "Invalid database configuration type for host (expected str)"
-            raise TypeError(msg)
-        if not isinstance(port, int):
-            msg = "Invalid database configuration type for port (expected int)"
-            raise TypeError(msg)
-        if not isinstance(user, str):
-            msg = "Invalid database configuration type for user (expected str)"
-            raise TypeError(msg)
-        if not isinstance(password, str):
-            msg = "Invalid database configuration type for password (expected str)"
-            raise TypeError(msg)
-        if not isinstance(name, str):
-            msg = "Invalid database configuration type for name (expected str)"
-            raise TypeError(msg)
+        missing_keys: list[str] = []
+        if host is None:
+            missing_keys.append("host")
+        if port is None:
+            missing_keys.append("port")
+        if user is None:
+            missing_keys.append("user")
+        if password is None:
+            missing_keys.append("password")
+        if name is None:
+            missing_keys.append("name")
 
-        result: DatabaseConfig = {
+        if missing_keys:
+            msg = f"Database configuration missing required keys: {', '.join(missing_keys)}"
+            raise ValueError(msg)
+
+        # Help mypy understand non-None after validation.
+        assert host is not None
+        assert port is not None
+        assert user is not None
+        assert password is not None
+        assert name is not None
+
+        return {
             "host": host,
             "port": port,
             "user": user,
             "password": password,
             "name": name,
         }
-        if isinstance(url, str) and url:
-            result["url"] = url
-        return result
-
-    def get_database_url(self) -> str:
-        """Get database connection URL from configuration.
-
-        Prefer using `get_database_config()` and building your own connection string.
-        This method is retained for backward compatibility.
-
-        Returns:
-            Database connection URL string.
-
-        Raises:
-            ValueError: If required configuration is missing.
-        """
-        db_config = self.get_database_config()
-        if "url" in db_config:
-            return db_config["url"]
-
-        return (
-            f"postgresql://{db_config['user']}:{db_config['password']}@"
-            f"{db_config['host']}:{db_config['port']}/{db_config['name']}"
-        )

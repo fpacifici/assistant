@@ -1,11 +1,11 @@
 """Tests for database connection and session management."""
 
 from datetime import UTC, datetime
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from assistant.models.database import (
@@ -19,21 +19,10 @@ from assistant.models.database import (
 from assistant.models.schema import Document, DocumentFormat, ExternalSource
 
 
-def test_get_database_url_from_config(tmp_path: Path) -> None:
+def test_get_database_url_from_config() -> None:
     """Test getting database URL from config file."""
-    # Create a test config file
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text(
-        "database:\n"
-        "  host: testhost\n"
-        "  port: 5433\n"
-        "  user: testuser\n"
-        "  password: testpass\n"
-        "  name: testdb\n",
-    )
-
     # Mock the Config class import inside get_database_url
-    with patch("assistant.config.Config") as mock_config_class:
+    with patch("assistant.models.database.Config") as mock_config_class:
         mock_config_instance = mock_config_class.return_value
         mock_config_instance.get_database_config.return_value = {
             "host": "testhost",
@@ -55,14 +44,9 @@ def test_get_database_url_from_env() -> None:
     test_url = "postgresql://envuser:envpass@envhost:5434/envdb"
 
     # Mock the Config class import inside get_database_url
-    with patch("assistant.config.Config") as mock_config_class:
+    with patch("assistant.models.database.Config") as mock_config_class:
         mock_config_instance = mock_config_class.return_value
         mock_config_instance.get_database_config.return_value = {
-            "host": "localhost",
-            "port": 5432,
-            "user": "assistant",
-            "password": "assistant",
-            "name": "assistant",
             "url": test_url,
         }
 
@@ -104,8 +88,6 @@ def test_create_schema_with_in_memory_db() -> None:
 
     # SQLite will raise OperationalError for CREATE SCHEMA
     # This is expected behavior - the function is designed for PostgreSQL
-    from sqlalchemy.exc import OperationalError
-
     with pytest.raises(OperationalError, match='near "SCHEMA"'):
         create_schema(engine)
 

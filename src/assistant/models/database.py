@@ -1,9 +1,17 @@
 """Database connection and session management."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-from sqlalchemy.orm.session import Session
+
+from assistant.config import Config, DatabaseComponentsConfig
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm.session import Session
 
 
 class Base(DeclarativeBase):
@@ -22,15 +30,16 @@ def get_database_url() -> str:
     Raises:
         ValueError: If required configuration is missing.
     """
-    from assistant.config import Config
-
     config = Config()
     db_config = config.get_database_config()
-    if "url" in db_config:
-        return db_config["url"]
+    url = db_config.get("url")
+    if isinstance(url, str) and url:
+        return url
+
+    components = cast("DatabaseComponentsConfig", db_config)
     return (
-        f"postgresql://{db_config['user']}:{db_config['password']}@"
-        f"{db_config['host']}:{db_config['port']}/{db_config['name']}"
+        f"postgresql://{components['user']}:{components['password']}@"
+        f"{components['host']}:{components['port']}/{components['name']}"
     )
 
 

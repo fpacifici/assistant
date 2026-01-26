@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from assistant.adapters.content import DocumentContent
+from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 
 
@@ -27,8 +28,6 @@ def test_external_source_interface_methods() -> None:
 
 def test_fake_external_source_implements_interface() -> None:
     """Test that FakeExternalSource implements the interface."""
-    from assistant.adapters.plugins.fake import FakeExternalSource
-
     fake = FakeExternalSource(ExternalSourceInstanceConfig(provider_config={}, query_params={}))
 
     # Should be able to call the methods

@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Self
 
 from assistant.adapters.content import DocumentContent
 
@@ -39,6 +40,22 @@ class ExternalSource(ABC):
             config: Instance configuration (provider config + DB query params).
         """
         self._config = config
+
+    @classmethod
+    @abstractmethod
+    def build(cls, config: ExternalSourceInstanceConfig) -> Self:
+        """Build an ExternalSource instance from resolved instance config.
+
+        Plugins must implement this factory method instead of relying on a shared constructor
+        contract across implementations.
+
+        Args:
+            config: Instance configuration (provider config + DB query params).
+
+        Returns:
+            A configured ExternalSource instance.
+        """
+        ...
 
     @abstractmethod
     def get_document(self, external_id: str) -> DocumentContent:
