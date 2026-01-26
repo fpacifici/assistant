@@ -10,3 +10,8 @@ Module documentation helps AI agents and developers understand:
 - Internal architecture and design patterns
 - Dependencies and relationships with other modules
 - Examples and common usage patterns
+
+## Available module docs
+
+- [`config.md`](config.md): configuration loading, env overrides, and typed schema
+- [`registry/registry.md`](registry/registry.md): adapter registry, instance caching, and resolution from config + DB

@@ -8,6 +8,7 @@ This is isting tasks for humans, not for agents.
 - Clean up the agents file
 - Ensure the coding standard are defined somewhere
 - Put together the first modules
+- - Clean up the config.py file. It manages env vars horribly
 
 ## Evernote integration
 

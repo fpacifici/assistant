@@ -77,12 +77,20 @@ The `ExternalSource` interface has these methods:
 
 - `get_document`. This takes the external id of a document and fetches the content.
 - `list_documents`. This takes the datetime of the earliest document to fetch and the
-source specific query parameters and returns the list of the document ids. The datetime
-should fitler documents by update date and not creation date.
+returns the list of the document ids. Source-specific query parameters are bound to the
+configured `ExternalSource` instance (loaded from the DB), not passed at call time. The
+datetime should fitler documents by update date and not creation date.
 
 There is a `Registry` class that maps provider ids to their implementation. This
-returns the implementation instance for a specific provider. This `Registry` class
-can load the yaml configuration needed to connect to the external source.
+maps provider **types** (e.g. `evernote`) to their implementation class, and returns
+cached **instances** keyed by the configured external source **instance id**
+(`ExternalSource.id`).
+
+When resolving an instance, the `Registry`:
+
+- reads provider-type configuration from `config.yaml` under `external_sources.<provider>`
+- reads source-instance query parameters from the DB `ExternalSource.provider_query`
+- instantiates the plugin once and reuses it for subsequent calls
 
 ## The DataLoad job.
 

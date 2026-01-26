@@ -8,7 +8,12 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from assistant.adapters.content import write_content
-from assistant.adapters.registry import Registry, get_registry
+from assistant.adapters.registry import (
+    ExternalSourceNotFoundError,
+    ProviderDisabledError,
+    Registry,
+    get_registry,
+)
 from assistant.adapters.source import ExternalSource as ExternalSourceBase
 from assistant.config import Config
 from assistant.models.database import get_session_factory
@@ -34,6 +39,9 @@ def load_data(config: Config | None = None) -> None:
         config = Config()
 
     registry = get_registry()
+    # Ensure the registry uses the same Config instance as this run (important for env overrides
+    # and per-test config files).
+    registry.config = config
     session_factory = get_session_factory()
     storage_path = config.get_document_storage_path()
 
@@ -53,6 +61,10 @@ def load_data(config: Config | None = None) -> None:
                     registry=registry,
                     storage_path=storage_path,
                 )
+            except (ExternalSourceNotFoundError, ProviderDisabledError, ValueError):
+                # These indicate a configuration / registry / DB consistency issue and should fail
+                # the whole run so the operator can fix it.
+                raise
             except Exception:
                 logger.exception(
                     "Error loading data from source %s",
@@ -89,29 +101,14 @@ def _load_source_data(
 
     since = most_recent[0] if most_recent else datetime.min.replace(tzinfo=UTC)
 
-    # Parse provider_query as JSON if present
-    query_params = {}
-    if external_source.provider_query:
-        import json
-
-        try:
-            query_params = json.loads(external_source.provider_query)
-        except json.JSONDecodeError:
-            logger.warning(
-                "Invalid JSON in provider_query for source %s",
-                external_source.id,
-            )
-
-    # Get provider instance
-    try:
-        provider = registry.get_provider(external_source.provider)
-    except ValueError:
-        logger.exception("Provider '%s' not found", external_source.provider)
-        return
+    # Ensure provider instance is registered for this source id, then retrieve it.
+    # Any registry/config/db consistency issues should bubble up to fail the whole run.
+    registry.register(external_source.id, session=session)
+    provider = registry.get_provider(external_source.id)
 
     # List documents updated since the most recent one
     try:
-        external_ids = provider.list_documents(since, query_params)
+        external_ids = provider.list_documents(since)
     except Exception:
         logger.exception("Error listing documents from provider")
         return

@@ -44,12 +44,12 @@ install:
 # Run all tests
 test:
 	@echo "Running tests..."
-	@.venv/bin/pytest
+	pytest tests
 
 # Run type checker
 typecheck:
 	@echo "Running type checker..."
-	@.venv/bin/mypy src/
+	mypy src/
 
 # Run linter
 lint:

@@ -2,10 +2,9 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 from assistant.adapters.content import DocumentContent
-from assistant.adapters.source import ExternalSource
+from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 
 
 class FakeExternalSource(ExternalSource):
@@ -14,16 +13,30 @@ class FakeExternalSource(ExternalSource):
     Returns mock documents with predictable content for testing purposes.
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: ExternalSourceInstanceConfig) -> None:
         """Initialize fake external source.
 
         Args:
-            config: Configuration dictionary (not used in fake implementation).
+            config: Instance configuration (mostly unused by fake provider).
         """
-        self.config = config
+        # NOTE: do not assume the base class has a concrete constructor contract.
+        # This fake plugin stores config locally; real plugins may ignore it or validate it.
+        self._config = config
         # Store mock documents
         self._documents: dict[str, tuple[datetime, bytes]] = {}
         self._initialize_mock_documents()
+
+    @classmethod
+    def build(cls, config: ExternalSourceInstanceConfig) -> "FakeExternalSource":
+        """Build a FakeExternalSource instance.
+
+        Args:
+            config: Instance configuration (mostly unused by fake provider).
+
+        Returns:
+            A FakeExternalSource instance.
+        """
+        return cls(config)
 
     def _initialize_mock_documents(self) -> None:
         """Initialize some mock documents for testing."""
@@ -62,13 +75,11 @@ class FakeExternalSource(ExternalSource):
     def list_documents(
         self,
         since: datetime,
-        query_params: dict[str, Any],  # noqa: ARG002
     ) -> list[str]:
         """List mock document IDs updated since a given datetime.
 
         Args:
             since: The earliest datetime to fetch documents from.
-            query_params: Source-specific query parameters (not used).
 
         Returns:
             List of external document IDs.

@@ -5,8 +5,6 @@ import logging
 import sys
 
 from assistant.adapters.dataload import load_data
-from assistant.adapters.plugins.fake import FakeExternalSource
-from assistant.adapters.registry import get_registry
 from assistant.config import Config
 
 logging.basicConfig(
@@ -17,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 def _register_plugins() -> None:
-    """Register all available plugins with the registry."""
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
-    logger.debug("Registered plugins")
+    """Register available plugins.
+
+    The registry now hardcodes provider classes at construction time, so this function is retained
+    for backward compatibility (e.g. CLI/tests) and is intentionally a no-op.
+    """
 
 
 def main() -> int:
@@ -44,7 +43,6 @@ def main() -> int:
         # Load configuration
         config = Config(config_path=args.config) if args.config else Config()
 
-        # Register plugins
         _register_plugins()
 
         # Run data load

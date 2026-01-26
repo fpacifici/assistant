@@ -1,9 +1,17 @@
 """Database connection and session management."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-from sqlalchemy.orm.session import Session
+
+from assistant.config import Config, DatabaseComponentsConfig
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm.session import Session
 
 
 class Base(DeclarativeBase):
@@ -14,7 +22,7 @@ def get_database_url() -> str:
     """Get database connection URL from configuration.
 
     Uses the Config class to read database connection parameters from
-    config.yaml file, with support for DATABASE_URL environment variable override.
+    config.yaml file, with support for environment-variable overrides.
 
     Returns:
         Database connection URL string.
@@ -22,10 +30,17 @@ def get_database_url() -> str:
     Raises:
         ValueError: If required configuration is missing.
     """
-    from assistant.config import Config
-
     config = Config()
-    return config.get_database_url()
+    db_config = config.get_database_config()
+    url = db_config.get("url")
+    if isinstance(url, str) and url:
+        return url
+
+    components = cast("DatabaseComponentsConfig", db_config)
+    return (
+        f"postgresql://{components['user']}:{components['password']}@"
+        f"{components['host']}:{components['port']}/{components['name']}"
+    )
 
 
 def get_engine() -> Engine:

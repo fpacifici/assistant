@@ -2,8 +2,13 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import TracebackType
 from unittest.mock import patch
 
+from sqlalchemy.orm import Session
+
+import assistant.adapters.registry as registry_module
 from assistant.adapters.dataload import load_data
 from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.registry import get_registry
@@ -13,13 +18,13 @@ from assistant.models.schema import Document, DocumentFormat, ExternalSource
 
 def test_load_data_updates_existing_document(
     test_config: Config,
-    db_session,
-    document_storage_dir,  # noqa: ARG001
+    db_session: Session,
+    document_storage_dir: Path,  # noqa: ARG001
 ) -> None:
     """Test that load_data updates existing documents."""
 
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source
     source = ExternalSource(provider="fake", provider_query="{}")
@@ -43,13 +48,18 @@ def test_load_data_updates_existing_document(
 
     # Mock the session factory
     class SessionContext:
-        def __enter__(self):
+        def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args):
-            pass
+        def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc: BaseException | None,
+            _tb: TracebackType | None,
+        ) -> None:
+            return None
 
-    def session_factory():
+    def session_factory() -> SessionContext:
         return SessionContext()
 
     with patch(
@@ -69,34 +79,40 @@ def test_load_data_updates_existing_document(
 
 def test_load_data_handles_provider_error(
     test_config: Config,
-    db_session,
-    document_storage_dir,  # noqa: ARG001
+    db_session: Session,
+    document_storage_dir: Path,  # noqa: ARG001
 ) -> None:
     """Test that load_data handles provider errors gracefully."""
+    registry_module._registry = None
     registry = get_registry()
 
     # Create a mock provider that raises an error
     class ErrorProvider(FakeExternalSource):
-        def list_documents(self, _since, _query_params):
+        def list_documents(self, _since: datetime) -> list[str]:
             msg = "Provider error"
             raise RuntimeError(msg)
 
-    registry.register("error", ErrorProvider)
+    registry._providers["fake"] = ErrorProvider
 
     # Create an external source with error provider
-    source = ExternalSource(provider="error", provider_query="{}")
+    source = ExternalSource(provider="fake", provider_query="{}")
     db_session.add(source)
     db_session.commit()
 
     # Mock the session factory
     class SessionContext:
-        def __enter__(self):
+        def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args):
-            pass
+        def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc: BaseException | None,
+            _tb: TracebackType | None,
+        ) -> None:
+            return None
 
-    def session_factory():
+    def session_factory() -> SessionContext:
         return SessionContext()
 
     with patch(
@@ -109,12 +125,12 @@ def test_load_data_handles_provider_error(
 
 def test_load_data_filters_by_since_datetime(
     test_config: Config,
-    db_session,
-    document_storage_dir,  # noqa: ARG001
+    db_session: Session,
+    document_storage_dir: Path,  # noqa: ARG001
 ) -> None:
     """Test that load_data only fetches documents updated since the most recent one."""
-    registry = get_registry()
-    registry.register("fake", FakeExternalSource)
+    registry_module._registry = None
+    get_registry()
 
     # Create an external source
     source = ExternalSource(provider="fake", provider_query="{}")
@@ -139,13 +155,18 @@ def test_load_data_filters_by_since_datetime(
 
     # Mock the session factory
     class SessionContext:
-        def __enter__(self):
+        def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args):
-            pass
+        def __exit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc: BaseException | None,
+            _tb: TracebackType | None,
+        ) -> None:
+            return None
 
-    def session_factory():
+    def session_factory() -> SessionContext:
         return SessionContext()
 
     with patch(
