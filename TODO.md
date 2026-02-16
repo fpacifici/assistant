@@ -4,16 +4,16 @@ This is isting tasks for humans, not for agents.
 
 ## Architecture and planning
 
-- Write a high level architecture document
-- Clean up the agents file
-- Ensure the coding standard are defined somewhere
-- Put together the first modules
-- - Clean up the config.py file. It manages env vars horribly
+- [DONE] Write a high level architecture document
+- [DONE] Clean up the agents file
+- [DONE] Ensure the coding standard are defined somewhere
+- [DONE] Put together the first modules
+- [DONE] - Clean up the config.py file. It manages env vars horribly
 
 ## Evernote integration
 
 - Prepare python modules
-- Create modules and interface for content retrieval
+- [DONE] Create modules and interface for content retrieval
 - Create the integration with evernote API
 - Create temporary local store
 - Script to load and dump
