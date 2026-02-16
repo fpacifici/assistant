@@ -3,16 +3,24 @@
 import argparse
 import logging
 import sys
-from evernote_backup.cli_app_auth import (
-    get_auth_token,
-    get_sync_client,
-)
+from datetime import datetime, timedelta, timezone
+from typing import cast
+
+from assistant.adapters.evernote import EvernoteSource
+from assistant.cli.table import print_table
+from evernote_backup.cli_app_auth import get_auth_token, get_sync_client
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    """Parse an ISO 8601 datetime string (e.g. 2021-01-15 or 2021-01-15T12:00:00+00:00)."""
+    s = value.strip().replace("Z", "+00:00")
+    return datetime.fromisoformat(s)
 
 
 def main() -> int:
@@ -29,43 +37,23 @@ def main() -> int:
         type=str,
         help="Name of the notebook",
     )
+    parser.add_argument(
+        "--since",
+        type=_parse_iso_datetime,
+        default=None,
+        metavar="DATETIME",
+        help="Only list notes updated since this datetime (ISO format). Default: 1 day ago.",
+    )
 
     args = parser.parse_args()
 
     notebook_name = args.notebook_name
+    since = args.since if args.since is not None else datetime.now(timezone.utc) - timedelta(days=1)
 
-    try:
-        with open("auth_token.txt", "r") as f:
-            auth_token = f.read()
-    
-    except FileNotFoundError:
-        auth_token = get_auth_token(
-            auth_user=None,
-            auth_password=None,
-            auth_oauth_port=10500,
-            auth_oauth_host="localhost",
-            backend="evernote",
-            network_retry_count=1,
-            use_system_ssl_ca=True,
-            custom_api_data=None,
-        )
-
-        with open("auth_token.txt", "w") as f:
-            f.write(auth_token)
-    
-    logger.info("Authenticated with Evernote")
-
-    client = get_sync_client(
-        auth_token=auth_token,
-        backend="evernote",
-        network_error_retry_count=1,
-        use_system_ssl_ca=True,
-        max_chunk_results=200,
-        is_jwt_needed=False,
-    )
-
-    notebooks = client.note_store.listNotebooks()
-    print([notebook.name for notebook in notebooks])
+    evernote = EvernoteSource(notebooks=["dist/stream"])
+    notes = evernote.list_documents(since=since)
+    for note in notes:
+        print(evernote.get_document(note))
 
     return 0
     

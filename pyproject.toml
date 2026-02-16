@@ -13,6 +13,7 @@ dependencies = [
     "psycopg2-binary>=2.9.0",
     "pyyaml>=6.0",
     "evernote-backup>=1.13.1",
+    "keyring==25.7.0",
 ]
 
 [project.optional-dependencies]
