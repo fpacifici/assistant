@@ -60,7 +60,7 @@ class Document(Base):
     )
     source_id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("external_sources.id"),
+        ForeignKey("assistant.external_sources.id"),
         nullable=False,
     )
 

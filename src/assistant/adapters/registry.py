@@ -15,7 +15,7 @@ from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 from assistant.config import Config
 from assistant.models.schema import ExternalSource as ExternalSourceRow
-
+from assistant.adapters.evernote import EvernoteSource
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +78,7 @@ class Registry:
         # Provider *instances* are registered explicitly by calling `register(...)`.
         self._providers: dict[str, type[ExternalSource]] = {
             "fake": FakeExternalSource,
+            "evernote": EvernoteSource,
         }
         self._instances: dict[UUID, ExternalSource] = {}
 

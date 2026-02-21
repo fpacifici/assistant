@@ -8,12 +8,34 @@ from evernote.edam.notestore.ttypes import NoteFilter, NoteResultSpec, NotesMeta
 from evernote.edam.type.ttypes import NoteSortOrder
 from evernote_backup.cli_app_auth import get_auth_token, get_sync_client
 from evernote_backup.evernote_client_sync import EvernoteClientSync
+from evernote_backup.evernote_client_util import EvernoteAuthError
 
 from assistant.adapters.content import DocumentContent
 from assistant.adapters.secrets import Oauth1AuthProvider, Oauth1Credential
 from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 
 logger = logging.getLogger(__name__)
+
+def get_token() -> str:
+    provider = Oauth1AuthProvider()
+    token = get_auth_token(
+        auth_user=None,
+        auth_password=None,
+        auth_oauth_port=10500,
+        auth_oauth_host="localhost",
+        backend="evernote",
+        network_retry_count=1,
+        use_system_ssl_ca=True,
+        custom_api_data=None,
+    )
+    logger.info("Authenticated with Evernote")
+    
+    provider.store_credential(
+        provider_type="evernote",
+        provider_account="default",
+        credential=Oauth1Credential(token=token),
+    )
+    return str(token)
 
 def create_client() -> EvernoteClientSync:
     provider = Oauth1AuthProvider()
@@ -23,33 +45,31 @@ def create_client() -> EvernoteClientSync:
     )
     
     if not cred:
-        token = get_auth_token(
-            auth_user=None,
-            auth_password=None,
-            auth_oauth_port=10500,
-            auth_oauth_host="localhost",
-            backend="evernote",
-            network_retry_count=1,
-            use_system_ssl_ca=True,
-            custom_api_data=None,
-        )
-        logger.info("Authenticated with Evernote")
-        provider.store_credential(
-            provider_type="evernote",
-            provider_account="default",
-            credential=Oauth1Credential(token=token),
-        )
+        token = get_token()
     else:
         token = cred.token
 
-    return get_sync_client(
-        auth_token=token,
-        backend="evernote",
-        network_error_retry_count=1,
-        use_system_ssl_ca=True,
-        max_chunk_results=200,
-        is_jwt_needed=False,
-    )
+    try:
+        client =get_sync_client(
+            auth_token=token,
+            backend="evernote",
+            network_error_retry_count=1,
+            use_system_ssl_ca=True,
+            max_chunk_results=200,
+            is_jwt_needed=False,
+        )
+    except EvernoteAuthError:
+        token = get_token()
+        client =get_sync_client(
+            auth_token=token,
+            backend="evernote",
+            network_error_retry_count=1,
+            use_system_ssl_ca=True,
+            max_chunk_results=200,
+            is_jwt_needed=False,
+        )
+
+    return client
 
 class EvernoteSource(ExternalSource):
     """

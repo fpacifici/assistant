@@ -12,11 +12,14 @@ This is isting tasks for humans, not for agents.
 
 ## Evernote integration
 
-- Prepare python modules
+- [DONE] Prepare python modules
 - [DONE] Create modules and interface for content retrieval
-- Create the integration with evernote API
-- Create temporary local store
-- Script to load and dump
+- [DONE] Create the integration with evernote API
+- Write arch file for evernote integration
+- [DONE] Create temporary local store
+- Add metadata concept for Document
+- [DONE] Script to load and dump
+- Add a name to the external sources
 
 ## Basic RAG
 
