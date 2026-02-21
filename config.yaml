@@ -19,3 +19,5 @@ external_sources:
     # Fake provider configuration for testing
     enabled: true
     # Add any fake-specific configuration here
+  evernote:
+    # Nothing to be configured here

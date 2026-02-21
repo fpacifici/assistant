@@ -158,6 +158,7 @@ def _process_document(
     # Fetch document content
     try:
         doc_content = provider.get_document(external_id)
+        logger.info("Fetched document: %s", external_id)
     except Exception:
         logger.exception("Error fetching document %s", external_id)
         raise

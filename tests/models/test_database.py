@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from assistant.models.database import (
     Base,
     create_schema,
+    drop_database,
     get_database_url,
     get_engine,
     get_session_factory,
@@ -156,6 +157,37 @@ def test_init_database_creates_tables(db_session: Session) -> None:
     documents = db_session.query(Document).all()
     assert len(documents) == 1
     assert documents[0].external_id == "test1"
+
+
+def test_drop_database_with_sqlite() -> None:
+    """Test drop_database with SQLite drops tables."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+
+    # Set up tables (same schema-stripping as test_init_database_with_in_memory_db)
+    doc_table = Document.__table__
+    source_table = ExternalSource.__table__
+    doc_schema = doc_table.schema
+    source_schema = source_table.schema
+    doc_table.schema = None
+    source_table.schema = None
+    source_id_col = doc_table.columns["source_id"]
+    for fk in list(source_id_col.foreign_keys):
+        fk._table_key = None
+        fk.column = source_table.columns["id"]
+
+    try:
+        with patch("assistant.models.database.create_schema"):
+            init_database(engine)
+        assert inspect(engine).has_table("documents")
+        assert inspect(engine).has_table("external_sources")
+
+        drop_database(engine)
+
+        assert not inspect(engine).has_table("documents")
+        assert not inspect(engine).has_table("external_sources")
+    finally:
+        doc_table.schema = doc_schema
+        source_table.schema = source_schema
 
 
 def test_base_declarative_base() -> None:

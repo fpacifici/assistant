@@ -76,3 +76,6 @@ docs/.doctrees/
 
 # Pre-commit
 .pre-commit-config-local.yaml
+
+# Data downloaded
+data/

@@ -78,6 +78,33 @@ def create_schema(engine: Engine | None = None) -> None:
         conn.commit()
 
 
+def drop_database(engine: Engine | None = None) -> None:
+    """Drop the assistant schema and all tables.
+
+    For PostgreSQL, drops the 'assistant' schema (CASCADE). For SQLite,
+    drops all tables in Base.metadata. Use before init_database to reset state.
+
+    Args:
+        engine: Optional SQLAlchemy engine. If not provided, a new one is created.
+
+    Raises:
+        Exception: If the drop operation fails.
+    """
+    if engine is None:
+        engine = get_engine()
+
+    dialect_name = engine.dialect.name
+    if dialect_name == "postgresql":
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA IF EXISTS assistant CASCADE"))
+            conn.commit()
+    else:
+        # SQLite and others: drop tables via metadata
+        from assistant.models import schema  # noqa: F401
+
+        Base.metadata.drop_all(engine)
+
+
 def init_database(engine: Engine | None = None) -> None:
     """Initialize database schema and create all tables.
 

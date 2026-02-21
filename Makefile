@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down
 
 # Default target
 help:
@@ -14,6 +14,8 @@ help:
 	@echo "  make check               - Run all checks (typecheck, lint, test)"
 	@echo "  make pre-commit-install  - Install pre-commit hooks"
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
+	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
+	@echo "  make services-down      - Stop and remove Docker Compose services (Postgres)"
 	@echo "  make clean               - Remove generated files and cache"
 
 # Install uv package manager
@@ -78,6 +80,18 @@ pre-commit-install:
 pre-commit-run:
 	@echo "Running pre-commit on all files..."
 	@pre-commit run --all-files
+
+# Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up
+services-up:
+	@if docker compose ps --status running -q 2>/dev/null | grep -q .; then \
+		echo "Docker Compose services already running"; \
+	else \
+		docker compose up -d; \
+	fi
+
+# Stop and remove Docker Compose services (Postgres)
+services-down:
+	@docker compose down
 
 # Clean generated files and cache
 clean:

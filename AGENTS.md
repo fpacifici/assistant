@@ -157,6 +157,10 @@ This project uses strict typing:
 
 ## Common Tasks
 
+### Development services (Postgres)
+
+When a task needs the Postgres database (e.g. running app code or tests that hit the DB), first ensure services are up by running `make services-up`. This is idempotent (no-op if the stack is already running). To stop the bundle when no longer needed, run `make services-down`.
+
 ### Adding a Dependency
 
 ```bash
