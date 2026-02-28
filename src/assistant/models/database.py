@@ -114,6 +114,12 @@ def init_database(engine: Engine | None = None) -> None:
     if engine is None:
         engine = get_engine()
 
+    # Enable pgvector extension (PostgreSQL only)
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+
     # Create schema first
     create_schema(engine)
 

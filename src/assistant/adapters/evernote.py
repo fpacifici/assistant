@@ -58,7 +58,7 @@ def create_client() -> EvernoteClientSync:
             max_chunk_results=200,
             is_jwt_needed=False,
         )
-    except EvernoteAuthError:
+    except Exception:
         token = get_token()
         client =get_sync_client(
             auth_token=token,
