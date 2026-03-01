@@ -15,6 +15,7 @@ dependencies = [
     "evernote-backup>=1.13.1",
     "keyring==25.7.0",
     "langchain-community>=0.4.1",
+    "langchain>=1.2.10",
     "langchain-openai>=1.1.10",
     "langchain_core>=1.2.16",
     "langchain-postgres>=0.0.17",

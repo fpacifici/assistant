@@ -15,6 +15,7 @@ from assistant.adapters.registry import (
     get_registry,
 )
 from assistant.adapters.source import ExternalSource as ExternalSourceBase
+from assistant.agents.vectors import VectorStore
 from assistant.config import Config
 from assistant.models.database import get_session_factory
 from assistant.models.schema import Document, DocumentFormat, ExternalSource
@@ -116,10 +117,12 @@ def _load_source_data(
     logger.info("Found %d documents to process", len(external_ids))
 
     # Fetch and store each document
+    vector_store = VectorStore()
     for external_id in external_ids:
         try:
             _process_document(
                 session=session,
+                vector_store=vector_store,
                 external_source=external_source,
                 provider=provider,
                 external_id=external_id,
@@ -131,6 +134,7 @@ def _load_source_data(
 
 def _process_document(
     session: Session,
+    vector_store: VectorStore,
     external_source: ExternalSource,
     provider: ExternalSourceBase,
     external_id: str,
@@ -200,6 +204,12 @@ def _process_document(
 
     # Store content in filesystem
     write_content(storage_path, doc_content)
+    # Add to Vector store
+    vector_store.add(doc_content.bytes.decode("utf-8"), {
+        "external_id": external_id,
+        "source_id": str(external_source.id),
+        "format": format_str,
+    })
 
     session.commit()
 

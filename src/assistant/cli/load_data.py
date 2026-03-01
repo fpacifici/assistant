@@ -5,6 +5,7 @@ import logging
 import sys
 
 from assistant.adapters.dataload import load_data
+from assistant.agents.infra import init_environment
 from assistant.config import Config
 
 logging.basicConfig(
@@ -47,6 +48,7 @@ def main() -> int:
 
         # Run data load
         logger.info("Starting data load job...")
+        init_environment()
         load_data(config)
         logger.info("Data load job completed successfully")
     except Exception:
