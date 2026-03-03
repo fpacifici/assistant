@@ -116,8 +116,16 @@ def _load_source_data(
 
     logger.info("Found %d documents to process", len(external_ids))
 
-    # Fetch and store each document
-    vector_store = VectorStore()
+    # Fetch and store each document. If the vector store cannot be initialized
+    # (for example because embedding credentials are not configured), we still
+    # want to load and persist documents; embeddings will simply be skipped.
+    try:
+        vector_store: VectorStore | None = VectorStore()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Error initializing vector store; skipping embedding generation for this run",
+        )
+        vector_store = None
     for external_id in external_ids:
         try:
             _process_document(
@@ -134,7 +142,7 @@ def _load_source_data(
 
 def _process_document(
     session: Session,
-    vector_store: VectorStore,
+    vector_store: VectorStore | None,
     external_source: ExternalSource,
     provider: ExternalSourceBase,
     external_id: str,
@@ -204,12 +212,16 @@ def _process_document(
 
     # Store content in filesystem
     write_content(storage_path, doc_content)
-    # Add to Vector store
-    vector_store.add(doc_content.bytes.decode("utf-8"), {
-        "external_id": external_id,
-        "source_id": str(external_source.id),
-        "format": format_str,
-    })
+    # Add to Vector store when available
+    if vector_store is not None:
+        vector_store.add(
+            doc_content.bytes.decode("utf-8"),
+            {
+                "external_id": external_id,
+                "source_id": str(external_source.id),
+                "format": format_str,
+            },
+        )
 
     session.commit()
 
