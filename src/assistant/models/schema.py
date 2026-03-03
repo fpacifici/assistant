@@ -33,6 +33,7 @@ class Document(Base):
         format: Format of the document (text, markdown, or PDF).
         source_id: Foreign key to the ExternalSource.
         source: Relationship to the ExternalSource.
+        metadata_entries: Collection of metadata key-value pairs.
     """
 
     __tablename__ = "documents"
@@ -69,6 +70,47 @@ class Document(Base):
         "ExternalSource",
         back_populates="documents",
     )
+    metadata_entries: Mapped[list["DocumentMetadata"]] = relationship(
+        "DocumentMetadata",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    def set_metadata(
+        self,
+        key: str,
+        value: str,
+    ) -> None:
+        """Set or update a metadata entry for this document.
+
+        If a metadata entry with the given key already exists, its value is updated.
+        Otherwise, a new metadata row is added for this document.
+
+        Args:
+            key: Metadata key to set.
+            value: Metadata value to associate with the key.
+        """
+        for entry in self.metadata_entries:
+            if entry.key == key:
+                entry.value = value
+                return
+
+        self.metadata_entries.append(
+            DocumentMetadata(
+                document_uuid=self.uuid,
+                key=key,
+                value=value,
+            ),
+        )
+
+    @property
+    def metadata_dict(self) -> dict[str, str]:
+        """Return document metadata as a mapping from key to value.
+
+        Returns:
+            A dictionary mapping metadata keys to their corresponding values.
+        """
+        return {entry.key: entry.value for entry in self.metadata_entries}
 
 
 class ExternalSource(Base):
@@ -97,4 +139,35 @@ class ExternalSource(Base):
         "Document",
         back_populates="source",
         cascade="all, delete-orphan",
+    )
+
+
+class DocumentMetadata(Base):
+    """Document metadata key-value pair.
+
+    Each row represents a single metadata entry associated with a document.
+
+    Attributes:
+        document_uuid: UUID of the related document.
+        key: Metadata key.
+        value: Metadata value.
+        document: Relationship to the owning Document.
+    """
+
+    __tablename__ = "document_metadata"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    document_uuid: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.documents.uuid"),
+        primary_key=True,
+        nullable=False,
+    )
+    key: Mapped[str] = mapped_column(String(255), primary_key=True, nullable=False)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Relationships
+    document: Mapped[Document] = relationship(
+        "Document",
+        back_populates="metadata_entries",
     )

@@ -1,10 +1,11 @@
 """Tests for database connection and session management."""
 
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Table, create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ from assistant.models.database import (
     get_session_factory,
     init_database,
 )
-from assistant.models.schema import Document, DocumentFormat, ExternalSource
+from assistant.models.schema import Document, DocumentFormat, DocumentMetadata, ExternalSource
 
 
 def test_get_database_url_from_config() -> None:
@@ -100,20 +101,28 @@ def test_init_database_with_in_memory_db() -> None:
     # For SQLite, we need to handle schemas differently
     # Temporarily remove schemas from table definitions
 
-    doc_table = Document.__table__
-    source_table = ExternalSource.__table__
+    doc_table = cast(Table, Document.__table__)
+    source_table = cast(Table, ExternalSource.__table__)
+    metadata_table = cast(Table, DocumentMetadata.__table__)
 
     # Save and remove schemas
     doc_schema = doc_table.schema
     source_schema = source_table.schema
+    metadata_schema = metadata_table.schema
     doc_table.schema = None
     source_table.schema = None
+    metadata_table.schema = None
 
-    # Update foreign key
+    # Update foreign keys to point to the no-schema tables
     source_id_col = doc_table.columns["source_id"]
     for fk in list(source_id_col.foreign_keys):
-        fk._table_key = None
-        fk.column = source_table.columns["id"]
+        fk._table_key = None  # type: ignore[attr-defined]
+        fk.column = source_table.columns["id"]  # type: ignore[assignment]
+
+    document_uuid_col = metadata_table.columns["document_uuid"]
+    for fk in list(document_uuid_col.foreign_keys):
+        fk._table_key = None  # type: ignore[attr-defined]
+        fk.column = doc_table.columns["uuid"]  # type: ignore[assignment]
 
     try:
         # Mock create_schema to skip it (SQLite doesn't support schemas)
@@ -125,10 +134,12 @@ def test_init_database_with_in_memory_db() -> None:
             inspector = inspect(engine)
             assert inspector.has_table("documents")
             assert inspector.has_table("external_sources")
+            assert inspector.has_table("document_metadata")
     finally:
         # Restore schemas
         doc_table.schema = doc_schema
         source_table.schema = source_schema
+        metadata_table.schema = metadata_schema
 
 
 def test_init_database_creates_tables(db_session: Session) -> None:
@@ -164,22 +175,31 @@ def test_drop_database_with_sqlite() -> None:
     engine = create_engine("sqlite:///:memory:", echo=False)
 
     # Set up tables (same schema-stripping as test_init_database_with_in_memory_db)
-    doc_table = Document.__table__
-    source_table = ExternalSource.__table__
+    doc_table = cast(Table, Document.__table__)
+    source_table = cast(Table, ExternalSource.__table__)
+    metadata_table = cast(Table, DocumentMetadata.__table__)
     doc_schema = doc_table.schema
     source_schema = source_table.schema
+    metadata_schema = metadata_table.schema
     doc_table.schema = None
     source_table.schema = None
+    metadata_table.schema = None
     source_id_col = doc_table.columns["source_id"]
     for fk in list(source_id_col.foreign_keys):
-        fk._table_key = None
-        fk.column = source_table.columns["id"]
+        fk._table_key = None  # type: ignore[attr-defined]
+        fk.column = source_table.columns["id"]  # type: ignore[assignment]
+
+    document_uuid_col = metadata_table.columns["document_uuid"]
+    for fk in list(document_uuid_col.foreign_keys):
+        fk._table_key = None  # type: ignore[attr-defined]
+        fk.column = doc_table.columns["uuid"]  # type: ignore[assignment]
 
     try:
         with patch("assistant.models.database.create_schema"):
             init_database(engine)
         assert inspect(engine).has_table("documents")
         assert inspect(engine).has_table("external_sources")
+        assert inspect(engine).has_table("document_metadata")
 
         drop_database(engine)
 
@@ -188,6 +208,7 @@ def test_drop_database_with_sqlite() -> None:
     finally:
         doc_table.schema = doc_schema
         source_table.schema = source_schema
+        metadata_table.schema = metadata_schema
 
 
 def test_base_declarative_base() -> None:
