@@ -116,8 +116,16 @@ def _load_source_data(
 
     logger.info("Found %d documents to process", len(external_ids))
 
-    # Fetch and store each document
-    vector_store = VectorStore()
+    # Fetch and store each document. If the vector store cannot be initialized
+    # (for example because embedding credentials are not configured), we still
+    # want to load and persist documents; embeddings will simply be skipped.
+    try:
+        vector_store: VectorStore | None = VectorStore()
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Error initializing vector store; skipping embedding generation for this run",
+        )
+        vector_store = None
     for external_id in external_ids:
         try:
             _process_document(
@@ -134,7 +142,7 @@ def _load_source_data(
 
 def _process_document(
     session: Session,
-    vector_store: VectorStore,
+    vector_store: VectorStore | None,
     external_source: ExternalSource,
     provider: ExternalSourceBase,
     external_id: str,
@@ -167,6 +175,9 @@ def _process_document(
         logger.exception("Error fetching document %s", external_id)
         raise
 
+    # Retrieve provider-specific metadata such as title and notebook name when available.
+    metadata = provider.get_document_metadata(external_id)
+
     # Determine format from content (simplified - in real implementation,
     # this would be more sophisticated)
     format_str = DocumentFormat.TEXT
@@ -177,39 +188,62 @@ def _process_document(
 
     now = datetime.now(UTC)
 
+    title_from_metadata = metadata.get("title") if metadata is not None else None
+    title = title_from_metadata or f"Document {external_id}"
+
     if existing_doc:
         # Update existing document
         existing_doc.last_update_datetime = now
-        existing_doc.title = f"Document {external_id}"  # Simplified
+        existing_doc.title = title
         existing_doc.format = format_str
         doc_uuid = existing_doc.uuid
+        document = existing_doc
         logger.debug("Updated document: %s", external_id)
     else:
         # Create new document
         doc_uuid = uuid.uuid4()
-        new_doc = Document(
+        document = Document(
             uuid=doc_uuid,
             external_id=external_id,
             creation_datetime=now,
             last_update_datetime=now,
-            title=f"Document {external_id}",  # Simplified
+            title=title,
             format=format_str,
             source_id=external_source.id,
         )
-        session.add(new_doc)
+        session.add(document)
         logger.debug("Created document: %s", external_id)
+
+    # Persist additional metadata entries as key-value pairs on the Document, skipping
+    # the title key which is stored as a first-class column.
+    for meta_key, meta_value in metadata.items():
+        if meta_key == "title":
+            continue
+        document.set_metadata(meta_key, str(meta_value))
 
     # Update content UUID to match document UUID
     doc_content.uuid = doc_uuid
 
     # Store content in filesystem
     write_content(storage_path, doc_content)
-    # Add to Vector store
-    vector_store.add(doc_content.bytes.decode("utf-8"), {
-        "external_id": external_id,
-        "source_id": str(external_source.id),
-        "format": format_str,
-    })
+
+    # Add to Vector store with title-prefixed content and enriched metadata when
+    # a vector store is available for this run.
+    if vector_store is not None:
+        body_text = doc_content.bytes.decode("utf-8")
+        embedding_text = f"{title}\n\n{body_text}" if title else body_text
+        embedding_metadata: dict[str, str] = {
+            "external_id": external_id,
+            "source_id": str(external_source.id),
+            "format": format_str.value,
+        }
+        if title:
+            embedding_metadata["title"] = title
+        notebook_name = metadata.get("notebook") if metadata is not None else None
+        if notebook_name:
+            embedding_metadata["notebook"] = str(notebook_name)
+
+        vector_store.add(embedding_text, embedding_metadata)
 
     session.commit()
 

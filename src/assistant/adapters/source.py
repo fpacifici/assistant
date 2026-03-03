@@ -91,3 +91,20 @@ class ExternalSource(ABC):
             ExternalSourceError: If the operation fails.
         """
         ...
+
+    def get_document_metadata(self, external_id: str) -> dict[str, str]:
+        """Return provider-specific metadata for a document.
+
+        Implementations may override this to expose additional metadata such as titles,
+        notebook names, or timestamps. The default implementation returns an empty
+        mapping, indicating that no metadata is available.
+
+        Args:
+            external_id: The ID of the document in the external source.
+
+        Returns:
+            A dictionary mapping metadata keys to values for the given document.
+        """
+        # Default implementation so providers can opt in without breaking callers.
+        del external_id  # Unused in the base implementation.
+        return {}
