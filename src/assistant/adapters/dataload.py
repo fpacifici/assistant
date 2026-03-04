@@ -131,7 +131,7 @@ def _load_source_data(
             logger.exception("Error processing document %s", external_id)
 
 
-def _process_document(
+def _process_document(  # noqa: PLR0913
     session: Session,
     vector_store: VectorStore,
     external_source: ExternalSource,
