@@ -116,6 +116,8 @@ black src/
 
 ## Development Workflow
 
+Every time you apply a change, run tests and typechecking as described below.
+
 ### Adding New Modules
 
 1. Create the module file in `src/assistant/`

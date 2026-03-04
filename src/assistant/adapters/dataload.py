@@ -15,7 +15,7 @@ from assistant.adapters.registry import (
     get_registry,
 )
 from assistant.adapters.source import ExternalSource as ExternalSourceBase
-from assistant.agents.vectors import VectorStore
+from assistant.agents.vectors import VectorStore, embedding_content_and_metadata
 from assistant.config import Config
 from assistant.models.database import get_session_factory
 from assistant.models.schema import Document, DocumentFormat, ExternalSource
@@ -185,45 +185,58 @@ def _process_document(
 
     now = datetime.now(UTC)
 
+    title = doc_content.title
+    meta = doc_content.metadata
+
     if existing_doc:
         # Update existing document
         existing_doc.last_update_datetime = now
-        existing_doc.title = f"Document {external_id}"  # Simplified
+        existing_doc.title = title
         existing_doc.format = format_str
         doc_uuid = existing_doc.uuid
+        document = existing_doc
         logger.debug("Updated document: %s", external_id)
     else:
         # Create new document
         doc_uuid = uuid.uuid4()
-        new_doc = Document(
+        document = Document(
             uuid=doc_uuid,
             external_id=external_id,
             creation_datetime=now,
             last_update_datetime=now,
-            title=f"Document {external_id}",  # Simplified
+            title=title,
             format=format_str,
             source_id=external_source.id,
         )
-        session.add(new_doc)
+        session.add(document)
         logger.debug("Created document: %s", external_id)
+
+    # Persist additional metadata entries as key-value pairs on the Document, skipping
+    # the title key which is stored as a first-class column.
+    for meta_key, meta_value in meta.items():
+        if meta_key == "title":
+            continue
+        document.set_metadata(meta_key, str(meta_value))
 
     # Update content UUID to match document UUID
     doc_content.uuid = doc_uuid
 
     # Store content in filesystem
     write_content(storage_path, doc_content)
-    # Add to Vector store when available
-    if vector_store is not None:
-        vector_store.add(
-            doc_content.bytes.decode("utf-8"),
-            {
-                "external_id": external_id,
-                "source_id": str(external_source.id),
-                "format": format_str,
-            },
-        )
 
     session.commit()
+
+    # Add to vector store when available (skip if embedding credentials not configured)
+    if vector_store is not None:
+        embedding_text, embedding_metadata = embedding_content_and_metadata(
+            doc_content,
+            extra_metadata={
+                "external_id": external_id,
+                "source_id": str(external_source.id),
+                "format": format_str.value,
+            },
+        )
+        vector_store.add(embedding_text, embedding_metadata)
 
 
 def _remove_deleted_documents(_session: Session, _storage_path: Path) -> None:

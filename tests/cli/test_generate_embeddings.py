@@ -15,6 +15,9 @@ def test_generate_embeddings_success() -> None:
     mock_document = MagicMock(spec=Document)
     mock_document.uuid = document_uuid
     mock_document.format = DocumentFormat.TEXT
+    mock_document.title = "Test Title"
+    mock_document.metadata_entries = []
+    mock_document.metadata_dict = {}
 
     mock_session = MagicMock()
     mock_session.get.return_value = mock_document
@@ -32,22 +35,24 @@ def test_generate_embeddings_success() -> None:
         patch("assistant.cli.generate_embeddings.Config") as mock_config_cls,
         patch("assistant.cli.generate_embeddings.get_session_factory", return_value=mock_factory),
         patch("assistant.cli.generate_embeddings.read_content", return_value=doc_content),
-        patch("assistant.cli.generate_embeddings.embed") as mock_embed,
+        patch("assistant.cli.generate_embeddings.VectorStore") as mock_store_cls,
         patch("sys.argv", ["generate_embeddings", str(document_uuid)]),
     ):
         mock_config = MagicMock()
         mock_config.get_document_storage_path.return_value = storage_path
         mock_config_cls.return_value = mock_config
 
-        mock_embed.return_value = [[0.1] * 1536]
+        mock_store = MagicMock()
+        mock_store.embed.return_value = [[0.1] * 1536]
+        mock_store_cls.return_value = mock_store
 
         result = main()
 
     assert result == 0
     mock_session.get.assert_called_once_with(Document, document_uuid)
-    mock_embed.assert_called_once_with(
-        "Hello world content",
-        {"uuid": str(document_uuid)},
+    mock_store.embed.assert_called_once_with(
+        "Test Title\n\nHello world content",
+        {"uuid": str(document_uuid), "title": "Test Title"},
     )
 
 

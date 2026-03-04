@@ -70,7 +70,12 @@ class FakeExternalSource(ExternalSource):
         doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"fake:{external_id}")
         _, content_bytes = self._documents[external_id]
 
-        return DocumentContent(uuid=doc_uuid, bytes=content_bytes)
+        return DocumentContent(
+            uuid=doc_uuid,
+            bytes=content_bytes,
+            title=f"Document {external_id}",
+            metadata={"source": "fake", "external_id": external_id},
+        )
 
     def list_documents(
         self,

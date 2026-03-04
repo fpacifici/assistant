@@ -8,7 +8,7 @@ from typing import cast
 
 from assistant.adapters.evernote import EvernoteSource
 from assistant.cli.table import print_table
-from evernote_backup.cli_app_auth import get_auth_token, get_sync_client
+from evernote_backup.cli_app_auth import get_auth_token, get_sync_client  # type: ignore[import-untyped]
 
 logging.basicConfig(
     level=logging.INFO,

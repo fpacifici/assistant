@@ -1,7 +1,7 @@
 """Tests for DataLoad job."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -60,23 +60,31 @@ def test_load_data_creates_documents(test_config: Config, db_session: Session) -
     def session_factory() -> SessionContext:
         return SessionContext()
 
-    with patch(
-        "assistant.adapters.dataload.get_session_factory",
-    ) as mock_factory:
+    with (
+        patch(
+            "assistant.adapters.dataload.get_session_factory",
+        ) as mock_factory,
+        patch("assistant.adapters.dataload.VectorStore") as mock_vector_store_cls,
+    ):
         mock_factory.return_value = session_factory
-        # Run load_data
+        mock_vector_store_cls.return_value.add = MagicMock()
         load_data(config=test_config)
 
     # Check that documents were created
     documents = db_session.query(Document).filter(Document.source_id == source.id).all()
     assert len(documents) >= 2  # Should have at least doc1 and doc2
 
-    # Check document properties
+    # Check document properties and metadata are populated from the provider
     for doc in documents:
         assert doc.external_id in ["doc1", "doc2"]
         assert doc.title is not None
+        assert doc.title == f"Document {doc.external_id}"
         assert doc.format is not None
         assert doc.source_id == source.id
+        assert doc.metadata_dict == {
+            "source": "fake",
+            "external_id": doc.external_id,
+        }
 
 
 def test_load_data_stores_content(
@@ -104,11 +112,14 @@ def test_load_data_stores_content(
     def session_factory():
         return SessionContext()
 
-    with patch(
-        "assistant.adapters.dataload.get_session_factory",
-    ) as mock_factory:
+    with (
+        patch(
+            "assistant.adapters.dataload.get_session_factory",
+        ) as mock_factory,
+        patch("assistant.adapters.dataload.VectorStore") as mock_vector_store_cls,
+    ):
         mock_factory.return_value = session_factory
-        # Run load_data
+        mock_vector_store_cls.return_value.add = MagicMock()
         load_data(config=test_config)
 
     # Check that content files were created

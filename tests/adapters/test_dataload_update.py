@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy.orm import Session
 
@@ -62,10 +62,14 @@ def test_load_data_updates_existing_document(
     def session_factory() -> SessionContext:
         return SessionContext()
 
-    with patch(
-        "assistant.adapters.dataload.get_session_factory",
-    ) as mock_factory:
+    with (
+        patch(
+            "assistant.adapters.dataload.get_session_factory",
+        ) as mock_factory,
+        patch("assistant.adapters.dataload.VectorStore") as mock_vector_store_cls,
+    ):
         mock_factory.return_value = session_factory
+        mock_vector_store_cls.return_value.add = MagicMock()
         load_data(config=test_config)
 
     # Refresh the document
@@ -115,10 +119,14 @@ def test_load_data_handles_provider_error(
     def session_factory() -> SessionContext:
         return SessionContext()
 
-    with patch(
-        "assistant.adapters.dataload.get_session_factory",
-    ) as mock_factory:
+    with (
+        patch(
+            "assistant.adapters.dataload.get_session_factory",
+        ) as mock_factory,
+        patch("assistant.adapters.dataload.VectorStore") as mock_vector_store_cls,
+    ):
         mock_factory.return_value = session_factory
+        mock_vector_store_cls.return_value.add = MagicMock()
         # Should not raise, but log error
         load_data(config=test_config)
 
@@ -169,10 +177,14 @@ def test_load_data_filters_by_since_datetime(
     def session_factory() -> SessionContext:
         return SessionContext()
 
-    with patch(
-        "assistant.adapters.dataload.get_session_factory",
-    ) as mock_factory:
+    with (
+        patch(
+            "assistant.adapters.dataload.get_session_factory",
+        ) as mock_factory,
+        patch("assistant.adapters.dataload.VectorStore") as mock_vector_store_cls,
+    ):
         mock_factory.return_value = session_factory
+        mock_vector_store_cls.return_value.add = MagicMock()
         load_data(config=test_config)
 
     # Should only fetch documents updated after recent_time

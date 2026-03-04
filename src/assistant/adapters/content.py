@@ -1,7 +1,8 @@
 """Document content handling for filesystem storage."""
 
 import uuid
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -12,10 +13,14 @@ class DocumentContent:
     Attributes:
         uuid: UUID of the document (used as filename).
         bytes: The raw bytes of the document content.
+        title: Document title from the provider; empty string when unknown.
+        metadata: Key-value metadata from the provider (e.g. notebook name).
     """
 
     uuid: uuid.UUID
     bytes: bytes
+    title: str = ""
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
 
 def get_content_path(base_dir: Path, document_uuid: uuid.UUID) -> Path:
