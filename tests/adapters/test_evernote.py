@@ -40,7 +40,13 @@ def _make_client(note_store: MagicMock) -> MagicMock:
 def test_fetch_one_document() -> None:
     """Test get_document returns DocumentContent when the note exists."""
     note = Note(guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890", content="<en-note>Hello</en-note>")
-    note_store = _make_note_store(get_note_side_effect=note)
+    note.title = "My Note Title"
+    note.notebookGuid = "nb-guid-1"
+    notebook = Notebook(guid="nb-guid-1", name="MyNotebook")
+    note_store = _make_note_store(
+        get_note_side_effect=note,
+        list_notebooks_return=[notebook],
+    )
     client = _make_client(note_store)
 
     with patch("assistant.adapters.evernote.create_client", return_value=client):
@@ -50,7 +56,10 @@ def test_fetch_one_document() -> None:
     assert isinstance(doc, DocumentContent)
     assert doc.uuid == UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
     assert doc.bytes == b"<en-note>Hello</en-note>"
+    assert doc.title == "My Note Title"
+    assert doc.metadata == {"notebook": "MyNotebook"}
     note_store.getNoteWithResultSpec.assert_called_once()
+    note_store.listNotebooks.assert_called_once()
 
 
 def test_get_document_non_existing_raises() -> None:
