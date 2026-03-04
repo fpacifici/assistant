@@ -5,7 +5,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from assistant.adapters.content import DocumentContent
+from assistant.models.content import DocumentContent
 from assistant.models.database import get_database_url
 
 
