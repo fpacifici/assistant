@@ -1,4 +1,4 @@
-from typing import Any, List, NamedTuple
+from typing import Any, NamedTuple
 
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
@@ -71,15 +71,7 @@ class VectorStore:
         self.store.delete(collection_name="assistant")
 
     def embed(self, content: str, metadata: dict[str, Any]) -> list[list[float]]:
-        """Generate embeddings for the given content.
-
-        Args:
-            content: Text content to embed.
-            metadata: Metadata to associate with the content.
-
-        Returns:
-            A list of embedding vectors (one per text chunk).
-        """
+        """Generate embeddings for the given content."""
 
         doc = Document(page_content=content, metadata=metadata)
         text_splitter = RecursiveCharacterTextSplitter(
@@ -93,7 +85,7 @@ class VectorStore:
             [split.page_content for split in all_splits],
         )
 
-    def splits(self, content: str, metadata: dict[str, Any]) -> List[Document]:
+    def splits(self, content: str, metadata: dict[str, Any]) -> list[Document]:
         """Split content into LangChain documents with metadata preserved."""
 
         doc = Document(page_content=content, metadata=metadata)
@@ -109,7 +101,7 @@ class VectorStore:
 
         self.store.add_documents(documents=self.splits(content, metadata))
 
-    def query(self, query: str) -> List[VectorResult]:
+    def query(self, query: str) -> list[VectorResult]:
         """Run a similarity search against the stored documents."""
 
         results = self.store.similarity_search_with_score(query)
@@ -123,13 +115,6 @@ def embed(content: str, metadata: dict[str, Any]) -> list[list[float]]:
 
     This creates a transient :class:`VectorStore` instance and delegates to its
     :meth:`VectorStore.embed` method.
-
-    Args:
-        content: Text content to embed.
-        metadata: Metadata to associate with the content.
-
-    Returns:
-        A list of embedding vectors (one per text chunk).
     """
 
     store = VectorStore()

@@ -19,7 +19,7 @@ def main() -> int:
     """Import database and documents from a tar.gz archive.
 
     Returns:
-        0 on success, 1 on error.
+        0 on success, -1 on error.
     """
 
     parser = argparse.ArgumentParser(
@@ -44,10 +44,11 @@ def main() -> int:
         logger.info("Importing database and documents from %s", archive_path)
         run_restore(config, archive_path)
         logger.info("Import completed successfully")
-        return 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Import failed")
-        return 1
+        return -1
+    else:
+        return 0
 
 
 if __name__ == "__main__":

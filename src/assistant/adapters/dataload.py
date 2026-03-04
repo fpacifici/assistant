@@ -116,16 +116,7 @@ def _load_source_data(
 
     logger.info("Found %d documents to process", len(external_ids))
 
-    # Fetch and store each document. If the vector store cannot be initialized
-    # (for example because embedding credentials are not configured), we still
-    # want to load and persist documents; embeddings will simply be skipped.
-    try:
-        vector_store: VectorStore | None = VectorStore()
-    except Exception:  # noqa: BLE001
-        logger.exception(
-            "Error initializing vector store; skipping embedding generation for this run",
-        )
-        vector_store = None
+    vector_store = VectorStore()
     for external_id in external_ids:
         try:
             _process_document(
@@ -140,9 +131,9 @@ def _load_source_data(
             logger.exception("Error processing document %s", external_id)
 
 
-def _process_document(
+def _process_document(  # noqa: PLR0913
     session: Session,
-    vector_store: VectorStore | None,
+    vector_store: VectorStore,
     external_source: ExternalSource,
     provider: ExternalSourceBase,
     external_id: str,
@@ -226,17 +217,15 @@ def _process_document(
 
     session.commit()
 
-    # Add to vector store when available (skip if embedding credentials not configured)
-    if vector_store is not None:
-        embedding_text, embedding_metadata = embedding_content_and_metadata(
-            doc_content,
-            extra_metadata={
-                "external_id": external_id,
-                "source_id": str(external_source.id),
-                "format": format_str.value,
-            },
-        )
-        vector_store.add(embedding_text, embedding_metadata)
+    embedding_text, embedding_metadata = embedding_content_and_metadata(
+        doc_content,
+        extra_metadata={
+            "external_id": external_id,
+            "source_id": str(external_source.id),
+            "format": format_str.value,
+        },
+    )
+    vector_store.add(embedding_text, embedding_metadata)
 
 
 def _remove_deleted_documents(_session: Session, _storage_path: Path) -> None:

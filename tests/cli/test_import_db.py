@@ -41,5 +41,5 @@ def test_import_db_cli_failure(tmp_path: Path) -> None:
         mock_run_restore.side_effect = Exception("Test error")
         result = main()
 
-    assert result == 1
+    assert result == -1
 

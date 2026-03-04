@@ -2,30 +2,21 @@
 
 from __future__ import annotations
 
-import json
+import shutil
 import tarfile
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
 import pytest
 
 from assistant.config import Config
-from assistant.export import DOCUMENTS_DIRNAME, LOGICAL_DATA_FILENAME
+from assistant.export import DB_DUMP_FILENAME, DOCUMENTS_DIRNAME
 from assistant.restore import run_restore
 
 
 def _create_sample_archive(root: Path) -> Path:
-    """Create a minimal archive compatible with the restore logic."""
+    """Create a minimal archive compatible with the restore logic (db.dump + documents/)."""
 
-    data: dict[str, list[object]] = {
-        "external_sources": [],
-        "documents": [],
-        "collections": [],
-        "embeddings": [],
-    }
-    data_path = root / LOGICAL_DATA_FILENAME
-    data_path.write_text(json.dumps(data), encoding="utf-8")
+    dump_path = root / DB_DUMP_FILENAME
+    dump_path.write_bytes(b"dummy-pg-dump")
 
     documents_dir = root / DOCUMENTS_DIRNAME
     documents_dir.mkdir(parents=True, exist_ok=True)
@@ -33,78 +24,76 @@ def _create_sample_archive(root: Path) -> Path:
 
     archive_path = root / "backup.tar.gz"
     with tarfile.open(archive_path, "w:gz") as tar:
-        tar.add(data_path, arcname=LOGICAL_DATA_FILENAME)
+        tar.add(dump_path, arcname=DB_DUMP_FILENAME)
         tar.add(documents_dir, arcname=DOCUMENTS_DIRNAME)
 
     return archive_path
 
 
-def test_run_restore_uses_helpers_and_restores_documents(
+def test_run_restore_calls_pg_restore_and_restores_documents(
     tmp_path: Path,
     test_config: Config,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """run_restore should orchestrate helpers and restore the documents tree."""
+    """run_restore should run pg_restore and restore the documents tree."""
 
     archive_path = _create_sample_archive(tmp_path)
 
-    # Prepare a fake engine with a simple dialect name.
-    engine = MagicMock()
-    engine.dialect = SimpleNamespace(name="sqlite")
+    restore_calls: list[tuple[Path, Config]] = []
+    doc_restore_calls: list[tuple[Config, Path]] = []
 
-    drop_calls: list[object] = []
-    init_calls: list[object] = []
-    reset_vector_calls: list[object] = []
-    clear_calls: list[object] = []
-    restore_app_calls: list[object] = []
-    restore_vector_calls: list[object] = []
+    def fake_pg_restore(dump_path: Path, *, config: Config) -> None:
+        restore_calls.append((dump_path, config))
 
-    monkeypatch.setattr("assistant.restore.get_engine", lambda: engine)
+    def fake_restore_documents(config: Config, extracted_root: Path) -> None:
+        doc_restore_calls.append((config, extracted_root))
+        # Actually copy documents so we can assert on the result.
+        source_dir = extracted_root / DOCUMENTS_DIRNAME
+        target_dir = config.get_document_storage_path()
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if source_dir.exists():
+            shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
-    def fake_drop_database(e: object) -> None:
-        drop_calls.append(e)
-
-    def fake_init_database(e: object) -> None:
-        init_calls.append(e)
-
-    def fake_reset_vector_tables(e: object) -> None:
-        reset_vector_calls.append(e)
-
-    def fake_clear_application_data(session: object) -> None:  # noqa: ARG001
-        clear_calls.append(object())
-
-    def fake_restore_application_data(session: object, data: object) -> None:  # noqa: ARG001
-        restore_app_calls.append(object())
-
-    def fake_restore_vector_data(e: object, data: object) -> None:  # noqa: ARG001
-        restore_vector_calls.append(e)
-
-    monkeypatch.setattr("assistant.restore.drop_database", fake_drop_database)
-    monkeypatch.setattr("assistant.restore.init_database", fake_init_database)
-    monkeypatch.setattr("assistant.restore._reset_vector_tables", fake_reset_vector_tables)
-    monkeypatch.setattr("assistant.restore._clear_application_data", fake_clear_application_data)
+    monkeypatch.setattr("assistant.restore._default_pg_restore", fake_pg_restore)
     monkeypatch.setattr(
-        "assistant.restore._restore_application_data",
-        fake_restore_application_data,
+        "assistant.restore._restore_documents_directory",
+        fake_restore_documents,
     )
-    monkeypatch.setattr("assistant.restore._restore_vector_data", fake_restore_vector_data)
 
-    # Ensure the target document directory exists and has a different file so
-    # that we can verify it gets replaced.
     target_docs = test_config.get_document_storage_path()
     target_docs.mkdir(parents=True, exist_ok=True)
     (target_docs / "old.txt").write_text("old", encoding="utf-8")
 
     run_restore(test_config, archive_path)
 
-    assert drop_calls == [engine]
-    assert init_calls == [engine]
-    assert reset_vector_calls == [engine]
-    assert clear_calls
-    assert restore_app_calls
-    assert restore_vector_calls == [engine]
+    assert len(restore_calls) == 1
+    dump_path, config = restore_calls[0]
+    assert dump_path.name == DB_DUMP_FILENAME
+    assert config is test_config
 
-    # The target documents directory should now contain the content from the archive.
+    assert len(doc_restore_calls) == 1
+    _, extracted_root = doc_restore_calls[0]
+    # extracted_root was the temp dir used during restore (since deleted)
+    assert extracted_root is not None
+
     restored_files = sorted(p.name for p in target_docs.iterdir())
     assert restored_files == ["note.txt"]
 
+
+def test_run_restore_raises_when_dump_missing(
+    tmp_path: Path,
+    test_config: Config,
+) -> None:
+    """run_restore should raise FileNotFoundError when archive has no db.dump."""
+
+    # Archive with only documents/, no db.dump.
+    documents_dir = tmp_path / DOCUMENTS_DIRNAME
+    documents_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = tmp_path / "incomplete.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(documents_dir, arcname=DOCUMENTS_DIRNAME)
+
+    with pytest.raises(FileNotFoundError, match=DB_DUMP_FILENAME):
+        run_restore(test_config, archive_path)
