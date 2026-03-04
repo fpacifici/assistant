@@ -1,9 +1,45 @@
-from typing import Any, List, NamedTuple, Tuple
+from typing import Any, List, NamedTuple
+
 from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from assistant.adapters.content import DocumentContent
 from assistant.models.database import get_database_url
+
+
+def embedding_content_and_metadata(
+    doc_content: DocumentContent,
+    *,
+    extra_metadata: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Build the content string and metadata dict passed to the vector store for embedding.
+
+    Args:
+        doc_content: Document content with optional title and metadata.
+        extra_metadata: Additional keys to merge into the metadata dict (e.g. external_id,
+            source_id, format, uuid). These take precedence over doc_content.metadata.
+
+    Returns:
+        A tuple (embedding_text, metadata). embedding_text is the body decoded as UTF-8,
+        optionally prefixed with the document title. metadata is a flat dict suitable
+        for the vector store, with string values.
+    """
+    body_text = doc_content.bytes.decode("utf-8")
+    title = doc_content.title
+    embedding_text = f"{title}\n\n{body_text}" if title else body_text
+    metadata: dict[str, Any] = {}
+    if doc_content.metadata:
+        for k, v in doc_content.metadata.items():
+            metadata[k] = str(v)
+    if title:
+        metadata["title"] = title
+    if extra_metadata:
+        for k, v in extra_metadata.items():
+            metadata[k] = str(v)
+    return embedding_text, metadata
+
 
 class VectorResult(NamedTuple):
     document: Document

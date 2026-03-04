@@ -1,9 +1,11 @@
 from typing import Generator, List, Tuple
+
+from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_core.documents import Document
+from langchain_core.messages import BaseMessage
 
 from assistant.agents.vectors import VectorResult, VectorStore
-from langchain.agents import create_agent
 
 @tool(response_format="content_and_artifact")
 def retrieve_documents(query: str) -> Tuple[str, List[Document]]:
@@ -32,7 +34,7 @@ class SearchAgent:
         )
         self.agent = create_agent("gpt-4.1", tools, system_prompt=prompt)
 
-    def query(self, query: str) -> Generator[str, None, None]:
+    def query(self, query: str) -> Generator[BaseMessage, None, None]:
         for event in self.agent.stream(
             {"messages": [{"role": "user", "content": query}]},
             stream_mode="values",

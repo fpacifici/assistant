@@ -4,11 +4,11 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from evernote.edam.notestore.ttypes import NoteFilter, NoteResultSpec, NotesMetadataResultSpec
-from evernote.edam.type.ttypes import NoteSortOrder
-from evernote_backup.cli_app_auth import get_auth_token, get_sync_client
-from evernote_backup.evernote_client_sync import EvernoteClientSync
-from evernote_backup.evernote_client_util import EvernoteAuthError
+from evernote.edam.notestore.ttypes import NoteFilter, NoteResultSpec, NotesMetadataResultSpec  # type: ignore[import-untyped]
+from evernote.edam.type.ttypes import NoteSortOrder  # type: ignore[import-untyped]
+from evernote_backup.cli_app_auth import get_auth_token, get_sync_client  # type: ignore[import-untyped]
+from evernote_backup.evernote_client_sync import EvernoteClientSync  # type: ignore[import-untyped]
+from evernote_backup.evernote_client_util import EvernoteAuthError  # type: ignore[import-untyped]
 
 from assistant.adapters.content import DocumentContent
 from assistant.adapters.secrets import Oauth1AuthProvider, Oauth1Credential
@@ -82,8 +82,6 @@ class EvernoteSource(ExternalSource):
     def __init__(self, notebooks: list[str]) -> None:
         self._notebooks = notebooks
         self._client: EvernoteClientSync | None = None
-        self._notebook_names_by_guid: dict[str, str] = {}
-        self._note_metadata_by_guid: dict[str, dict[str, str]] = {}
 
     @classmethod
     def build(cls, config: ExternalSourceInstanceConfig) -> "EvernoteSource":
@@ -113,20 +111,30 @@ class EvernoteSource(ExternalSource):
             external_id: The ID of the document in the external source.
 
         Returns:
-            DocumentContent containing the document data.
+            DocumentContent containing the document data, title, and metadata.
         """
-        
         client = self._get_client()
         note = client.get_note_store().getNoteWithResultSpec(
             guid=external_id,
             resultSpec=NoteResultSpec(
                 includeContent=True,
-            )
+            ),
         )
-
+        notebooks = {
+            nb.guid: nb.name
+            for nb in client.get_note_store().listNotebooks()
+        }
+        notebook_guid = getattr(note, "notebookGuid", None)
+        notebook_name = notebooks.get(notebook_guid, "") if notebook_guid else ""
+        title = getattr(note, "title", None) or ""
+        metadata: dict[str, str] = (
+            {"notebook": notebook_name} if notebook_name else {}
+        )
         return DocumentContent(
             uuid=UUID(note.guid),
             bytes=note.content.encode("utf-8") if note.content else b"",
+            title=title,
+            metadata=metadata,
         )
 
     def list_documents(self, since: datetime) -> list[str]:
@@ -143,7 +151,6 @@ class EvernoteSource(ExternalSource):
             notebook.guid: notebook.name
             for notebook in client.get_note_store().listNotebooks()
         }
-        self._notebook_names_by_guid = notebooks
         names = set(notebooks.values())
         for notebook in self._notebooks:
             if notebook not in names:
@@ -177,71 +184,6 @@ class EvernoteSource(ExternalSource):
                     end_reached = True
                 offset += len(notes.notes)
                 search_context = notes.searchContextBytes
-
-                for note in notes.notes:
-                    notebook_name = notebooks.get(note.notebookGuid, "")
-                    metadata: dict[str, str] = {}
-                    if note.title:
-                        metadata["title"] = note.title
-                    if notebook_name:
-                        metadata["notebook"] = notebook_name
-                    if metadata:
-                        self._note_metadata_by_guid[note.guid] = metadata
-
                 updated_ids.extend([note.guid for note in notes.notes])
 
         return updated_ids
-
-    def get_document_metadata(self, external_id: str) -> dict[str, str]:
-        """Return metadata for a document identified by its Evernote GUID.
-
-        Metadata includes:
-        * ``title``: The Evernote note title.
-        * ``notebook``: The name of the notebook the note belongs to.
-
-        Args:
-            external_id: Evernote note GUID.
-
-        Returns:
-            A metadata dictionary for the given note. May be empty if metadata
-            cannot be determined.
-        """
-
-        cached = self._note_metadata_by_guid.get(external_id)
-        if cached is not None:
-            # Return a shallow copy to avoid accidental mutation by callers.
-            return dict(cached)
-
-        client = self._get_client()
-        note = client.get_note_store().getNoteWithResultSpec(
-            guid=external_id,
-            resultSpec=NoteResultSpec(
-                includeContent=False,
-            ),
-        )
-
-        # Ensure notebook mapping is populated; it can be reused across calls.
-        if not self._notebook_names_by_guid:
-            notebooks = {
-                notebook.guid: notebook.name
-                for notebook in client.get_note_store().listNotebooks()
-            }
-            self._notebook_names_by_guid = notebooks
-        else:
-            notebooks = self._notebook_names_by_guid
-
-        metadata: dict[str, str] = {}
-        if getattr(note, "title", None):
-            metadata["title"] = str(note.title)
-        notebook_guid = getattr(note, "notebookGuid", None)
-        if notebook_guid:
-            notebook_name = notebooks.get(notebook_guid)
-            if notebook_name:
-                metadata["notebook"] = notebook_name
-
-        if metadata:
-            self._note_metadata_by_guid[external_id] = metadata
-
-        return metadata
-
-        

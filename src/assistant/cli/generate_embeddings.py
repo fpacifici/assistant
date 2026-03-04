@@ -5,9 +5,9 @@ import logging
 import sys
 import uuid as uuid_module
 
-from assistant.adapters.content import read_content
+from assistant.adapters.content import DocumentContent, read_content
 from assistant.agents.infra import init_environment
-from assistant.agents.vectors import VectorStore
+from assistant.agents.vectors import VectorStore, embedding_content_and_metadata
 from assistant.config import Config
 from assistant.models.database import get_session_factory
 from assistant.models.schema import Document, DocumentFormat
@@ -68,23 +68,23 @@ def main() -> int:
             logger.error("Content not found for document %s", document_uuid)
             return 1
 
+        doc_content = DocumentContent(
+            uuid=document.uuid,
+            bytes=content.bytes,
+            title=document.title,
+            metadata=document.metadata_dict,
+        )
         try:
-            text = content.bytes.decode("utf-8")
+            embedding_text, embedding_metadata = embedding_content_and_metadata(
+                doc_content,
+                extra_metadata={"uuid": str(document.uuid)},
+            )
         except UnicodeDecodeError:
             logger.exception("Failed to decode content as UTF-8")
             return 1
 
-        embedding_text = f"{document.title}\n\n{text}"
-        metadata = {"uuid": str(document.uuid), "title": document.title}
-        # Include any additional key-value metadata stored for this document.
-        for entry in document.metadata_entries:
-            # Avoid overwriting existing keys such as uuid/title.
-            if entry.key in metadata:
-                continue
-            metadata[entry.key] = entry.value
-
         store = VectorStore()
-        vectors = store.embed(embedding_text, metadata)
+        vectors = store.embed(embedding_text, embedding_metadata)
         logger.info(
             "Generated %d embedding(s) for document %s",
             len(vectors),
