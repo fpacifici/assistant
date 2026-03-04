@@ -17,6 +17,7 @@ def test_generate_embeddings_success() -> None:
     mock_document.format = DocumentFormat.TEXT
     mock_document.title = "Test Title"
     mock_document.metadata_entries = []
+    mock_document.metadata_dict = {}
 
     mock_session = MagicMock()
     mock_session.get.return_value = mock_document
