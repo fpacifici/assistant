@@ -74,12 +74,17 @@ def test_load_data_creates_documents(test_config: Config, db_session: Session) -
     documents = db_session.query(Document).filter(Document.source_id == source.id).all()
     assert len(documents) >= 2  # Should have at least doc1 and doc2
 
-    # Check document properties
+    # Check document properties and metadata are populated from the provider
     for doc in documents:
         assert doc.external_id in ["doc1", "doc2"]
         assert doc.title is not None
+        assert doc.title == f"Document {doc.external_id}"
         assert doc.format is not None
         assert doc.source_id == source.id
+        assert doc.metadata_dict == {
+            "source": "fake",
+            "external_id": doc.external_id,
+        }
 
 
 def test_load_data_stores_content(
