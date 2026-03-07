@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from assistant.config import Config, DatabaseComponentsConfig
+from langgraph.checkpoint.postgres import PostgresSaver  
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -132,3 +133,6 @@ def init_database(engine: Engine | None = None) -> None:
     # The schema is specified in the table definitions (__table_args__)
     # SQLAlchemy 2.0 doesn't accept schema parameter in create_all
     Base.metadata.create_all(engine)
+
+    with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
+        checkpointer.setup()

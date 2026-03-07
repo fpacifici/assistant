@@ -23,7 +23,7 @@ This is isting tasks for humans, not for agents.
 
 ## Basic RAG
 
-- Set it up with Langchain
-- Find a storage
-- Write a script to ask questions
-- Iterate on this
+- [DONE] Set it up with Langchain
+- [DONE] Find a storage
+- [DONE] Write a script to ask questions
+- [DONE] Iterate on this
