@@ -29,13 +29,23 @@ def main() -> int:
         type=str,
         help="The search query string",
     )
+    parser.add_argument(
+        "--thread-id",
+        "-t",
+        type=str,
+        help="The thread ID",
+    )
     args = parser.parse_args()
-
+    thread_id = args.thread_id
     try:
         init_environment()
         store = SearchAgent()
-        for event in store.query(args.query):
+        messages = []
+        print(f" Thread ID: {thread_id}")
+        for event in store.query(thread_id, args.query):
             event.pretty_print()
+            messages.append(event)
+        
         return 0
     except Exception:
         logger.exception("Query failed")

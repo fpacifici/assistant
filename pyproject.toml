@@ -20,6 +20,7 @@ dependencies = [
     "langchain_core>=1.2.16",
     "langchain-postgres>=0.0.17",
     "python-dotenv>=1.2.1",
+    "langgraph-checkpoint-postgres>=3.0.4",
 ]
 
 [project.optional-dependencies]
