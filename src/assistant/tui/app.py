@@ -61,7 +61,7 @@ class ChatApp(App[None]):
     """Textual chat app that sends user queries to the RAG agent and streams responses.
 
     The app shows a scrollable log for the conversation and an input at the bottom.
-    Submit a query to stream agent messages; when done, you can send another. Exit with Ctrl+Q.
+    Submit a query to stream agent messages; then send another. Exit with Ctrl+Q.
     """
 
     CSS_PATH = "chat.css"

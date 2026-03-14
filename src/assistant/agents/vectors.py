@@ -17,7 +17,7 @@ def embedding_content_and_metadata(
     *,
     extra_metadata: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    """Build the content string and metadata dict passed to the vector store for embedding.
+    """Build content string and metadata dict for the vector store embedding.
 
     Args:
         doc_content: Document content with optional title and metadata.

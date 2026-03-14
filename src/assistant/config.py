@@ -1,6 +1,6 @@
 """Configuration management for the assistant package.
 
-This module loads configuration from a YAML file and supports environment-variable overrides.
+This module loads configuration from YAML and supports environment-variable overrides.
 """
 
 from __future__ import annotations
@@ -68,7 +68,9 @@ def _env_var_name(key: str) -> str:
     return key.upper().replace(".", "_")
 
 
-def _coerce_env_value(*, key: str, env_key: str, raw: str, expected_type: type[object]) -> object:
+def _coerce_env_value(
+    *, key: str, env_key: str, raw: str, expected_type: type[object]
+) -> object:
     """Coerce an environment variable string to an expected scalar type.
 
     Args:
@@ -165,7 +167,9 @@ class Config:
             value = value[part]
         return value
 
-    def _get_expected_scalar_type(self, *, key: str, default: object | None) -> type[object]:
+    def _get_expected_scalar_type(
+        self, *, key: str, default: object | None
+    ) -> type[object]:
         """Infer the expected scalar type for an env override.
 
         Preference order:
@@ -190,7 +194,7 @@ class Config:
     def _get_typed_value(self, *, key: str, expected_type: type[T]) -> T | None:
         """Get a scalar config value with env-var override and strict typing.
 
-        This is used for structured config sections (like `database.*`) where defaults are not
+        This is used for structured config (e.g. database.*) where defaults are not
         applied, but env-var overrides still need correct type coercion.
 
         Args:
@@ -201,8 +205,7 @@ class Config:
             The configured value, or None if the key is absent in both YAML and env.
 
         Raises:
-            ValueError: If an env var override cannot be coerced, or if the YAML value type is
-                invalid.
+            ValueError: If env override cannot be coerced or YAML value type is invalid.
         """
 
         env_key = _env_var_name(key)
@@ -220,7 +223,7 @@ class Config:
         if value is _MISSING:
             return None
         if not isinstance(value, expected_type):
-            msg = f"Invalid configuration type for {key!r} (expected {expected_type.__name__})"
+            msg = f"Invalid config type for {key!r} (expected {expected_type.__name__})"
             raise ValueError(msg)  # noqa: TRY004
         return value
 
@@ -239,15 +242,14 @@ class Config:
             - Examples: `database.url` -> `DATABASE_URL`
 
         Args:
-            key: Configuration key (supports dot notation, e.g., "external_sources.fake.enabled").
+            key: Config key (dot notation, e.g. "external_sources.fake.enabled").
             default: Default value if key is not found.
 
         Returns:
             Configuration value, possibly overridden by an environment variable.
 
         Raises:
-            ValueError: If an environment variable override is present but cannot be coerced to the
-                expected type.
+            ValueError: If env override is present but cannot be coerced to expected type.
         """
 
         env_key = _env_var_name(key)
@@ -291,8 +293,8 @@ class Config:
     def get_database_config(self) -> DatabaseConfig:
         """Get the effective database configuration with env-var overrides applied.
 
-        This method returns a `DatabaseConfig` structure that already reflects environment-variable
-        overrides following the module convention:
+        Returns a `DatabaseConfig` that reflects environment-variable overrides per module
+        convention:
 
             - `database.url` -> `DATABASE_URL`
             - `database.host` -> `DATABASE_HOST`
@@ -302,10 +304,8 @@ class Config:
             A `DatabaseConfig` mapping, either as a full URL or as connection components.
 
         Raises:
-            ValueError: If neither the YAML `database` section nor any `DATABASE_*` env vars are
-                present.
-            ValueError: If the resulting database configuration is missing required keys or has
-                invalid types.
+            ValueError: If neither YAML `database` nor any `DATABASE_*` env vars are set.
+            ValueError: If database config is missing required keys or has invalid types.
         """
 
         database_section = self._get_from_config("database")
@@ -347,7 +347,9 @@ class Config:
             missing_keys.append("name")
 
         if missing_keys:
-            msg = f"Database configuration missing required keys: {', '.join(missing_keys)}"
+            msg = (
+                f"Database configuration missing required keys: {', '.join(missing_keys)}"
+            )
             raise ValueError(msg)
 
         # Help mypy understand non-None after validation.

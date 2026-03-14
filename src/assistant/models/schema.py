@@ -70,7 +70,7 @@ class Document(Base):
         "ExternalSource",
         back_populates="documents",
     )
-    metadata_entries: Mapped[list["DocumentMetadata"]] = relationship(
+    metadata_entries: Mapped[list[DocumentMetadata]] = relationship(
         "DocumentMetadata",
         back_populates="document",
         cascade="all, delete-orphan",

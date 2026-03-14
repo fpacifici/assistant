@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 def _register_plugins() -> None:
     """Register available plugins.
 
-    The registry now hardcodes provider classes at construction time, so this function is retained
-    for backward compatibility (e.g. CLI/tests) and is intentionally a no-op.
+    The registry hardcodes provider classes at construction; this is retained for
+    backward compatibility (e.g. CLI/tests) and is intentionally a no-op.
     """
 
 

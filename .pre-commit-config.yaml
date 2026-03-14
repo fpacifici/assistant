@@ -28,22 +28,15 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
-  # Black for code formatting
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  # mypy for type checking (use project .venv to avoid duplicate-module and get deps)
+  - repo: local
     hooks:
-      - id: black
-        language_version: python3.13
-
-  # mypy for type checking
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #  rev: v1.13.0
-  #  hooks:
-  #    - id: mypy
-  #      additional_dependencies:
-  #        - types-all
-  #      args: [--strict, --ignore-missing-imports]
-  #      files: ^src/
+      - id: mypy
+        name: mypy
+        entry: .venv/bin/mypy src/
+        language: system
+        files: ^src/
+        pass_filenames: false
 
   # Check for common security issues
   - repo: https://github.com/PyCQA/bandit

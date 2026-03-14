@@ -58,7 +58,7 @@ def test_config_get_with_dot_notation(tmp_path: Path) -> None:
     """Test getting nested config values with dot notation."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "external_sources:\n" "  fake:\n" "    enabled: true\n" "    timeout: 30\n",
+        "external_sources:\n  fake:\n    enabled: true\n    timeout: 30\n",
     )
 
     config = Config(config_path=config_file)
@@ -196,7 +196,7 @@ def test_config_get_external_sources_env_override_type_coercion(tmp_path: Path) 
     """Test type coercion for env overrides (bool/int)."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "external_sources:\n" "  fake:\n" "    enabled: true\n" "    timeout: 30\n",
+        "external_sources:\n  fake:\n    enabled: true\n    timeout: 30\n",
     )
 
     config = Config(config_path=config_file)
@@ -213,7 +213,7 @@ def test_config_get_database_config_from_database_url_key(tmp_path: Path) -> Non
     """Test that database.url in YAML is used as the connection string."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "database:\n" "  url: postgresql://yamluser:yamlpass@yamlhost:5432/yamldb\n",
+        "database:\n  url: postgresql://yamluser:yamlpass@yamlhost:5432/yamldb\n",
     )
 
     config = Config(config_path=config_file)

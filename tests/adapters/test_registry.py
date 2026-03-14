@@ -17,7 +17,9 @@ def test_registry_creation(test_config: Config) -> None:
     assert "fake" in registry.list_providers()
 
 
-def test_registry_register_provider_instance(test_config: Config, db_session: Session) -> None:
+def test_registry_register_provider_instance(
+    test_config: Config, db_session: Session
+) -> None:
     """Test registering a provider instance."""
     registry = Registry(config=test_config)
 
@@ -44,7 +46,9 @@ def test_registry_get_provider(test_config: Config, db_session: Session) -> None
     assert isinstance(provider, FakeExternalSource)
 
 
-def test_registry_get_provider_is_cached(test_config: Config, db_session: Session) -> None:
+def test_registry_get_provider_is_cached(
+    test_config: Config, db_session: Session
+) -> None:
     """Test that provider instances are cached by external source id."""
     registry = Registry(config=test_config)
 
@@ -59,7 +63,9 @@ def test_registry_get_provider_is_cached(test_config: Config, db_session: Sessio
     assert provider1 is provider2
 
 
-def test_registry_get_unregistered_provider(test_config: Config, db_session: Session) -> None:
+def test_registry_get_unregistered_provider(
+    test_config: Config, db_session: Session
+) -> None:
     """Test getting an unregistered provider raises error."""
     registry = Registry(config=test_config)
 

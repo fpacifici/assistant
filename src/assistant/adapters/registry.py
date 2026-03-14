@@ -11,11 +11,12 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session
 
+from assistant.adapters.evernote import EvernoteSource
 from assistant.adapters.plugins.fake import FakeExternalSource
 from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 from assistant.config import Config
 from assistant.models.schema import ExternalSource as ExternalSourceRow
-from assistant.adapters.evernote import EvernoteSource
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +57,9 @@ class ProviderInstanceNotRegisteredError(RegistryError):
         Args:
             source_id: External source instance id that is not registered.
         """
-        super().__init__(f"ExternalSource id '{source_id}' is not registered in the registry")
+        super().__init__(
+            f"ExternalSource id '{source_id}' is not registered in the registry"
+        )
 
 
 class Registry:
@@ -97,7 +100,7 @@ class Registry:
         Raises:
             ExternalSourceNotFoundError: If the external source instance doesn't exist.
             ProviderDisabledError: If the provider type is disabled in config.
-            ValueError: If the provider type is not registered or provider_query is invalid.
+            ValueError: If provider type is not registered or provider_query is invalid.
         """
         if source_id in self._instances:
             return
@@ -113,7 +116,9 @@ class Registry:
         if provider_config.get("enabled") is False:
             raise ProviderDisabledError(provider_type=provider_type)
 
-        query_params = self._parse_query_params(source_id=source_id, raw=row.provider_query)
+        query_params = self._parse_query_params(
+            source_id=source_id, raw=row.provider_query
+        )
         instance_config = ExternalSourceInstanceConfig(
             provider_config=provider_config,
             query_params=query_params,
@@ -165,7 +170,9 @@ class Registry:
         return cast("dict[str, object]", parsed)
 
     @staticmethod
-    def _load_external_source_row(*, source_id: UUID, session: Session) -> ExternalSourceRow:
+    def _load_external_source_row(
+        *, source_id: UUID, session: Session
+    ) -> ExternalSourceRow:
         """Load the ExternalSource DB row for a given instance id."""
 
         row = session.get(ExternalSourceRow, source_id)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import tarfile
 from pathlib import Path
+
 import pytest
 
 from assistant.config import Config
@@ -13,7 +14,7 @@ from assistant.restore import run_restore
 
 
 def _create_sample_archive(root: Path) -> Path:
-    """Create a minimal archive compatible with the restore logic (db.dump + documents/)."""
+    """Create a minimal archive for restore logic (db.dump + documents/)."""
 
     dump_path = root / DB_DUMP_FILENAME
     dump_path.write_bytes(b"dummy-pg-dump")

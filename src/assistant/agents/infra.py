@@ -1,5 +1,7 @@
 import os
+
 import dotenv
+
 
 def init_environment() -> None:
     """Initialize the keys for the agents."""

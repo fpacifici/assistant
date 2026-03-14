@@ -10,7 +10,7 @@ from assistant.models.schema import Document, DocumentFormat
 
 
 def test_generate_embeddings_success() -> None:
-    """Test successful embedding generation: embed called with content and UUID in metadata."""
+    """Test embedding generation: embed called with content and UUID in metadata."""
     document_uuid = uuid.uuid4()
     mock_document = MagicMock(spec=Document)
     mock_document.uuid = document_uuid
@@ -33,7 +33,10 @@ def test_generate_embeddings_success() -> None:
     with (
         patch("assistant.cli.generate_embeddings.init_environment"),
         patch("assistant.cli.generate_embeddings.Config") as mock_config_cls,
-        patch("assistant.cli.generate_embeddings.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.generate_embeddings.get_session_factory",
+            return_value=mock_factory,
+        ),
         patch("assistant.cli.generate_embeddings.read_content", return_value=doc_content),
         patch("assistant.cli.generate_embeddings.VectorStore") as mock_store_cls,
         patch("sys.argv", ["generate_embeddings", str(document_uuid)]),
@@ -69,7 +72,10 @@ def test_generate_embeddings_document_not_found() -> None:
     with (
         patch("assistant.cli.generate_embeddings.init_environment"),
         patch("assistant.cli.generate_embeddings.Config") as mock_config_cls,
-        patch("assistant.cli.generate_embeddings.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.generate_embeddings.get_session_factory",
+            return_value=mock_factory,
+        ),
         patch("sys.argv", ["generate_embeddings", str(document_uuid)]),
     ):
         mock_config = MagicMock()
@@ -99,7 +105,10 @@ def test_generate_embeddings_content_not_found() -> None:
     with (
         patch("assistant.cli.generate_embeddings.init_environment"),
         patch("assistant.cli.generate_embeddings.Config") as mock_config_cls,
-        patch("assistant.cli.generate_embeddings.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.generate_embeddings.get_session_factory",
+            return_value=mock_factory,
+        ),
         patch("assistant.cli.generate_embeddings.read_content", return_value=None),
         patch("sys.argv", ["generate_embeddings", str(document_uuid)]),
     ):
@@ -129,7 +138,10 @@ def test_generate_embeddings_pdf_unsupported() -> None:
     with (
         patch("assistant.cli.generate_embeddings.init_environment"),
         patch("assistant.cli.generate_embeddings.Config") as mock_config_cls,
-        patch("assistant.cli.generate_embeddings.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.generate_embeddings.get_session_factory",
+            return_value=mock_factory,
+        ),
         patch("sys.argv", ["generate_embeddings", str(document_uuid)]),
     ):
         mock_config = MagicMock()
