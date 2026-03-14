@@ -69,17 +69,17 @@ format:
 check: typecheck lint test
 	@echo "✅ All checks passed"
 
-# Install pre-commit hooks
+# Install pre-commit hooks (uses project .venv)
 pre-commit-install:
 	@echo "Installing pre-commit hooks..."
 	@uv pip install pre-commit
-	@pre-commit install
+	@.venv/bin/pre-commit install
 	@echo "✅ Pre-commit hooks installed"
 
-# Run pre-commit on all files
+# Run pre-commit on all files (uses project .venv)
 pre-commit-run:
 	@echo "Running pre-commit on all files..."
-	@pre-commit run --all-files
+	@.venv/bin/pre-commit run --all-files
 
 # Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up
 services-up:

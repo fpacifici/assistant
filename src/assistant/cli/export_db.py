@@ -44,12 +44,12 @@ def main() -> int:
         logger.info("Exporting database and documents to %s", output_path)
         run_export(config, output_path)
         logger.info("Export completed successfully")
-        return 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Export failed")
         return 1
+    else:
+        return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

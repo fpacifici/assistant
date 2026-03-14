@@ -4,17 +4,38 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from evernote.edam.notestore.ttypes import NoteFilter, NoteResultSpec, NotesMetadataResultSpec  # type: ignore[import-untyped]
+from evernote.edam.notestore.ttypes import (  # type: ignore[import-untyped]
+    NoteFilter,
+    NoteResultSpec,
+    NotesMetadataResultSpec,
+)
 from evernote.edam.type.ttypes import NoteSortOrder  # type: ignore[import-untyped]
-from evernote_backup.cli_app_auth import get_auth_token, get_sync_client  # type: ignore[import-untyped]
+from evernote_backup.cli_app_auth import (  # type: ignore[import-untyped]
+    get_auth_token,
+    get_sync_client,
+)
 from evernote_backup.evernote_client_sync import EvernoteClientSync  # type: ignore[import-untyped]
-from evernote_backup.evernote_client_util import EvernoteAuthError  # type: ignore[import-untyped]
 
 from assistant.adapters.content import DocumentContent
 from assistant.adapters.secrets import Oauth1AuthProvider, Oauth1Credential
 from assistant.adapters.source import ExternalSource, ExternalSourceInstanceConfig
 
 logger = logging.getLogger(__name__)
+
+
+class NoNotebooksConfigError(ValueError):
+    """Raised when the provider config does not specify notebooks."""
+
+    def __init__(self) -> None:
+        super().__init__("No notebooks specified in the provider config")
+
+
+class NotebookNotFoundError(ValueError):
+    """Raised when a configured notebook name is not found in the account."""
+
+    def __init__(self, notebook: str) -> None:
+        super().__init__(f"Notebook {notebook} not found")
+
 
 def get_token() -> str:
     provider = Oauth1AuthProvider()
@@ -29,7 +50,7 @@ def get_token() -> str:
         custom_api_data=None,
     )
     logger.info("Authenticated with Evernote")
-    
+
     provider.store_credential(
         provider_type="evernote",
         provider_account="default",
@@ -37,20 +58,15 @@ def get_token() -> str:
     )
     return str(token)
 
+
 def create_client() -> EvernoteClientSync:
     provider = Oauth1AuthProvider()
-    cred = provider.get_credential(
-        provider_type="evernote", 
-        provider_account="default"
-    )
-    
-    if not cred:
-        token = get_token()
-    else:
-        token = cred.token
+    cred = provider.get_credential(provider_type="evernote", provider_account="default")
+
+    token = get_token() if not cred else cred.token
 
     try:
-        client =get_sync_client(
+        client = get_sync_client(
             auth_token=token,
             backend="evernote",
             network_error_retry_count=1,
@@ -60,7 +76,7 @@ def create_client() -> EvernoteClientSync:
         )
     except Exception:
         token = get_token()
-        client =get_sync_client(
+        client = get_sync_client(
             auth_token=token,
             backend="evernote",
             network_error_retry_count=1,
@@ -71,12 +87,14 @@ def create_client() -> EvernoteClientSync:
 
     return client
 
+
 class EvernoteSource(ExternalSource):
     """
     Evernote implementation of ExternalSource.
 
-    
+
     """
+
     # TODO: Intercept permission denied errors
 
     def __init__(self, notebooks: list[str]) -> None:
@@ -95,7 +113,7 @@ class EvernoteSource(ExternalSource):
         """
         notebooks = config.query_params.get("notebooks")
         if notebooks is None or not isinstance(notebooks, list):
-            raise ValueError("No notebooks specified in the provuider config")
+            raise NoNotebooksConfigError()
         return cls(notebooks)
 
     def _get_client(self) -> EvernoteClientSync:
@@ -120,16 +138,11 @@ class EvernoteSource(ExternalSource):
                 includeContent=True,
             ),
         )
-        notebooks = {
-            nb.guid: nb.name
-            for nb in client.get_note_store().listNotebooks()
-        }
+        notebooks = {nb.guid: nb.name for nb in client.get_note_store().listNotebooks()}
         notebook_guid = getattr(note, "notebookGuid", None)
         notebook_name = notebooks.get(notebook_guid, "") if notebook_guid else ""
         title = getattr(note, "title", None) or ""
-        metadata: dict[str, str] = (
-            {"notebook": notebook_name} if notebook_name else {}
-        )
+        metadata: dict[str, str] = {"notebook": notebook_name} if notebook_name else {}
         return DocumentContent(
             uuid=UUID(note.guid),
             bytes=note.content.encode("utf-8") if note.content else b"",
@@ -148,14 +161,13 @@ class EvernoteSource(ExternalSource):
         """
         client = self._get_client()
         notebooks = {
-            notebook.guid: notebook.name
-            for notebook in client.get_note_store().listNotebooks()
+            notebook.guid: notebook.name for notebook in client.get_note_store().listNotebooks()
         }
         names = set(notebooks.values())
         for notebook in self._notebooks:
             if notebook not in names:
-                raise ValueError(f"Notebook {notebook} not found")
-        
+                raise NotebookNotFoundError(notebook)
+
         relevant_notebooks = {
             notebook_id for notebook_id, name in notebooks.items() if name in self._notebooks
         }
@@ -167,7 +179,7 @@ class EvernoteSource(ExternalSource):
             search_context: bytes | None = None
             end_reached = False
             offset = 0
-        
+
             while not end_reached:
                 notes = client.get_note_store().findNotesMetadata(
                     NoteFilter(
@@ -176,9 +188,9 @@ class EvernoteSource(ExternalSource):
                         words=f"updated:{since.strftime('%Y%m%dT%H%M%S')}",
                         searchContextBytes=search_context,
                     ),
-                    offset = offset,
+                    offset=offset,
                     maxNotes=100,
-                    resultSpec=NotesMetadataResultSpec()
+                    resultSpec=NotesMetadataResultSpec(),
                 )
                 if len(notes.notes) == 0:
                     end_reached = True

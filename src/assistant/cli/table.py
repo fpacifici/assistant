@@ -3,7 +3,10 @@
 Formats lists of dictionaries as pretty-printed tables using only the standard library.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
+# Timestamp above this is treated as milliseconds (converted to seconds)
+_TS_MS_THRESHOLD = 1e12
 
 
 def _format_timestamp(value: object) -> str:
@@ -19,11 +22,11 @@ def _format_timestamp(value: object) -> str:
         return ""
     if isinstance(value, datetime):
         return value.isoformat()
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         ts = float(value)
-        if ts > 1e12:
+        if ts > _TS_MS_THRESHOLD:
             ts /= 1000.0
-        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        dt = datetime.fromtimestamp(ts, tz=UTC)
         return dt.isoformat()
     return str(value)
 
@@ -74,12 +77,12 @@ def format_as_table(
                 widths[i] = max(widths[i], len(cell(key, row.get(key))))
 
     def line(cells: list[str]) -> str:
-        return cell_sep.join(c.ljust(w) for c, w in zip(cells, widths))
+        return cell_sep.join(c.ljust(w) for c, w in zip(cells, widths, strict=False))
 
     header = line(keys)
     sep = "-" * len(header)
     body = [line([cell(k, row.get(k)) for k in keys]) for row in rows]
-    return "\n".join([header, sep] + body)
+    return "\n".join([header, sep, *body])
 
 
 def print_table(
@@ -97,11 +100,3 @@ def print_table(
         cell_sep: String between columns.
         timestamp_columns: Keys whose values are formatted as ISO datetimes.
     """
-    print(
-        format_as_table(
-            rows,
-            columns=columns,
-            cell_sep=cell_sep,
-            timestamp_columns=timestamp_columns,
-        )
-    )
