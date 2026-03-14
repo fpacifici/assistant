@@ -136,4 +136,10 @@ exclude_lines = [
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv", "build", "dist"]
-skips = ["B101"]  # Skip assert_used in test files
+skips = [
+    "B101",  # assert_used in test files
+    "B404",  # subprocess import (used intentionally for pg_dump/docker in export/restore)
+    "B603",  # subprocess without shell (args are from config/our archive, not user input)
+    "B607",  # partial executable path (docker, pg_restore are standard tool names)
+    "B202",  # tarfile.extractall (archive content is from our export, not untrusted)
+]

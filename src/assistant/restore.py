@@ -39,7 +39,7 @@ def _default_pg_restore(dump_path: Path, *, config: Config) -> None:
             runner.
     """
     cfg = _build_pg_dump_config(config)
-    container_path = "/tmp/db.dump"
+    container_path = "/tmp/db.dump"  # nosec B108
 
     subprocess.run(
         ["docker", "cp", str(dump_path), f"{cfg.container_name}:{container_path}"],
