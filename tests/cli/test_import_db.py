@@ -42,4 +42,3 @@ def test_import_db_cli_failure(tmp_path: Path) -> None:
         result = main()
 
     assert result == -1
-

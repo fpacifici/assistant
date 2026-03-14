@@ -14,7 +14,9 @@ from evernote_backup.cli_app_auth import (  # type: ignore[import-untyped]
     get_auth_token,
     get_sync_client,
 )
-from evernote_backup.evernote_client_sync import EvernoteClientSync  # type: ignore[import-untyped]
+from evernote_backup.evernote_client_sync import (  # type: ignore[import-untyped]
+    EvernoteClientSync,
+)
 
 from assistant.adapters.content import DocumentContent
 from assistant.adapters.secrets import Oauth1AuthProvider, Oauth1Credential
@@ -161,7 +163,8 @@ class EvernoteSource(ExternalSource):
         """
         client = self._get_client()
         notebooks = {
-            notebook.guid: notebook.name for notebook in client.get_note_store().listNotebooks()
+            notebook.guid: notebook.name
+            for notebook in client.get_note_store().listNotebooks()
         }
         names = set(notebooks.values())
         for notebook in self._notebooks:
@@ -169,7 +172,9 @@ class EvernoteSource(ExternalSource):
                 raise NotebookNotFoundError(notebook)
 
         relevant_notebooks = {
-            notebook_id for notebook_id, name in notebooks.items() if name in self._notebooks
+            notebook_id
+            for notebook_id, name in notebooks.items()
+            if name in self._notebooks
         }
         updated_ids = []
 

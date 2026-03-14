@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from assistant.models.schema import Document, DocumentFormat, DocumentMetadata, ExternalSource
+from assistant.models.schema import (
+    Document,
+    DocumentFormat,
+    DocumentMetadata,
+    ExternalSource,
+)
 
 
 def test_document_set_metadata_creates_and_updates(db_session: Session) -> None:
@@ -43,4 +48,3 @@ def test_document_set_metadata_creates_and_updates(db_session: Session) -> None:
     assert len(rows) == 1
     assert rows[0].value == "Notebook B"
     assert document.metadata_dict == {"notebook": "Notebook B"}
-

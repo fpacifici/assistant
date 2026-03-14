@@ -62,7 +62,7 @@ class ChatApp(App[None]):
     """Textual chat app that sends user queries to the RAG agent and streams responses.
 
     The app shows a scrollable log for the conversation and an input at the bottom.
-    Long lines in the log wrap at the container width. Use Up/Down and Page Up/Page Down
+    Long lines in the log wrap at the container width. Use Up/Down and Page Up/Down
     to scroll the message area (works regardless of focus). The chat CLI runs with
     mouse=False so the terminal handles the mouse for text selection and copy.
     Submit a query to stream agent messages; when done, you can send another.
@@ -158,4 +158,5 @@ class ChatApp(App[None]):
 
     def on_query_error(self, event: QueryError) -> None:
         """Append an error line to the log."""
-        self.query_one("#log", RichLog).write(f"[red]Error:[/red] {event.error}", expand=True)
+        log = self.query_one("#log", RichLog)
+        log.write(f"[red]Error:[/red] {event.error}", expand=True)

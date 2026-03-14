@@ -27,4 +27,3 @@ class DocumentContent:
     bytes: bytes
     title: str = ""
     metadata: Mapping[str, str] = field(default_factory=dict)
-

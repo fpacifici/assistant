@@ -57,8 +57,8 @@ def _build_pg_dump_config(
     url = db_config.get("url")
     if isinstance(url, str) and url:
         msg = (
-            "Database configuration must use component fields (host/port/user/password/name) "
-            "to support container-based pg_dump. A URL-only configuration cannot be used "
+            "Database config must use component fields (host/port/user/password/name) "
+            "for container-based pg_dump. URL-only configuration cannot be used "
             "for automated pg_dump invocation."
         )
         raise ValueError(msg)
@@ -155,4 +155,3 @@ def run_export(config: Config, output_path: Path) -> None:
         with tarfile.open(output_path, "w:gz") as tar:
             tar.add(db_dump_path, arcname=DB_DUMP_FILENAME)
             tar.add(documents_tmp_dir, arcname=DOCUMENTS_DIRNAME)
-

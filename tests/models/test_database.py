@@ -18,7 +18,12 @@ from assistant.models.database import (
     get_session_factory,
     init_database,
 )
-from assistant.models.schema import Document, DocumentFormat, DocumentMetadata, ExternalSource
+from assistant.models.schema import (
+    Document,
+    DocumentFormat,
+    DocumentMetadata,
+    ExternalSource,
+)
 
 
 def test_get_database_url_from_config() -> None:

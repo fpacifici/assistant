@@ -40,8 +40,8 @@ def load_data(config: Config | None = None) -> None:
         config = Config()
 
     registry = get_registry()
-    # Ensure the registry uses the same Config instance as this run (important for env overrides
-    # and per-test config files).
+    # Ensure the registry uses the same Config instance as this run (important for
+    # env overrides and per-test config files).
     registry.config = config
     session_factory = get_session_factory()
     storage_path = config.get_document_storage_path()
@@ -63,8 +63,7 @@ def load_data(config: Config | None = None) -> None:
                     storage_path=storage_path,
                 )
             except (ExternalSourceNotFoundError, ProviderDisabledError, ValueError):
-                # These indicate a configuration / registry / DB consistency issue and should fail
-                # the whole run so the operator can fix it.
+                # Config/registry/DB consistency; fail the run so operator can fix.
                 raise
             except Exception:
                 logger.exception(

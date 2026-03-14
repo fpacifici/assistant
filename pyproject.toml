@@ -30,7 +30,6 @@ dev = [
     "pytest-cov>=4.1.0",
     "mypy>=1.7.0",
     "ruff>=0.1.6",
-    "black>=23.11.0",
     "pre-commit>=3.5.0",
     "bandit[toml]>=1.7.5",
 ]
@@ -71,7 +70,7 @@ ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py313"
-line-length = 100
+line-length = 90
 
 [tool.ruff.lint]
 select = [
@@ -111,15 +110,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["PLR2004", "S101", "TC001", "TC002", "TC003"]
-"src/assistant/export.py" = ["E402"]
-"src/assistant/restore.py" = ["E402"]
-"src/assistant/models/content.py" = ["E402"]
+"src/assistant/export.py" = ["E402", "TC001", "TC002", "TC003"]
+"src/assistant/restore.py" = ["E402", "TC001", "TC002", "TC003"]
+"src/assistant/models/content.py" = ["E402", "TC001", "TC002", "TC003"]
 "src/assistant/models/database.py" = ["PLC0415"]
-
-[tool.black]
-line-length = 100
-target-version = ['py313']
-include = '\.pyi?$'
 
 [tool.pyright]
 extraPaths = ["src"]
@@ -142,4 +136,10 @@ exclude_lines = [
 
 [tool.bandit]
 exclude_dirs = ["tests", ".venv", "build", "dist"]
-skips = ["B101"]  # Skip assert_used in test files
+skips = [
+    "B101",  # assert_used in test files
+    "B404",  # subprocess import (used intentionally for pg_dump/docker in export/restore)
+    "B603",  # subprocess without shell (args are from config/our archive, not user input)
+    "B607",  # partial executable path (docker, pg_restore are standard tool names)
+    "B202",  # tarfile.extractall (archive content is from our export, not untrusted)
+]

@@ -15,7 +15,9 @@ def test_add_evernote_success() -> None:
     mock_factory.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("assistant.cli.add_evernote.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.add_evernote.get_session_factory", return_value=mock_factory
+        ),
         patch("sys.argv", ["add_evernote", "Notebook1", "Notebook2"]),
     ):
         result = main()
@@ -39,7 +41,9 @@ def test_add_evernote_failure() -> None:
     mock_factory.return_value.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("assistant.cli.add_evernote.get_session_factory", return_value=mock_factory),
+        patch(
+            "assistant.cli.add_evernote.get_session_factory", return_value=mock_factory
+        ),
         patch("sys.argv", ["add_evernote", "MyNotebook"]),
     ):
         result = main()

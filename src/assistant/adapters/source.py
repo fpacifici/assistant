@@ -13,12 +13,12 @@ from assistant.adapters.content import DocumentContent
 class ExternalSourceInstanceConfig:
     """Configuration for a single ExternalSource instance.
 
-    This is the resolved configuration used to instantiate a provider plugin for a specific
-    configured external source (e.g. Evernote notebook A vs Evernote notebook B).
+    This is the resolved configuration used to instantiate a provider plugin for a
+    specific configured external source (e.g. Evernote notebook A vs B).
 
     Attributes:
-        provider_config: Provider-type configuration loaded from YAML (e.g. credentials, timeouts).
-        query_params: Source-instance query parameters loaded from the DB (`provider_query` JSON).
+        provider_config: Provider-type config from YAML (e.g. credentials, timeouts).
+        query_params: Source-instance query params from DB (`provider_query` JSON).
     """
 
     provider_config: Mapping[str, object]
@@ -46,7 +46,7 @@ class ExternalSource(ABC):
     def build(cls, config: ExternalSourceInstanceConfig) -> Self:
         """Build an ExternalSource instance from resolved instance config.
 
-        Plugins must implement this factory method instead of relying on a shared constructor
+        Plugins must implement this factory instead of relying on a shared constructor
         contract across implementations.
 
         Args:

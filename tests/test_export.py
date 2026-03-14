@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tarfile
 from pathlib import Path
+
 import pytest
 
 from assistant.config import Config
@@ -52,4 +53,3 @@ def test_run_export_creates_archive_with_expected_members(
         assert DB_DUMP_FILENAME in names
         # The documents directory should be present with at least one entry.
         assert any(name.startswith("documents") for name in names)
-

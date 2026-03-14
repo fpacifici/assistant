@@ -10,7 +10,7 @@ help:
 	@echo "  make test                - Run all tests"
 	@echo "  make typecheck           - Run mypy type checker"
 	@echo "  make lint                - Run ruff linter"
-	@echo "  make format              - Format code with black and ruff"
+	@echo "  make format              - Format code with ruff"
 	@echo "  make check               - Run all checks (typecheck, lint, test)"
 	@echo "  make pre-commit-install  - Install pre-commit hooks"
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
@@ -62,7 +62,7 @@ lint:
 format:
 	@echo "Formatting code..."
 	@ruff check --fix src/ tests/
-	@black src/ tests/
+	@ruff format src/ tests/
 	@echo "✅ Code formatted"
 
 # Run all checks

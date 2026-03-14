@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_iso_datetime(value: str) -> datetime:
-    """Parse an ISO 8601 datetime string (e.g. 2021-01-15 or 2021-01-15T12:00:00+00:00)."""
+    """Parse an ISO 8601 datetime (e.g. 2021-01-15 or 2021-01-15T12:00:00+00:00)."""
     s = value.strip().replace("Z", "+00:00")
     return datetime.fromisoformat(s)
 
@@ -39,12 +39,14 @@ def main() -> int:
         type=_parse_iso_datetime,
         default=None,
         metavar="DATETIME",
-        help="Only list notes updated since this datetime (ISO format). Default: 1 day ago.",
+        help="Only list notes updated since this datetime (ISO). Default: 1 day ago.",
     )
 
     args = parser.parse_args()
 
-    since = args.since if args.since is not None else datetime.now(UTC) - timedelta(days=1)
+    since = (
+        args.since if args.since is not None else datetime.now(UTC) - timedelta(days=1)
+    )
 
     evernote = EvernoteSource(notebooks=[args.notebook_name])
     notes = evernote.list_documents(since=since)

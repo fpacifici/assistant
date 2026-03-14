@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_postgres import PGVector
+from langgraph.checkpoint.postgres import PostgresSaver
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from assistant.config import Config, DatabaseComponentsConfig
-from langgraph.checkpoint.postgres import PostgresSaver  
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine

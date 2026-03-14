@@ -20,7 +20,7 @@ class FakeExternalSource(ExternalSource):
             config: Instance configuration (mostly unused by fake provider).
         """
         # NOTE: do not assume the base class has a concrete constructor contract.
-        # This fake plugin stores config locally; real plugins may ignore it or validate it.
+        # This fake plugin stores config locally; real plugins may ignore or validate it.
         self._config = config
         # Store mock documents
         self._documents: dict[str, tuple[datetime, bytes]] = {}

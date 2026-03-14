@@ -9,6 +9,7 @@ from assistant.adapters.secrets import (
     Oauth1Credential,
 )
 
+
 def test_oauth1_auth_provider_get_store_get_delete() -> None:
     """Test Oauth1AuthProvider: get non-existent, store, get, delete."""
     provider = Oauth1AuthProvider()
@@ -26,7 +27,9 @@ def test_oauth1_auth_provider_get_store_get_delete() -> None:
         # Store credential
         mock_keyring.reset_mock()
         provider.store_credential(provider_type, provider_account, credential)
-        mock_keyring.set_password.assert_called_once_with(KEYRING_SERVICE, key, serialized)
+        mock_keyring.set_password.assert_called_once_with(
+            KEYRING_SERVICE, key, serialized
+        )
 
         # Get: returns stored credential
         mock_keyring.reset_mock()

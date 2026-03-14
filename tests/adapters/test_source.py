@@ -28,7 +28,9 @@ def test_external_source_interface_methods() -> None:
 
 def test_fake_external_source_implements_interface() -> None:
     """Test that FakeExternalSource implements the interface."""
-    fake = FakeExternalSource(ExternalSourceInstanceConfig(provider_config={}, query_params={}))
+    fake = FakeExternalSource(
+        ExternalSourceInstanceConfig(provider_config={}, query_params={})
+    )
 
     # Should be able to call the methods
     assert isinstance(fake, ExternalSource)
