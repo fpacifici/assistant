@@ -1,4 +1,4 @@
-from typing import Generator, List, Tuple
+from typing import Generator, List, Optional, Tuple
 
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -11,12 +11,12 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from assistant.models.database import get_database_url  
 from langchain_core.runnables import RunnableConfig
 
+
 @tool(response_format="content_and_artifact")
 def retrieve_documents(query: str) -> Tuple[str, List[Document]]:
     """Retrieve documents from the vector store."""
     
-    vector_store = VectorStore()
-    retrieved_docs = vector_store.query(query)
+    retrieved_docs = VectorStore().query(query)
     serialized = "\n\n".join(
         (f"Source: {doc.document.metadata}\nContent: {doc.document.page_content}")
         for doc in retrieved_docs
@@ -29,7 +29,6 @@ class SearchAgent:
 
     def __init__(self) -> None:
         self.tools = [retrieve_documents]
-        
         self.prompt = (
             "You are a knowledgeable assistant who can provide a summary about a "
             "topic described on a list of documents. "
