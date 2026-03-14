@@ -1,6 +1,7 @@
 """Tests for document content handling."""
 
 import uuid
+from pathlib import Path
 
 from assistant.adapters.content import (
     DocumentContent,
@@ -11,7 +12,7 @@ from assistant.adapters.content import (
 )
 
 
-def test_get_content_path(document_storage_dir) -> None:
+def test_get_content_path(document_storage_dir: Path) -> None:
     """Test getting content path for a document."""
     doc_uuid = uuid.uuid4()
     path = get_content_path(document_storage_dir, doc_uuid)
@@ -19,7 +20,7 @@ def test_get_content_path(document_storage_dir) -> None:
     assert path == document_storage_dir / str(doc_uuid)
 
 
-def test_write_and_read_content(document_storage_dir) -> None:
+def test_write_and_read_content(document_storage_dir: Path) -> None:
     """Test writing and reading document content."""
     doc_uuid = uuid.uuid4()
     content_bytes = b"Test document content"
@@ -37,7 +38,7 @@ def test_write_and_read_content(document_storage_dir) -> None:
     assert read.bytes == content_bytes
 
 
-def test_read_nonexistent_content(document_storage_dir) -> None:
+def test_read_nonexistent_content(document_storage_dir: Path) -> None:
     """Test reading content that doesn't exist."""
     doc_uuid = uuid.uuid4()
 
@@ -46,7 +47,7 @@ def test_read_nonexistent_content(document_storage_dir) -> None:
     assert content is None
 
 
-def test_delete_content(document_storage_dir) -> None:
+def test_delete_content(document_storage_dir: Path) -> None:
     """Test deleting document content."""
     doc_uuid = uuid.uuid4()
     content = DocumentContent(uuid=doc_uuid, bytes=b"Test content")

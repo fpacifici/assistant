@@ -1,6 +1,9 @@
 """Tests for DataLoad job."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from types import TracebackType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,7 +27,12 @@ def test_load_data_with_no_sources(test_config: Config, db_session: Session) -> 
         def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args) -> None:
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: TracebackType | None,
+        ) -> None:
             pass
 
     def session_factory() -> SessionContext:
@@ -54,7 +62,12 @@ def test_load_data_creates_documents(test_config: Config, db_session: Session) -
         def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args):
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: TracebackType | None,
+        ) -> None:
             pass
 
     def session_factory() -> SessionContext:
@@ -103,13 +116,18 @@ def test_load_data_stores_content(
 
     # Mock the session factory to use our test session
     class SessionContext:
-        def __enter__(self):
+        def __enter__(self) -> Session:
             return db_session
 
-        def __exit__(self, *args):
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_val: BaseException | None,
+            exc_tb: TracebackType | None,
+        ) -> None:
             pass
 
-    def session_factory():
+    def session_factory() -> SessionContext:
         return SessionContext()
 
     with (

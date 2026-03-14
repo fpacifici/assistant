@@ -110,7 +110,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["ANN", "PLR2004", "S101"]
+"tests/**/*.py" = ["PLR2004", "S101", "TC001", "TC002", "TC003"]
+"src/assistant/export.py" = ["E402"]
+"src/assistant/restore.py" = ["E402"]
+"src/assistant/models/content.py" = ["E402"]
+"src/assistant/models/database.py" = ["PLC0415"]
 
 [tool.black]
 line-length = 100

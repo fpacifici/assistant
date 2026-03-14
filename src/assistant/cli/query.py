@@ -6,7 +6,6 @@ import sys
 
 from assistant.agents.infra import init_environment
 from assistant.agents.rag import SearchAgent
-from assistant.agents.vectors import VectorStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,15 +40,15 @@ def main() -> int:
         init_environment()
         store = SearchAgent()
         messages = []
-        print(f" Thread ID: {thread_id}")
+        logger.info("Thread ID: %s", thread_id)
         for event in store.query(thread_id, args.query):
             event.pretty_print()
             messages.append(event)
-        
-        return 0
     except Exception:
         logger.exception("Query failed")
         return 1
+    else:
+        return 0
 
 
 if __name__ == "__main__":
