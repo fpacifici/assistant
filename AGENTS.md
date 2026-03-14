@@ -159,6 +159,16 @@ This project uses strict typing:
 
 ## Common Tasks
 
+### Chat TUI
+
+To run the interactive chat TUI that sends queries to the RAG agent and streams responses:
+
+```bash
+python -m assistant.cli.chat <thread_id>
+```
+
+Exit with **Ctrl+Q**. See [`docs/modules/tui.md`](docs/modules/tui.md) for details.
+
 ### Development services (Postgres)
 
 When a task needs the Postgres database (e.g. running app code or tests that hit the DB), first ensure services are up by running `make services-up`. This is idempotent (no-op if the stack is already running). To stop the bundle when no longer needed, run `make services-down`.

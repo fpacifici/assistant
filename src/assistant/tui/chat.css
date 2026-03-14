@@ -1,0 +1,11 @@
+/* Chat TUI layout: log fills space, input docked at bottom */
+
+#log-container {
+    dock: top;
+    height: 1fr;
+    overflow: auto;
+}
+
+#input {
+    dock: bottom;
+}

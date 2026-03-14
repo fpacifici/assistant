@@ -1,3 +1,4 @@
+import traceback
 from typing import Any, NamedTuple
 
 from langchain_core.documents import Document
@@ -7,7 +8,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from assistant.models.content import DocumentContent
 from assistant.models.database import get_database_url
+from logging import getLogger
 
+logger = getLogger(__name__)
 
 def embedding_content_and_metadata(
     doc_content: DocumentContent,
@@ -48,6 +51,29 @@ class VectorResult(NamedTuple):
     score: float
 
 
+_default_store: VectorStore | None = None
+
+
+def init_vector_store(model: str = "text-embedding-3-small") -> VectorStore:
+    """Return a shared VectorStore instance.
+
+    PGVector (and thus VectorStore) must not be constructed more than once per
+    process when used from tools, because langchain_postgres uses a shared
+    SQLAlchemy Base; redefining the same tables raises InvalidRequestError.
+    This lazy singleton ensures a single store is reused.
+
+    Args:
+        model: OpenAI embedding model identifier (used only on first call).
+
+    Returns:
+        The shared VectorStore instance.
+    """
+    global _default_store
+    if _default_store is None:
+        _default_store = VectorStore(model=model)
+    return _default_store
+
+
 class VectorStore:
     """Wrapper around the PGVector-backed LangChain vector store."""
 
@@ -59,6 +85,7 @@ class VectorStore:
         """
 
         self.embeddings = OpenAIEmbeddings(model=model)
+        logger.info(f"Initializing PGVector with collection name: assistant")
         self.store = PGVector(
             embeddings=self.embeddings,
             collection_name="assistant",
@@ -113,9 +140,7 @@ class VectorStore:
 def embed(content: str, metadata: dict[str, Any]) -> list[list[float]]:
     """Convenience function used by CLI code to generate embeddings.
 
-    This creates a transient :class:`VectorStore` instance and delegates to its
+    Uses the shared :class:`VectorStore` and delegates to its
     :meth:`VectorStore.embed` method.
     """
-
-    store = VectorStore()
-    return store.embed(content, metadata)
+    return init_vector_store().embed(content, metadata)
