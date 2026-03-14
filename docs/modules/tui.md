@@ -27,6 +27,8 @@ The CLI calls `init_environment()`, creates a `SearchAgent`, and launches `ChatA
 3. When streaming finishes, the input is re-enabled for the next query.
 4. Exit with **Ctrl+Q**.
 
+Long lines in the message log wrap at the container width. Use **Up**/**Down** and **Page Up**/**Page Down** to scroll the message area (works even when the input line has focus). Mouse handling is disabled so you can select text with the mouse and copy as in a normal terminal (e.g. drag to select, then Cmd+C or your terminal’s copy shortcut).
+
 ## Dependencies
 
 - **Textual** – UI framework (layout, `Input`, `RichLog`, workers).

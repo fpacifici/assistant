@@ -34,7 +34,7 @@ def main() -> int:
         init_environment()
         agent = SearchAgent()
         app = ChatApp(thread_id=args.thread_id, agent=agent)
-        app.run()
+        app.run(mouse=False)  # allow terminal to handle mouse for text selection/copy
     except Exception:
         logger.exception("Chat TUI failed")
         return 1

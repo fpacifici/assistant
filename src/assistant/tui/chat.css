@@ -6,6 +6,10 @@
     overflow: auto;
 }
 
+#log {
+    width: 100%;
+}
+
 #input {
     dock: bottom;
 }
