@@ -40,6 +40,14 @@ def test_chat_app_constructs_with_thread_id_and_agent() -> None:
     assert app._rag_agent is mock_agent
 
 
+def test_chat_app_has_log_scroll_and_focus_bindings() -> None:
+    """Test that ChatApp defines expected key bindings for log and input."""
+    binding_keys = {binding.key for binding in ChatApp.BINDINGS}
+    assert "ctrl+up" in binding_keys
+    assert "ctrl+down" in binding_keys
+    assert "ctrl+l" in binding_keys
+
+
 def test_chat_cli_parses_thread_id() -> None:
     """Test that the chat CLI parses thread_id and runs the app."""
     with (
