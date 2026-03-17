@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.binding import Binding, BindingType
 from textual.message import Message
 from textual.widgets import Input, RichLog
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
+    from textual._path import CSSPathType
 
     from assistant.agents.rag import SearchAgent
 
@@ -69,13 +69,12 @@ class ChatApp(App[None]):
     Exit with Ctrl+Q.
     """
 
-    CSS_PATH = "chat.css"
+    CSS_PATH: ClassVar[CSSPathType | None] = "chat.css"
 
-    BINDINGS = [
-        Binding("up", "scroll_log_up", "Scroll Up", show=False),
-        Binding("down", "scroll_log_down", "Scroll Down", show=False),
-        Binding("pageup", "scroll_log_page_up", "Page Up", show=False),
-        Binding("pagedown", "scroll_log_page_down", "Page Down", show=False),
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("ctrl+up", "log_scroll_up", "Scroll log up", show=False),
+        Binding("ctrl+down", "log_scroll_down", "Scroll log down", show=False),
+        Binding("ctrl+l", "toggle_focus", "Toggle focus", show=False),
     ]
 
     def __init__(self, thread_id: str, agent: SearchAgent) -> None:
@@ -88,36 +87,39 @@ class ChatApp(App[None]):
         super().__init__()
         self._rag_thread_id = thread_id
         self._rag_agent = agent
+        self._textlog: RichLog | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the layout: log area and input."""
-        with VerticalScroll(id="log-container"):
-            yield RichLog(id="log", highlight=True, markup=True, wrap=True)
+        yield RichLog(id="log", highlight=True, markup=True, wrap=True)
         yield Input(id="input", placeholder="Send a query...")
+
+    def action_log_scroll_up(self) -> None:
+        """Scroll the chat log up by one line."""
+        log_widget = self.query_one("#log", RichLog)
+        scroll_x, scroll_y = log_widget.scroll_offset
+        log_widget.scroll_to(scroll_x, max(scroll_y - 1, 0), animate=False)
+
+    def action_log_scroll_down(self) -> None:
+        """Scroll the chat log down by one line."""
+        log_widget = self.query_one("#log", RichLog)
+        scroll_x, scroll_y = log_widget.scroll_offset
+        log_widget.scroll_to(scroll_x, scroll_y + 1, animate=False)
+
+    def action_toggle_focus(self) -> None:
+        """Toggle focus between the chat log (read mode) and the input (chat mode)."""
+        focused = self.focused
+        if isinstance(focused, RichLog):
+            self.query_one("#input", Input).focus()
+        else:
+            self.query_one("#log", RichLog).focus()
 
     def on_mount(self) -> None:
         """Focus the input when the app mounts."""
+        for msg in self._rag_agent.load(self._rag_thread_id):
+            text = _format_message(msg)
+            self.post_message(StreamChunk(text))
         self.query_one("#input", Input).focus()
-
-    def _scroll_container(self) -> VerticalScroll:
-        """Return the log scroll container for keyboard scrolling."""
-        return self.query_one("#log-container", VerticalScroll)
-
-    def action_scroll_log_up(self) -> None:
-        """Scroll the message log up one line."""
-        self._scroll_container().scroll_up()
-
-    def action_scroll_log_down(self) -> None:
-        """Scroll the message log down one line."""
-        self._scroll_container().scroll_down()
-
-    def action_scroll_log_page_up(self) -> None:
-        """Scroll the message log up one page."""
-        self._scroll_container().page_up()
-
-    def action_scroll_log_page_down(self) -> None:
-        """Scroll the message log down one page."""
-        self._scroll_container().page_down()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """On enter: run the query in a worker and stream results to the log."""

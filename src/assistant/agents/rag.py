@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import cast
 
 from langchain.agents import create_agent
 from langchain.tools import tool
@@ -49,3 +50,23 @@ class SearchAgent:
                 config=config,
             ):
                 yield event["messages"][-1]
+
+    def load(self, thread_id: str) -> Generator[BaseMessage]:
+        """Load and stream the full conversation history for a given thread.
+
+        Args:
+            thread_id: Identifier of the conversation thread to load.
+
+        Yields:
+            Each message in the stored conversation history, in order.
+        """
+        config = RunnableConfig({"configurable": {"thread_id": thread_id}})
+        with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
+            checkpoint_tuple = checkpointer.get_tuple(config)
+            if checkpoint_tuple is None:
+                return
+
+            checkpoint = checkpoint_tuple.checkpoint
+            channel_values = checkpoint["channel_values"]
+            messages = cast(list[BaseMessage], channel_values["messages"])
+            yield from messages
