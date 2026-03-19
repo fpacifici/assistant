@@ -1,10 +1,13 @@
 from collections.abc import Generator
+from functools import lru_cache
 from typing import cast
 
 from langchain.agents import create_agent
 from langchain.tools import tool
+from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
+from langchain_core.outputs import LLMResult
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 
@@ -12,11 +15,27 @@ from assistant.agents.vectors import VectorStore
 from assistant.models.database import get_database_url
 
 
+@lru_cache(maxsize=1)
+def get_vector_store() -> VectorStore:
+    """Return the process-wide vector store instance."""
+    return VectorStore()
+
+
+class TokenTrackingHandler(BaseCallbackHandler):
+    def __init__(self) -> None:
+        self.total_tokens: int = 0
+
+    def on_llm_end(self, response: LLMResult, **_kwargs: object) -> None:
+        if hasattr(response, "llm_output") and response.llm_output:
+            usage = response.llm_output.get("token_usage", {})
+            self.total_tokens += usage.get("total_tokens", 0)
+
+
 @tool(response_format="content_and_artifact")
 def retrieve_documents(query: str) -> tuple[str, list[Document]]:
     """Retrieve documents from the vector store."""
 
-    retrieved_docs = VectorStore().query(query)
+    retrieved_docs = get_vector_store().query(query)
     serialized = "\n\n".join(
         (f"Source: {doc.document.metadata}\nContent: {doc.document.page_content}")
         for doc in retrieved_docs
@@ -34,12 +53,16 @@ class SearchAgent:
             "You are given access to a tool to retrieve the documents. "
             "Use the tool to query the documents to answer the user's question."
         )
+        get_vector_store()
 
     def query(self, thread_id: str, query: str) -> Generator[BaseMessage]:
-        config = RunnableConfig({"configurable": {"thread_id": thread_id}})
+        handler = TokenTrackingHandler()
+        config = RunnableConfig(
+            {"configurable": {"thread_id": thread_id}, "callbacks": [handler]}
+        )
         with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
             self.agent = create_agent(
-                "gpt-4.1",
+                "openai:gpt-5",
                 self.tools,
                 system_prompt=self.prompt,
                 checkpointer=checkpointer,
@@ -50,6 +73,10 @@ class SearchAgent:
                 config=config,
             ):
                 yield event["messages"][-1]
+
+            yield BaseMessage(
+                content=f"Total tokens: {handler.total_tokens}", type="token_usage"
+            )
 
     def load(self, thread_id: str) -> Generator[BaseMessage]:
         """Load and stream the full conversation history for a given thread.
