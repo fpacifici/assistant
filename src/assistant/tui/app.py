@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from assistant.agents.rag import SearchAgent
 
 
-def _format_message(msg: "BaseMessage") -> str:  # noqa: UP037
+def _format_message(msg: "BaseMessage") -> str | None:  # noqa: UP037
     """Format a BaseMessage for display in the chat log.
 
     Args:
@@ -33,8 +33,13 @@ def _format_message(msg: "BaseMessage") -> str:  # noqa: UP037
         label = "User"
     elif "AI" in type_name or "assistant" in type_name.lower():
         label = "Assistant"
+    elif "ToolMessage" in type_name:
+        tool_call_id = getattr(msg, "tool_call_id", None)
+        if tool_call_id is None:
+            return "Tool message"
+        return f"Tool message: {tool_call_id}"
     else:
-        label = type_name.replace("Message", "")
+        return None
     return f"[bold]{label}:[/bold] {content}"
 
 
@@ -118,7 +123,8 @@ class ChatApp(App[None]):
         """Focus the input when the app mounts."""
         for msg in self._rag_agent.load(self._rag_thread_id):
             text = _format_message(msg)
-            self.post_message(StreamChunk(text))
+            if text:
+                self.post_message(StreamChunk(text))
         self.query_one("#input", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -142,7 +148,8 @@ class ChatApp(App[None]):
         try:
             for msg in self._rag_agent.query(self._rag_thread_id, query):
                 text = _format_message(msg)
-                self.post_message(StreamChunk(text))
+                if text:
+                    self.post_message(StreamChunk(text))
             self.post_message(QueryDone())
         except Exception as e:
             self.post_message(QueryError(str(e)))
