@@ -1,0 +1,131 @@
+---
+- inputs:
+    question:
+    - "List the note titles that describe database consistency models"
+  outputs:
+    answer: |
+      - Metadata: The many faces of consistency
+      - Why you should pick strong consistency, whenever possible
+      - Keeping CALM: When Distributed Consistency Is Easy
+      - Postgres consistency notes
+      - https://jepsen.io/consistency
+      - DB transactions summary
+    notes_ids:
+      - 03c8dc99-2dcb-485e-8342-97b9ce9fd9e0
+      - 7f8c336c-dc53-4691-a067-0281cbd97b7c
+      - 359bc0f4-229a-4176-88cf-499992484138
+      - 9f24edff-e8f7-ea90-18f4-9f8ff27e6380
+      - 134226bc-334c-42fc-a7f9-909379208325
+      - c2ea16ec-1dae-bf56-77b3-a472fbd31a14
+    topics:
+      - database
+      - consistency
+      - transactions
+    notebooks:
+      - DB/storage
+- inputs:
+    question: "What are the most common database consistency models?"
+  outputs:
+    answer: |
+      - Repeatable reads
+      - Serializable
+      - Read committed
+      - Read uncommitted
+    notes_ids:
+      - c2ea16ec-1dae-bf56-77b3-a472fbd31a14
+      - 9f24edff-e8f7-ea90-18f4-9f8ff27e6380
+      - 7f8c336c-dc53-4691-a067-0281cbd97b7c
+      - 359bc0f4-229a-4176-88cf-499992484138
+      - 33c24f8d-7524-4223-a9d9-5ac5a992653f
+    topics:
+      - database
+      - consistency
+      - transactions
+    notebooks:
+      - DB/storage
+- inputs:
+    question: "Which note titles talk about datadog storage?"
+  outputs:
+    answer: |
+      - Datadog timeseries storage
+      - Datadog Husky
+    notes_ids:
+      - c0bd6c58-6f54-23ef-a4da-2e9ba9edab8a
+      - c9b10d4c-3f4e-7717-7037-cf03235b24b4
+    topics:
+      - database
+      - distributed systems
+      - kafka
+    notebooks:
+      - DB/storage
+      - dist/stream
+- inputs:
+    question: "Which documents talk about systems to manage rate limiters and circuit breakers?"
+  outputs:
+    answer: |
+      - Circuit Breaker Is Misconfigured – Shopify Engineering
+      - GitHub Scales Its Rate Limiter Using Redis
+    notes_ids:
+      - 2324af1d-c98b-4c7e-8ea8-9c8618b9ef63
+      - a6081203-dbc7-440d-922c-01246c4b0188
+    topics:
+      - systems
+      - infrastructure
+      - reliability
+    notebooks:
+      - perf/scale
+- inputs:
+    question: "Describe the process to establish a tCP connection."
+  outputs:
+    answer: |
+      - client send SYN packet to server
+      - server send SYN-ACK packet to client
+      - client send ACK packet to server
+      - connection established
+    notes_ids:
+      - 4ffb82b1-ead1-0bfa-d443-35e956ffdb81
+      - ba9f74c5-583e-4d49-a1e1-774634810c2c
+    topics:
+      - systems
+      - infrastructure
+      - network
+    notebooks:
+      - infrastructure
+- inputs:
+    question: "What are some examples of table formats for data infrastructure?"
+  outputs:
+    answer: |
+      - Delta Lake
+      - Iceberg
+      - Paimon
+    notes_ids:
+      - 067dfe48-bbe7-9909-c85e-02d1c79ad9f7
+      - ef5725a9-4326-15f8-62a5-73e14930e911
+      - 4d162f93-4d34-e40c-e4a0-3110b1df6c23
+      - d95c5cc0-fbb1-4cb7-bc77-7e32e41470dc
+      - 9fd79d66-488c-8fbc-f29a-36029967b6d9
+    topics:
+      - database
+    notebooks:
+      - DB/storage
+      - dist/stream
+- inputs:
+    question: "What are the responsibilities of the main component of apache Flink?"
+  outputs:
+    answer: |
+      - JobManager
+        - Assign work to task managers when it sees enough slots
+        - Coordinates checkpoint management
+      - ResourceManager
+        - Keeps track of idle slots to tell the JobManager to provide them
+      - TaskManagers
+        - Provides slot
+        - Can deploy multiple taskManager with one slot in a Pod to isolate resource usage
+      - Dispatcher
+        - Receives job and starts JobManagers
+    notes_ids:
+      - 773ae705-d769-fce8-6826-0453c3693a54
+    topics:
+      - streaming
+    notebooks:
+      - dist/stream

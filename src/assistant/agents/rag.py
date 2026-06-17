@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from functools import lru_cache
 from typing import cast
 
 from langchain.agents import create_agent
@@ -11,14 +10,8 @@ from langchain_core.outputs import LLMResult
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from assistant.agents.vectors import VectorStore
+from assistant.agents.vectors import init_vector_store
 from assistant.models.database import get_database_url
-
-
-@lru_cache(maxsize=1)
-def get_vector_store() -> VectorStore:
-    """Return the process-wide vector store instance."""
-    return VectorStore()
 
 
 class TokenTrackingHandler(BaseCallbackHandler):
@@ -32,14 +25,18 @@ class TokenTrackingHandler(BaseCallbackHandler):
 
 
 @tool(response_format="content_and_artifact")
-def retrieve_documents(query: str) -> tuple[str, list[Document]]:
+def retrieve_documents(query: str) -> tuple[list[dict[str, object]], list[Document]]:
     """Retrieve documents from the vector store."""
 
-    retrieved_docs = get_vector_store().query(query)
-    serialized = "\n\n".join(
-        (f"Source: {doc.document.metadata}\nContent: {doc.document.page_content}")
+    retrieved_docs = init_vector_store().query(query)
+    serialized = [
+        {
+            "source": doc.document.metadata,
+            "content": doc.document.page_content,
+        }
         for doc in retrieved_docs
-    )
+    ]
+
     docs = [doc.document for doc in retrieved_docs]
     return serialized, docs
 
@@ -53,7 +50,7 @@ class SearchAgent:
             "You are given access to a tool to retrieve the documents. "
             "Use the tool to query the documents to answer the user's question."
         )
-        get_vector_store()
+        init_vector_store()
 
     def query(self, thread_id: str, query: str) -> Generator[BaseMessage]:
         handler = TokenTrackingHandler()
@@ -62,7 +59,7 @@ class SearchAgent:
         )
         with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
             self.agent = create_agent(
-                "openai:gpt-5",
+                "openai:gpt-4.1",
                 self.tools,
                 system_prompt=self.prompt,
                 checkpointer=checkpointer,
