@@ -1,0 +1,21 @@
+version = 1
+agents = ["claude", "cursor"]
+
+[trust]
+allow_all = true
+
+[[skills]]
+name = "dotagents"
+source = "getsentry/dotagents"
+
+[[skills]]
+name = "skill-creator"
+source = "anthropics/skills"
+
+[[skills]]
+name = "office-hours"
+source = "garrytan/gstack"
+
+[[skills]]
+name = "grill-me"
+source = "mattpocock/skills"
