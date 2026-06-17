@@ -10,3 +10,4 @@ def init_environment() -> None:
     os.environ["LANGSMITH_TRACING"] = "true"
     os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
     os.environ["LANGSMITH_PROJECT"] = "Assistant"
+
