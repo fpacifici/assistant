@@ -1,13 +1,11 @@
 # Assistant
 
-An AI agent that organizes your knowledge from multiple sources and summarizes topics.
+A note-taking system with an AI agent that organizes your knowledge.
 
-Assistant reads your notes from the sources you configure, it ingests your
-knowledge base from different sources, it processes and it generates summaries
-of topics you ask for.
-
-It is also able to keep track of a list of blogs and feeds you configure and
-include them in the summary as sources.
+Assistant is a note-taking application that helps you capture, store, and
+organize your notes. It includes an AI agent that can process your knowledge
+base from multiple sources, generate summaries of topics you ask for, and
+keep track of blogs and feeds you configure to include as sources.
 
 ## Overview
 

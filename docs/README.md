@@ -1,6 +1,6 @@
 # Documentation Overview
 
-Welcome to the assistant package documentation!
+Welcome to the documentation for Assistant — a note-taking system with an AI agent that organizes your knowledge.
 
 ## Directory Structure
 
