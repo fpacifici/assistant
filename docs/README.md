@@ -41,10 +41,7 @@ Detailed documentation for each module in the package. Includes public APIs, usa
 4. Explore `modules/` for specific components
 
 ### For AI Agents
-1. **Start here**: `agents/README.md`
-2. **Before coding**: `agents/coding-conventions.md`
-3. **When implementing**: `agents/common-patterns.md`
-4. **Reference**: Project root `.cursorrules` or `.claude/code_style.md`
+1. **Start here**: `AGENTS.md`
 
 ### For Understanding Architecture
 1. Read `architecture/README.md`
