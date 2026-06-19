@@ -178,43 +178,121 @@ the specified notebook. Returns 204 on success, 404 if not found.
 
 ### Nodes
 
-The resource is `/notebook/.../note/.../node`
-We support the following operations:
+The resource is `/notebook/{notebook_id}/note/{note_id}/node`.
 
-Add node with POST:
-```
+Clients never see or send raw position strings — ordering is an internal
+concern. When listing nodes (via GET on the note), the server returns them
+in order. Clients reference nodes by ID when specifying insertion points.
+
+Both merge nodes must belong to the same note (the one in the URL path).
+
+#### Create node
+
+`POST /notebook/{notebook_id}/note/{note_id}/node`
+
+Requires `X-User-Id` header.
+
+Request body:
+```json
 {
-    position: .... # This is the position of the previous node
-    payload: ....
+    "payload": "Text content",
+    "after_node_id": "uuid (optional)",
+    "before_node_id": "uuid (optional)"
 }
 ```
 
-We pick the position of the previous node and insert the node between that
-position and the next at midpoint
+If neither `after_node_id` nor `before_node_id` is provided, the node is
+appended at the end. If `after_node_id` is provided, the node is inserted
+after that node. Both may be provided to insert between two specific nodes.
 
-PATCH `/notebook/.../note/.../node/...`
-Splits a node
+Response (201):
+```json
 {
-    offset: ... # The character at which to split
+    "id": "uuid",
+    "note_id": "uuid",
+    "author_id": "uuid",
+    "node_type": "text",
+    "payload": "Text content",
+    "version": 1,
+    "creation_timestamp": "2026-01-01T00:00:00Z",
+    "update_timestamp": "2026-01-01T00:00:00Z"
 }
+```
 
-PUT `/notebook/.../note/.../node/...`
-Two options:
-Replace payload
+#### Update node payload
+
+`PATCH /notebook/{notebook_id}/note/{note_id}/node/{node_id}`
+
+Uses a discriminated union body with `type: "update"`.
+
+Request body:
+```json
 {
-    payload: ....
+    "type": "update",
+    "payload": "New text content",
+    "expected_version": 1
 }
+```
 
-Merge nodes. The nodes have to be consecutive.
+Returns 409 if the version doesn't match (optimistic locking). The
+response includes the current version so the client can retry.
+
+Response (200): NodeResponse with bumped version.
+
+#### Merge nodes
+
+`PATCH /notebook/{notebook_id}/note/{note_id}/node/{node_id}`
+
+The URL identifies the **target** node (the one that survives). The source
+node is absorbed and deleted. Both must be text nodes in the same note.
+
+Request body:
+```json
 {
-    nodes: [
-        node1,
-        node2,...
-    ]
+    "type": "merge",
+    "source_node_id": "uuid",
+    "expected_version": 2,
+    "source_expected_version": 1
 }
+```
 
-DELETE `/notebook/.../note/.../node/...`
-Deletes a node.
+`expected_version` is the target's version, `source_expected_version` is
+the source's. Returns 409 if either version doesn't match.
+
+Response (200): NodeResponse of the target with merged payload and bumped
+version.
+
+#### Split node
+
+`POST /notebook/{notebook_id}/note/{note_id}/node/{node_id}/split`
+
+Splits a text node at a character offset. The original node keeps
+`payload[:offset]` and a new node is created with `payload[offset:]`
+immediately after it.
+
+Request body:
+```json
+{
+    "offset": 12,
+    "expected_version": 1
+}
+```
+
+Returns 409 if the version doesn't match.
+
+Response (201):
+```json
+{
+    "original": { "id": "uuid", "payload": "left part", "version": 2, "..." : "..." },
+    "new": { "id": "uuid", "payload": "right part", "version": 1, "..." : "..." }
+}
+```
+
+#### Delete node
+
+`DELETE /notebook/{notebook_id}/note/{note_id}/node/{node_id}`
+
+Deletes a node. Idempotent — returns 204 whether or not the node existed.
 
 **Current state**: Node endpoints are not yet implemented. The service
 layer supports all node operations (add, insert, update, split, merge,

@@ -118,6 +118,64 @@ def cmd_delete_note(args: argparse.Namespace) -> None:
     _print_response(response)
 
 
+def cmd_create_node(args: argparse.Namespace) -> None:
+    body: dict[str, str] = {"payload": args.payload}
+    if args.after_node_id:
+        body["after_node_id"] = args.after_node_id
+    if args.before_node_id:
+        body["before_node_id"] = args.before_node_id
+    response = httpx.post(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node",
+        json=body,
+        headers={"X-User-Id": args.user_id},
+    )
+    _print_response(response)
+
+
+def cmd_update_node(args: argparse.Namespace) -> None:
+    response = httpx.patch(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node/{args.node_id}",
+        json={
+            "type": "update",
+            "payload": args.payload,
+            "expected_version": args.expected_version,
+        },
+    )
+    _print_response(response)
+
+
+def cmd_merge_node(args: argparse.Namespace) -> None:
+    response = httpx.patch(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node/{args.node_id}",
+        json={
+            "type": "merge",
+            "source_node_id": args.source_node_id,
+            "expected_version": args.expected_version,
+            "source_expected_version": args.source_expected_version,
+        },
+    )
+    _print_response(response)
+
+
+def cmd_split_node(args: argparse.Namespace) -> None:
+    response = httpx.post(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node/{args.node_id}/split",
+        json={
+            "offset": args.offset,
+            "expected_version": args.expected_version,
+        },
+        headers={"X-User-Id": args.user_id},
+    )
+    _print_response(response)
+
+
+def cmd_delete_node(args: argparse.Namespace) -> None:
+    response = httpx.delete(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node/{args.node_id}",
+    )
+    _print_response(response)
+
+
 def _register_user_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -188,6 +246,51 @@ def _register_note_commands(
     p.set_defaults(func=cmd_delete_note)
 
 
+def _register_node_commands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser("create-node")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--payload", required=True)
+    p.add_argument("--user-id", required=True)
+    p.add_argument("--after-node-id")
+    p.add_argument("--before-node-id")
+    p.set_defaults(func=cmd_create_node)
+
+    p = subparsers.add_parser("update-node")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--node-id", required=True)
+    p.add_argument("--payload", required=True)
+    p.add_argument("--expected-version", type=int, required=True)
+    p.set_defaults(func=cmd_update_node)
+
+    p = subparsers.add_parser("merge-node")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--node-id", required=True, help="Target node (survives)")
+    p.add_argument("--source-node-id", required=True, help="Source node (absorbed)")
+    p.add_argument("--expected-version", type=int, required=True)
+    p.add_argument("--source-expected-version", type=int, required=True)
+    p.set_defaults(func=cmd_merge_node)
+
+    p = subparsers.add_parser("split-node")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--node-id", required=True)
+    p.add_argument("--offset", type=int, required=True)
+    p.add_argument("--expected-version", type=int, required=True)
+    p.add_argument("--user-id", required=True)
+    p.set_defaults(func=cmd_split_node)
+
+    p = subparsers.add_parser("delete-node")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--node-id", required=True)
+    p.set_defaults(func=cmd_delete_node)
+
+
 def main() -> int:
     """Run the API client CLI."""
     parser = argparse.ArgumentParser(
@@ -202,6 +305,7 @@ def main() -> int:
     _register_user_commands(subparsers)
     _register_notebook_commands(subparsers)
     _register_note_commands(subparsers)
+    _register_node_commands(subparsers)
 
     args = parser.parse_args()
     args.func(args)

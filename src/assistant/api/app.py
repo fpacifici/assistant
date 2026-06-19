@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 
 from assistant.api.exceptions import register_exception_handlers
+from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
 from assistant.api.routes.users import router as users_router
@@ -31,5 +32,6 @@ def create_app(
     app.include_router(users_router, prefix="/user", tags=["users"])
     app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
     app.include_router(notes_router, prefix="/notebook", tags=["notes"])
+    app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
 
     return app
