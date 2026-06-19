@@ -119,9 +119,27 @@ def get_notebook(
 def list_notebooks(
     session: Session,
     owner_id: uuid.UUID,
+    *,
+    offset: int = 0,
+    limit: int | None = None,
 ) -> list[Notebook]:
-    stmt = select(Notebook).where(Notebook.owner_id == owner_id)
+    stmt = select(Notebook).where(Notebook.owner_id == owner_id).offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
+
+
+def update_notebook(
+    session: Session,
+    notebook_id: uuid.UUID,
+    *,
+    name: str | None = None,
+) -> Notebook:
+    notebook = get_notebook(session, notebook_id)
+    if name is not None:
+        notebook.name = name
+    session.flush()
+    return notebook
 
 
 def delete_notebook(
@@ -168,9 +186,28 @@ def get_note(
 def list_notes(
     session: Session,
     notebook_id: uuid.UUID,
+    *,
+    offset: int = 0,
+    limit: int | None = None,
 ) -> list[Note]:
-    stmt = select(Note).where(Note.notebook_id == notebook_id)
+    stmt = select(Note).where(Note.notebook_id == notebook_id).offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
+
+
+def update_note(
+    session: Session,
+    note_id: uuid.UUID,
+    *,
+    title: str | None = None,
+) -> Note:
+    note = get_note(session, note_id)
+    if title is not None:
+        note.title = title
+    _touch_note(session, note_id)
+    session.flush()
+    return note
 
 
 def delete_note(

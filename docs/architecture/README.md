@@ -147,3 +147,4 @@ the webui.
 ## Subcomponents
 
 - [`Notes Service`](notesservice.md)
+- [`API`](api.md)
