@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import uuid as uuid_module
-from datetime import datetime  # noqa: TC003
+from datetime import UTC, datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +27,196 @@ class DocumentFormat(str, Enum):
     TEXT = "text"
     MARKDOWN = "markdown"
     PDF = "pdf"
+
+
+class NodeType(str, Enum):
+    """Node type enumeration."""
+
+    TEXT = "text"
+    ATTACHMENT = "attachment"
+
+
+class User(Base):
+    """User model."""
+
+    __tablename__ = "users"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    uid: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    email: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        unique=True,
+    )
+    firstname: Mapped[str] = mapped_column(String(255), nullable=False)
+    lastname: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    notebooks: Mapped[list[Notebook]] = relationship(
+        "Notebook",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+    notes: Mapped[list[Note]] = relationship(
+        "Note",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+
+
+class Notebook(Base):
+    """Notebook model."""
+
+    __tablename__ = "notebooks"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="notebooks",
+    )
+    notes: Mapped[list[Note]] = relationship(
+        "Note",
+        back_populates="notebook",
+        cascade="all, delete-orphan",
+    )
+
+
+class Note(Base):
+    """Note model."""
+
+    __tablename__ = "notes"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    notebook_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notebooks.id"),
+        nullable=False,
+    )
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    creation_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    update_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    notebook: Mapped[Notebook] = relationship(
+        "Notebook",
+        back_populates="notes",
+    )
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="notes",
+    )
+    nodes: Mapped[list[Node]] = relationship(
+        "Node",
+        back_populates="note",
+        cascade="all, delete-orphan",
+        order_by="Node.position",
+    )
+
+
+class AttachmentMetadata(Base):
+    """Attachment metadata model."""
+
+    __tablename__ = "attachment_metadata"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+
+class Node(Base):
+    """Node model representing a content chunk within a note."""
+
+    __tablename__ = "nodes"
+    __table_args__ = (
+        CheckConstraint(
+            "(node_type = 'text' AND payload IS NOT NULL"
+            " AND attachment_id IS NULL)"
+            " OR "
+            "(node_type = 'attachment' AND payload IS NULL"
+            " AND attachment_id IS NOT NULL)",
+            name="ck_node_type_fields",
+        ),
+        Index("ix_nodes_note_id_position", "note_id", "position"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id"),
+        nullable=False,
+    )
+    position: Mapped[str] = mapped_column(String(255), nullable=False)
+    author_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    node_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.attachment_metadata.id"),
+        nullable=True,
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+    update_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    note: Mapped[Note] = relationship(
+        "Note",
+        back_populates="nodes",
+    )
+    author: Mapped[User] = relationship("User")
+    attachment: Mapped[AttachmentMetadata | None] = relationship(
+        "AttachmentMetadata",
+    )
 
 
 class Document(Base):

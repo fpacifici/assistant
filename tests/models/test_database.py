@@ -1,11 +1,10 @@
 """Tests for database connection and session management."""
 
 from datetime import UTC, datetime
-from typing import cast
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import Table, create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -21,9 +20,37 @@ from assistant.models.database import (
 from assistant.models.schema import (
     Document,
     DocumentFormat,
-    DocumentMetadata,
     ExternalSource,
 )
+
+
+def _strip_schemas_for_sqlite() -> dict[str, str | None]:
+    """Strip schemas from all tables for SQLite compatibility.
+
+    Returns a dict of original schemas keyed by table fullname.
+    """
+    original: dict[str, str | None] = {}
+    for table in Base.metadata.sorted_tables:
+        original[table.fullname] = table.schema
+        table.schema = None
+
+    for table in Base.metadata.sorted_tables:
+        for col in table.columns:
+            for fk in col.foreign_keys:
+                fk._table_key = None  # type: ignore[attr-defined]
+                ref_table_name = fk.column.table.name
+                ref_col_name = fk.column.name
+                ref_table = Base.metadata.tables.get(ref_table_name)
+                if ref_table is not None:
+                    fk.column = ref_table.columns[ref_col_name]  # type: ignore[assignment]
+
+    return original
+
+
+def _restore_schemas(original: dict[str, str | None]) -> None:
+    """Restore original schemas on all tables."""
+    for table in Base.metadata.sorted_tables:
+        table.schema = original[table.fullname]
 
 
 def test_get_database_url_from_config() -> None:
@@ -102,49 +129,25 @@ def test_create_schema_with_in_memory_db() -> None:
 def test_init_database_with_in_memory_db() -> None:
     """Test initializing database with in-memory SQLite database."""
     engine = create_engine("sqlite:///:memory:", echo=False)
-
-    # For SQLite, we need to handle schemas differently
-    # Temporarily remove schemas from table definitions
-
-    doc_table = cast(Table, Document.__table__)
-    source_table = cast(Table, ExternalSource.__table__)
-    metadata_table = cast(Table, DocumentMetadata.__table__)
-
-    # Save and remove schemas
-    doc_schema = doc_table.schema
-    source_schema = source_table.schema
-    metadata_schema = metadata_table.schema
-    doc_table.schema = None
-    source_table.schema = None
-    metadata_table.schema = None
-
-    # Update foreign keys to point to the no-schema tables
-    source_id_col = doc_table.columns["source_id"]
-    for fk in list(source_id_col.foreign_keys):
-        fk._table_key = None  # type: ignore[attr-defined]
-        fk.column = source_table.columns["id"]  # type: ignore[assignment]
-
-    document_uuid_col = metadata_table.columns["document_uuid"]
-    for fk in list(document_uuid_col.foreign_keys):
-        fk._table_key = None  # type: ignore[attr-defined]
-        fk.column = doc_table.columns["uuid"]  # type: ignore[assignment]
+    original = _strip_schemas_for_sqlite()
 
     try:
-        # Mock create_schema to skip it (SQLite doesn't support schemas)
-        with patch("assistant.models.database.create_schema"):
-            # Initialize database
+        with (
+            patch("assistant.models.database.create_schema"),
+            patch("assistant.models.database.PostgresSaver"),
+        ):
             init_database(engine)
 
-            # Verify tables were created
             inspector = inspect(engine)
             assert inspector.has_table("documents")
             assert inspector.has_table("external_sources")
             assert inspector.has_table("document_metadata")
+            assert inspector.has_table("users")
+            assert inspector.has_table("notebooks")
+            assert inspector.has_table("notes")
+            assert inspector.has_table("nodes")
     finally:
-        # Restore schemas
-        doc_table.schema = doc_schema
-        source_table.schema = source_schema
-        metadata_table.schema = metadata_schema
+        _restore_schemas(original)
 
 
 def test_init_database_creates_tables(db_session: Session) -> None:
@@ -178,42 +181,25 @@ def test_init_database_creates_tables(db_session: Session) -> None:
 def test_drop_database_with_sqlite() -> None:
     """Test drop_database with SQLite drops tables."""
     engine = create_engine("sqlite:///:memory:", echo=False)
-
-    # Set up tables (same schema-stripping as test_init_database_with_in_memory_db)
-    doc_table = cast(Table, Document.__table__)
-    source_table = cast(Table, ExternalSource.__table__)
-    metadata_table = cast(Table, DocumentMetadata.__table__)
-    doc_schema = doc_table.schema
-    source_schema = source_table.schema
-    metadata_schema = metadata_table.schema
-    doc_table.schema = None
-    source_table.schema = None
-    metadata_table.schema = None
-    source_id_col = doc_table.columns["source_id"]
-    for fk in list(source_id_col.foreign_keys):
-        fk._table_key = None  # type: ignore[attr-defined]
-        fk.column = source_table.columns["id"]  # type: ignore[assignment]
-
-    document_uuid_col = metadata_table.columns["document_uuid"]
-    for fk in list(document_uuid_col.foreign_keys):
-        fk._table_key = None  # type: ignore[attr-defined]
-        fk.column = doc_table.columns["uuid"]  # type: ignore[assignment]
+    original = _strip_schemas_for_sqlite()
 
     try:
-        with patch("assistant.models.database.create_schema"):
+        with (
+            patch("assistant.models.database.create_schema"),
+            patch("assistant.models.database.PostgresSaver"),
+        ):
             init_database(engine)
         assert inspect(engine).has_table("documents")
         assert inspect(engine).has_table("external_sources")
-        assert inspect(engine).has_table("document_metadata")
+        assert inspect(engine).has_table("nodes")
 
         drop_database(engine)
 
         assert not inspect(engine).has_table("documents")
         assert not inspect(engine).has_table("external_sources")
+        assert not inspect(engine).has_table("nodes")
     finally:
-        doc_table.schema = doc_schema
-        source_table.schema = source_schema
-        metadata_table.schema = metadata_schema
+        _restore_schemas(original)
 
 
 def test_base_declarative_base() -> None:

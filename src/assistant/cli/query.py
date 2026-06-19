@@ -6,7 +6,6 @@ import sys
 
 from assistant.agents.infra import init_environment
 from assistant.agents.rag import SearchAgent
-from assistant.agents.vectors import VectorStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,12 +33,13 @@ def main() -> int:
     try:
         init_environment()
         store = SearchAgent()
-        for event in store.query(args.query):
+        for event in store.query("cli", args.query):
             event.pretty_print()
-        return 0
     except Exception:
         logger.exception("Query failed")
         return 1
+    else:
+        return 0
 
 
 if __name__ == "__main__":

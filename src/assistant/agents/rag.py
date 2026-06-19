@@ -1,5 +1,4 @@
 from collections.abc import Generator
-from functools import lru_cache
 from typing import cast
 
 from langchain.agents import create_agent
@@ -11,9 +10,8 @@ from langchain_core.outputs import LLMResult
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 
-from assistant.agents.vectors import VectorStore, init_vector_store
+from assistant.agents.vectors import init_vector_store
 from assistant.models.database import get_database_url
-
 
 
 class TokenTrackingHandler(BaseCallbackHandler):
@@ -31,7 +29,7 @@ def retrieve_documents(query: str) -> tuple[list[dict[str, object]], list[Docume
     """Retrieve documents from the vector store."""
 
     retrieved_docs = init_vector_store().query(query)
-    serialized = [
+    serialized: list[dict[str, object]] = [
         {
             "source": doc.document.metadata,
             "content": doc.document.page_content,

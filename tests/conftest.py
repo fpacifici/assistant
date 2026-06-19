@@ -2,15 +2,14 @@
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
 
 import pytest
-from sqlalchemy import Table, create_engine
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from assistant.config import Config
+from assistant.models import schema as _schema  # noqa: F401
 from assistant.models.database import Base
-from assistant.models.schema import Document, DocumentMetadata, ExternalSource
 
 
 @pytest.fixture
@@ -108,7 +107,8 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
     """Provide a database session for testing.
 
     Uses in-memory SQLite database. SQLite doesn't support schemas,
-    so we create table definitions without schemas for testing.
+    so we temporarily strip schemas from all tables and re-resolve
+    foreign keys before creating them.
 
     Args:
         tmp_path: Temporary directory fixture.
@@ -116,62 +116,28 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
     Yields:
         Database session.
     """
-    # Use in-memory SQLite for testing
     database_url = "sqlite:///:memory:"
     engine = create_engine(database_url, echo=False)
 
-    # SQLite doesn't support schemas, so we temporarily modify Base.metadata
-    # to remove schemas from table definitions
-    # Get the original table objects
-    doc_table = cast(Table, Document.__table__)
-    source_table = cast(Table, ExternalSource.__table__)
-    metadata_table = cast(Table, DocumentMetadata.__table__)
+    tables = Base.metadata.sorted_tables
+    original_schemas: dict[str, str | None] = {}
 
-    # Save original schemas
-    doc_schema = doc_table.schema
-    source_schema = source_table.schema
-    metadata_schema = metadata_table.schema
+    for table in tables:
+        original_schemas[table.fullname] = table.schema
+        table.schema = None
 
-    # Remove schemas temporarily - this must be done before any table operations
-    doc_table.schema = None
-    source_table.schema = None
-    metadata_table.schema = None
-
-    # SQLAlchemy looks up tables in metadata using a key that includes schema.
-    # When we set schema = None, the table key changes, but the foreign key
-    # constraint might still reference the old key. We need to ensure the FK
-    # can find the referenced table in the no-schema namespace.
-    #
-    # The foreign key uses a string reference "external_sources.id", which should
-    # work, but SQLAlchemy resolves it by looking up the table in metadata.
-    # We need to ensure both tables are in the same metadata namespace.
-
-    # Force SQLAlchemy to re-resolve the foreign keys by updating the constraints
-    # Get the source_id column and its foreign key
-    source_id_col = doc_table.columns["source_id"]
-    for fk in list(source_id_col.foreign_keys):
-        # Update the foreign key to explicitly reference source_table
-        # This ensures it points to the table in the no-schema namespace
-        fk._table_key = None  # type: ignore[attr-defined]  # Clear cached table key
-        fk.column = source_table.columns["id"]  # type: ignore[assignment]
-
-    # Ensure the foreign key from document_metadata to documents also points to the
-    # no-schema documents table in this in-memory SQLite database.
-    document_uuid_col = metadata_table.columns["document_uuid"]
-    for fk in list(document_uuid_col.foreign_keys):
-        fk._table_key = None  # type: ignore[attr-defined]
-        fk.column = doc_table.columns["uuid"]  # type: ignore[assignment]
+    for table in tables:
+        for col in table.columns:
+            for fk in col.foreign_keys:
+                fk._table_key = None  # type: ignore[attr-defined]
+                ref_table_name = fk.column.table.name
+                ref_col_name = fk.column.name
+                ref_table = Base.metadata.tables.get(ref_table_name)
+                if ref_table is not None:
+                    fk.column = ref_table.columns[ref_col_name]  # type: ignore[assignment]
 
     try:
-        # Create tables - SQLAlchemy should now resolve the foreign keys correctly
-        # Create external_sources first
-        source_table.create(engine, checkfirst=True)
-        # Then create documents - the FK should now find external_sources
-        doc_table.create(engine, checkfirst=True)
-        # Finally create document_metadata - the FK should now find documents
-        metadata_table.create(engine, checkfirst=True)
-
-        # Create session - the ORM models will work
+        Base.metadata.create_all(engine)
         session_factory = sessionmaker(bind=engine)
         session = session_factory()
 
@@ -179,13 +145,7 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
             yield session
         finally:
             session.close()
-            # Drop tables in reverse order
-            Base.metadata.drop_all(
-                engine,
-                tables=[metadata_table, doc_table, source_table],
-            )
+            Base.metadata.drop_all(engine)
     finally:
-        # Restore original schemas
-        doc_table.schema = doc_schema
-        source_table.schema = source_schema
-        metadata_table.schema = metadata_schema
+        for table in tables:
+            table.schema = original_schemas[table.fullname]
