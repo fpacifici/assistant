@@ -1,17 +1,18 @@
-import ast
 import json
 import uuid
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from langchain_core.messages import BaseMessage
-
-from assistant.agents.rag import SearchAgent
 from openevals.llm import create_llm_as_judge
 from openevals.prompts import CORRECTNESS_PROMPT
 
+from assistant.agents.rag import SearchAgent
 
-def _extract_source_fields(content: str) -> tuple[list[str], list[str]]:
+if TYPE_CHECKING:
+    from langchain_core.messages import BaseMessage
+
+
+def _extract_source_fields(content: str | Sequence[Any]) -> tuple[list[str], list[str]]:
     """Extract `external_id` and `notebook` values from retrieved sources.
 
     Supports:
@@ -23,7 +24,7 @@ def _extract_source_fields(content: str) -> tuple[list[str], list[str]]:
         content: Tool message content.
 
     Returns:
-        A tuple `(external_ids, notebooks)` preserving first-seen order and de-duplicating.
+        A tuple ``(external_ids, notebooks)`` with first-seen order.
     """
 
     external_ids: list[str] = []
@@ -32,12 +33,14 @@ def _extract_source_fields(content: str) -> tuple[list[str], list[str]]:
     seen_notebooks: set[str] = set()
 
     parsed_sources: list[Mapping[str, object]] = []
-    
 
-    parsed_sources = json.loads(content)
+    parsed_sources = json.loads(str(content))
     for parsed in parsed_sources:
-        external_id = parsed["source"].get("external_id")
-        notebook = parsed["source"].get("notebook")
+        source = parsed["source"]
+        if not isinstance(source, Mapping):
+            continue
+        external_id = source.get("external_id")
+        notebook = source.get("notebook")
 
         if isinstance(external_id, str) and external_id not in seen_external_ids:
             seen_external_ids.add(external_id)
@@ -67,31 +70,25 @@ def target(inputs: dict[str, object]) -> dict[str, object]:
     topics: list[str] = []
     thread_id = f"eval_{uuid.uuid4()}"
 
-    question_input = inputs.get("question")
-    question: str = str(question_input) if isinstance(question_input, Sequence) else str(question_input)
+    question: str = str(inputs.get("question"))
 
     for event in store.query(thread_id, question):
         if event.type == "tool":
             content = event.content
-            if isinstance(content, (str, Sequence)):
-                
+            if isinstance(content, str | Sequence):
                 extracted_note_ids, extracted_notebooks = _extract_source_fields(content)
                 note_ids.extend(extracted_note_ids)
                 notebooks.extend(extracted_notebooks)
-            
+
         elif event.type == "ai":
             response = event
 
     answer: str = ""
     if response is not None:
         content = response.content
-        if isinstance(content, str):
-            answer = content.strip()
-        else:
-            # Some message types use list-based content; fall back to string coercion.
-            answer = str(content).strip()
+        answer = content.strip() if isinstance(content, str) else str(content).strip()
 
-    ret = {
+    ret: dict[str, object] = {
         "answer": answer,
         "notes_ids": note_ids,
         "topics": topics,
@@ -117,4 +114,3 @@ def correctness_evaluator(
         outputs=outputs,
         reference_outputs=reference_outputs,
     )
-

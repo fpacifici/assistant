@@ -1,0 +1,53 @@
+"""Notes service module."""
+
+from assistant.notes.exceptions import (
+    InvalidNodeTypeError,
+    NodeNotFoundError,
+    NodeVersionConflictError,
+    NotebookNotFoundError,
+    NoteNotFoundError,
+    NotesServiceError,
+)
+from assistant.notes.service import (
+    add_attachment_node,
+    add_text_node,
+    create_note,
+    create_notebook,
+    delete_node,
+    delete_note,
+    delete_notebook,
+    get_note,
+    get_notebook,
+    get_ordered_nodes,
+    insert_text_node,
+    list_notebooks,
+    list_notes,
+    merge_text_nodes,
+    split_text_node,
+    update_text_node,
+)
+
+__all__ = [
+    "InvalidNodeTypeError",
+    "NodeNotFoundError",
+    "NodeVersionConflictError",
+    "NoteNotFoundError",
+    "NotebookNotFoundError",
+    "NotesServiceError",
+    "add_attachment_node",
+    "add_text_node",
+    "create_note",
+    "create_notebook",
+    "delete_node",
+    "delete_note",
+    "delete_notebook",
+    "get_note",
+    "get_notebook",
+    "get_ordered_nodes",
+    "insert_text_node",
+    "list_notebooks",
+    "list_notes",
+    "merge_text_nodes",
+    "split_text_node",
+    "update_text_node",
+]
