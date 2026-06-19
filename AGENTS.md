@@ -31,6 +31,10 @@ assistant/
 **Python Version**: >= 3.13
 **Package Manager**: uv
 
+## Architecture
+
+The architecture of the system is described in [`Architecture`](docs/architecture/README.md)
+
 ## Quick Start
 
 > [!NOTE]
@@ -38,6 +42,18 @@ assistant/
 > See the instructions below to know how to setup the venv
 
 ### Setup Development Environment
+
+#### Start dev services
+
+We have a docker compose bundle for the db and other dev services
+
+```bash
+# Start the devservices and detach
+docker compose up -d
+
+# Stops the devservices
+docker compose down
+```
 
 #### Quick Setup (Recommended)
 
@@ -118,22 +134,6 @@ black src/
 
 Every time you apply a change, run tests and typechecking as described below.
 
-### Adding New Modules
-
-1. Create the module file in `src/assistant/`
-2. Add type hints to all functions and classes
-3. Create corresponding test file in `tests/`
-4. Document the module in `docs/modules/`
-5. Update `src/assistant/__init__.py` if exposing public API
-
-### Making Architecture Decisions
-
-1. Create a new ADR in `docs/adr/` following the template
-2. Discuss the decision, alternatives, and consequences
-3. Update the index in `docs/adr/README.md`
-4. Implement the decision
-5. Reference the ADR in relevant code comments
-
 ### Writing Tests
 
 - Place tests in `tests/` mirroring the `src/assistant/` structure
@@ -169,6 +169,50 @@ python -m assistant.cli.chat <thread_id>
 
 Exit with **Ctrl+Q**. See [`docs/modules/tui.md`](docs/modules/tui.md) for details.
 
+### REST API Server
+
+Start the API server (requires Postgres to be running, see below):
+
+```bash
+# Set up the database (first time only)
+python -m assistant.cli.setup_database
+
+# Start the server
+python -m assistant.cli.api_server
+```
+
+The server runs on `http://localhost:8000` by default. Options:
+- `--host` (default: 0.0.0.0)
+- `--port` (default: 8000)
+- `--reload` (auto-reload on code changes)
+
+OpenAPI docs are available at `http://localhost:8000/docs`.
+
+### API Client CLI
+
+A CLI client for manually calling the API:
+
+```bash
+# User operations
+python -m assistant.cli.api_client create-user --email user@example.com --firstname Jane --lastname Doe
+python -m assistant.cli.api_client get-user <uid>
+python -m assistant.cli.api_client update-user <uid> --firstname Updated
+
+# Notebook operations (--user-id required for create and list)
+python -m assistant.cli.api_client create-notebook --name "My Notebook" --user-id <uid>
+python -m assistant.cli.api_client list-notebooks --user-id <uid>
+python -m assistant.cli.api_client get-notebook <notebook_id>
+python -m assistant.cli.api_client delete-notebook <notebook_id>
+
+# Note operations
+python -m assistant.cli.api_client create-note --notebook-id <id> --title "My Note" --user-id <uid>
+python -m assistant.cli.api_client list-notes --notebook-id <id>
+python -m assistant.cli.api_client get-note --notebook-id <id> --note-id <id>
+python -m assistant.cli.api_client delete-note --notebook-id <id> --note-id <id>
+```
+
+Options: `--base-url` (default: http://localhost:8000), `--offset`, `--limit` for list commands.
+
 ### Development services (Postgres)
 
 When a task needs the Postgres database (e.g. running app code or tests that hit the DB), first ensure services are up by running `make services-up`. This is idempotent (no-op if the stack is already running). To stop the bundle when no longer needed, run `make services-down`.
@@ -198,3 +242,11 @@ pytest tests/test_specific.py::test_function_name
 4. Project-level: Update README.md
 
 ## Conventions
+
+### API Layer
+
+API route handlers must not mutate ORM entities directly. All data
+operations (create, read, update, delete) go through service functions in
+`src/assistant/notes/service.py` or `src/assistant/notes/user_service.py`.
+The service layer owns flush/transaction semantics; the API layer owns
+HTTP concerns (request parsing, response serialization, session commit).

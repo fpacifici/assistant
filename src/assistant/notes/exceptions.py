@@ -12,6 +12,10 @@ class NotesServiceError(Exception):
     """Base exception for the notes service."""
 
 
+class UserNotFoundError(NotesServiceError):
+    """Raised when a user is not found."""
+
+
 class NotebookNotFoundError(NotesServiceError):
     """Raised when a notebook is not found."""
 
