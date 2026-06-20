@@ -58,6 +58,12 @@ Response (201):
 }
 ```
 
+`GET /user`
+
+List users. Supports pagination via query parameters:
+- `offset` (default: 0)
+- `limit` (default: 20, max: 100)
+
 `GET /user/{uid}`
 
 Retrieve a user by UUID. Returns 404 if not found.
@@ -186,6 +192,27 @@ in order. Clients reference nodes by ID when specifying insertion points.
 
 Both merge nodes must belong to the same note (the one in the URL path).
 
+#### List nodes
+
+`GET /notebook/{notebook_id}/note/{note_id}/node`
+
+List all nodes in a note, returned in position order.
+
+Response (200):
+```json
+[
+    {
+        "id": "uuid",
+        "note_id": "uuid",
+        "author_id": "uuid",
+        "node_type": "text",
+        "payload": "Text content",
+        "version": 1,
+        "update_timestamp": "2026-01-01T00:00:00Z"
+    }
+]
+```
+
 #### Create node
 
 `POST /notebook/{notebook_id}/note/{note_id}/node`
@@ -293,10 +320,6 @@ Response (201):
 `DELETE /notebook/{notebook_id}/note/{note_id}/node/{node_id}`
 
 Deletes a node. Idempotent — returns 204 whether or not the node existed.
-
-**Current state**: Node endpoints are not yet implemented. The service
-layer supports all node operations (add, insert, update, split, merge,
-delete) and will be exposed in a future iteration.
 
 ### Error Responses
 

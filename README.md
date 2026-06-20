@@ -64,6 +64,35 @@ make pre-commit-install
 make pre-commit-run
 ```
 
+## Frontend
+
+The web UI is a React app in the `frontend/` directory.
+
+### Setup
+
+```bash
+# Install dependencies
+make frontend-install
+
+# Start the dev server (requires the API server running)
+make frontend-dev
+
+# Or start both backend and frontend together
+make dev
+```
+
+The frontend dev server runs at `http://localhost:5173` and expects the
+API server at `http://localhost:8000`. Make sure Postgres is running
+(`make services-up`) and you have at least one user in the database.
+
+### Build
+
+```bash
+make frontend-build    # Production build
+make frontend-lint     # Lint
+make frontend-check    # All frontend checks
+```
+
 ## Documentation
 
 Comprehensive documentation is available in the `docs/` directory:

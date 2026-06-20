@@ -12,6 +12,7 @@ from assistant.api.schemas.pagination import Pagination
 from assistant.models.schema import Note
 from assistant.notes.exceptions import NoteNotFoundError
 from assistant.notes.service import (
+    add_text_node,
     create_note,
     delete_note,
     get_note,
@@ -50,6 +51,7 @@ def create_note_endpoint(
         owner_id=user_id,
         title=body.title,
     )
+    add_text_node(session, note_id=note.id, author_id=user_id, payload="")
     return NoteResponse.model_validate(note)
 
 

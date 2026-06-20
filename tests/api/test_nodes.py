@@ -28,6 +28,48 @@ def _setup(
     return nb, note
 
 
+# --- List nodes ---
+
+
+def test_list_nodes_empty(
+    client: TestClient,
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_nodes_ordered(
+    client: TestClient,
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    add_text_node(db_session, note.id, test_user.uid, "First")
+    add_text_node(db_session, note.id, test_user.uid, "Second")
+    add_text_node(db_session, note.id, test_user.uid, "Third")
+
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert [n["payload"] for n in data] == ["First", "Second", "Third"]
+
+
+def test_list_nodes_wrong_notebook(
+    client: TestClient,
+    test_user: User,
+    db_session: Session,
+) -> None:
+    _nb, note = _setup(db_session, test_user)
+    other_nb = create_notebook(db_session, "Other", test_user.uid)
+    response = client.get(f"/notebook/{other_nb.id}/note/{note.id}/node")
+    assert response.status_code == 404
+
+
 # --- Create node ---
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
+
 from assistant.models.schema import User
 from assistant.notes.exceptions import UserNotFoundError
 
@@ -33,6 +35,18 @@ def get_user(
     if user is None:
         raise UserNotFoundError(str(uid))
     return user
+
+
+def list_users(
+    session: Session,
+    *,
+    offset: int = 0,
+    limit: int | None = None,
+) -> list[User]:
+    stmt = select(User).offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    return list(session.scalars(stmt))
 
 
 def update_user(
