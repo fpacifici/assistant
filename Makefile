@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-check dev
 
 # Default target
 help:
@@ -16,6 +16,13 @@ help:
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
 	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
 	@echo "  make services-down      - Stop and remove Docker Compose services (Postgres)"
+	@echo "  make server              - Start the FastAPI API server"
+	@echo "  make frontend-install    - Install frontend dependencies"
+	@echo "  make frontend-dev        - Start frontend dev server"
+	@echo "  make frontend-build      - Build frontend for production"
+	@echo "  make frontend-lint       - Lint frontend code"
+	@echo "  make frontend-check      - Run all frontend checks"
+	@echo "  make dev                 - Start both backend and frontend dev servers"
 	@echo "  make clean               - Remove generated files and cache"
 
 # Install uv package manager
@@ -108,6 +115,42 @@ clean:
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete
 	@echo "✅ Cleanup complete"
+
+# Start the FastAPI API server
+server:
+	@echo "Starting API server on http://localhost:8000 ..."
+	@.venv/bin/python -m assistant.cli.api_server
+
+# Install frontend dependencies
+frontend-install:
+	@echo "Installing frontend dependencies..."
+	@cd frontend && npm install
+	@echo "✅ Frontend dependencies installed"
+
+# Start frontend dev server
+frontend-dev:
+	@echo "Starting frontend dev server..."
+	@cd frontend && npm run dev
+
+# Build frontend for production
+frontend-build:
+	@echo "Building frontend..."
+	@cd frontend && npm run build
+	@echo "✅ Frontend built"
+
+# Lint frontend code
+frontend-lint:
+	@echo "Linting frontend..."
+	@cd frontend && npm run lint
+
+# Run all frontend checks
+frontend-check: frontend-lint
+	@echo "✅ Frontend checks passed"
+
+# Start both backend and frontend dev servers
+dev:
+	@echo "Starting backend and frontend..."
+	@.venv/bin/python -m assistant.cli.api_server & cd frontend && npm run dev
 
 # Quick development setup (run once)
 dev-setup: setup install pre-commit-install

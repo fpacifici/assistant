@@ -14,6 +14,43 @@ if TYPE_CHECKING:
     from assistant.models.schema import User
 
 
+class TestListUsers:
+    def test_list_users_empty(self, client: TestClient) -> None:
+        response = client.get("/user")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_list_users(
+        self,
+        client: TestClient,
+        test_user: User,
+    ) -> None:
+        response = client.get("/user")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["uid"] == str(test_user.uid)
+
+    def test_list_users_pagination(
+        self,
+        client: TestClient,
+        test_user: User,  # noqa: ARG002
+        db_session: Session,
+    ) -> None:
+        for i in range(4):
+            other = UserModel(
+                email=f"other{i}@example.com",
+                firstname="O",
+                lastname="U",
+            )
+            db_session.add(other)
+        db_session.flush()
+
+        response = client.get("/user", params={"limit": 2})
+        assert response.status_code == 200
+        assert len(response.json()) == 2
+
+
 class TestCreateUser:
     def test_create_user(self, client: TestClient) -> None:
         response = client.post(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from assistant.notes.service import create_note, create_notebook
+from assistant.notes.service import create_note, create_notebook, get_ordered_nodes
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
@@ -32,6 +32,26 @@ class TestCreateNote:
         data = response.json()
         assert data["title"] == "My Note"
         assert data["notebook_id"] == str(nb.id)
+
+    def test_create_note_creates_default_node(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "NB", test_user.uid)
+        response = client.post(
+            f"/notebook/{nb.id}/note",
+            json={"title": "My Note"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 201
+        note_id = response.json()["id"]
+        nodes = get_ordered_nodes(db_session, uuid.UUID(note_id))
+        assert len(nodes) == 1
+        assert nodes[0].payload == ""
+        assert nodes[0].node_type == "text"
 
     def test_create_note_missing_header(
         self,

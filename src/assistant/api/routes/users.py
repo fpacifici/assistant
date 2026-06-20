@@ -7,8 +7,9 @@ import uuid
 from fastapi import APIRouter
 
 from assistant.api.dependencies import SessionDep
+from assistant.api.schemas.pagination import Pagination
 from assistant.api.schemas.users import UserCreate, UserResponse, UserUpdate
-from assistant.notes.user_service import create_user, get_user, update_user
+from assistant.notes.user_service import create_user, get_user, list_users, update_user
 
 router = APIRouter()
 
@@ -25,6 +26,19 @@ def create_user_endpoint(
         lastname=body.lastname,
     )
     return UserResponse.model_validate(user)
+
+
+@router.get("", response_model=list[UserResponse])
+def list_users_endpoint(
+    session: SessionDep,
+    pagination: Pagination,
+) -> list[UserResponse]:
+    users = list_users(
+        session,
+        offset=pagination.offset,
+        limit=pagination.limit,
+    )
+    return [UserResponse.model_validate(u) for u in users]
 
 
 @router.get("/{uid}", response_model=UserResponse)

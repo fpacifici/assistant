@@ -21,6 +21,7 @@ from assistant.notes.service import (
     add_text_node,
     delete_node,
     get_note,
+    get_ordered_nodes,
     insert_text_node,
     merge_text_nodes,
     split_text_node,
@@ -53,6 +54,21 @@ def _validate_note_in_notebook(
     note = get_note(session, note_id)
     if note.notebook_id != notebook_id:
         raise NoteNotFoundError(str(note_id))
+
+
+@router.get(
+    "/{notebook_id}/note/{note_id}/node",
+    response_model=list[NodeResponse],
+)
+def list_nodes_endpoint(
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID,
+    session: SessionDep,
+) -> list[NodeResponse]:
+    """List all nodes in a note, ordered by position."""
+    _validate_note_in_notebook(session, notebook_id, note_id)
+    nodes = get_ordered_nodes(session, note_id)
+    return [NodeResponse.model_validate(n) for n in nodes]
 
 
 @router.post(

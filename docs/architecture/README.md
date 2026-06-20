@@ -134,7 +134,14 @@ These are in the same python package but can be deployed independently.
 They are provided as a docker container as well.
 
 The TUI is a python package. It is separate from the main package in the
-same github repo. Same is true for the Web UI, which is a React site.
+same github repo.
+
+The Web UI is a React single-page application in the `/frontend`
+directory. It is built with Vite, React, TypeScript, React Router, and
+TanStack Query. It talks to the API server over HTTP and uses the
+`X-User-Id` header for user identification. The source lives in
+`frontend/src/` with API client, components, and routing.
+
 Both the TUI and the Web UI talk to the API and Websocket server.
 
 All this can be deployed in a Docker Compose bundle that contains:
