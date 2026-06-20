@@ -15,6 +15,7 @@ from assistant.models.schema import (
     User,
 )
 from assistant.notes.exceptions import (
+    InvalidBlockTypeError,
     InvalidNodeTypeError,
     NodeNotFoundError,
     NodeVersionConflictError,
@@ -23,6 +24,7 @@ from assistant.notes.exceptions import (
 )
 from assistant.notes.service import (
     add_attachment_node,
+    add_markdown_node,
     add_text_node,
     create_note,
     create_notebook,
@@ -32,11 +34,13 @@ from assistant.notes.service import (
     get_note,
     get_notebook,
     get_ordered_nodes,
+    insert_markdown_node,
     insert_text_node,
     list_notebooks,
     list_notes,
     merge_text_nodes,
     split_text_node,
+    update_markdown_node,
     update_text_node,
 )
 
@@ -478,3 +482,119 @@ def test_update_touches_note_timestamp(db_session: Session) -> None:
     if updated_ts.tzinfo is not None:
         updated_ts = updated_ts.replace(tzinfo=None)
     assert updated_ts >= original_ts
+
+
+# -----------------------------------------------------------------------
+# Markdown node operations
+# -----------------------------------------------------------------------
+
+
+def test_add_markdown_node(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    node = add_markdown_node(db_session, note.id, user.uid, "# Title", "heading")
+    assert node.node_type == NodeType.MARKDOWN
+    assert node.block_type == "heading"
+    assert node.payload == "# Title"
+    assert node.version == 1
+
+
+def test_add_markdown_node_invalid_block_type(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    with pytest.raises(InvalidBlockTypeError):
+        add_markdown_node(db_session, note.id, user.uid, "text", "invalid_type")
+
+
+def test_insert_markdown_node_between(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    n1 = add_markdown_node(db_session, note.id, user.uid, "# Title", "heading")
+    n3 = add_markdown_node(db_session, note.id, user.uid, "paragraph text", "paragraph")
+
+    n2 = insert_markdown_node(
+        db_session,
+        note.id,
+        user.uid,
+        "> quote",
+        "blockquote",
+        after_node_id=n1.id,
+        before_node_id=n3.id,
+    )
+
+    assert n1.position < n2.position < n3.position
+    assert n2.block_type == "blockquote"
+    nodes = get_ordered_nodes(db_session, note.id)
+    assert [n.payload for n in nodes] == ["# Title", "> quote", "paragraph text"]
+
+
+def test_update_markdown_node_success(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+    node = add_markdown_node(db_session, note.id, user.uid, "old", "paragraph")
+
+    updated = update_markdown_node(db_session, node.id, "# new heading", "heading", 1)
+    assert updated.payload == "# new heading"
+    assert updated.block_type == "heading"
+    assert updated.version == 2
+
+
+def test_update_markdown_node_version_conflict(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+    node = add_markdown_node(db_session, note.id, user.uid, "v1", "paragraph")
+
+    update_markdown_node(db_session, node.id, "v2", "paragraph", 1)
+
+    with pytest.raises(NodeVersionConflictError) as exc_info:
+        update_markdown_node(db_session, node.id, "v3", "paragraph", 1)
+    assert exc_info.value.expected_version == 1
+    assert exc_info.value.actual_version == 2
+
+
+def test_update_markdown_node_rejects_text_node(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+    node = add_text_node(db_session, note.id, user.uid, "text")
+
+    with pytest.raises(InvalidNodeTypeError):
+        update_markdown_node(db_session, node.id, "new", "paragraph", 1)
+
+
+def test_markdown_and_text_nodes_coexist(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    add_text_node(db_session, note.id, user.uid, "plain text")
+    add_markdown_node(db_session, note.id, user.uid, "# Heading", "heading")
+    add_markdown_node(db_session, note.id, user.uid, "para", "paragraph")
+
+    nodes = get_ordered_nodes(db_session, note.id)
+    assert len(nodes) == 3
+    assert nodes[0].node_type == NodeType.TEXT
+    assert nodes[0].block_type is None
+    assert nodes[1].node_type == NodeType.MARKDOWN
+    assert nodes[1].block_type == "heading"
+    assert nodes[2].block_type == "paragraph"
+
+
+def test_delete_markdown_node(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    node = add_markdown_node(db_session, note.id, user.uid, "# Title", "heading")
+    delete_node(db_session, node.id)
+
+    nodes = get_ordered_nodes(db_session, note.id)
+    assert len(nodes) == 0

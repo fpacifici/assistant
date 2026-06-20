@@ -34,6 +34,18 @@ class NodeType(str, Enum):
 
     TEXT = "text"
     ATTACHMENT = "attachment"
+    MARKDOWN = "markdown"
+
+
+class MarkdownBlockType(str, Enum):
+    """Markdown block type enumeration."""
+
+    PARAGRAPH = "paragraph"
+    HEADING = "heading"
+    BLOCKQUOTE = "blockquote"
+    LIST_ITEM = "list_item"
+    IMAGE = "image"
+    CODE_BLOCK = "code_block"
 
 
 class User(Base):
@@ -165,10 +177,13 @@ class Node(Base):
     __table_args__ = (
         CheckConstraint(
             "(node_type = 'text' AND payload IS NOT NULL"
-            " AND attachment_id IS NULL)"
+            " AND attachment_id IS NULL AND block_type IS NULL)"
             " OR "
             "(node_type = 'attachment' AND payload IS NULL"
-            " AND attachment_id IS NOT NULL)",
+            " AND attachment_id IS NOT NULL AND block_type IS NULL)"
+            " OR "
+            "(node_type = 'markdown' AND payload IS NOT NULL"
+            " AND attachment_id IS NULL AND block_type IS NOT NULL)",
             name="ck_node_type_fields",
         ),
         Index("ix_nodes_note_id_position", "note_id", "position"),
@@ -193,6 +208,7 @@ class Node(Base):
     )
     node_type: Mapped[str] = mapped_column(String(20), nullable=False)
     payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    block_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     attachment_id: Mapped[uuid_module.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assistant.attachment_metadata.id"),

@@ -155,3 +155,4 @@ the webui.
 
 - [`Notes Service`](notesservice.md)
 - [`API`](api.md)
+- [`Markdown support`](markdown.md)

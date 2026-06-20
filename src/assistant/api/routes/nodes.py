@@ -18,13 +18,16 @@ from assistant.api.schemas.nodes import (
 from assistant.models.schema import Node
 from assistant.notes.exceptions import NodeNotFoundError, NoteNotFoundError
 from assistant.notes.service import (
+    add_markdown_node,
     add_text_node,
     delete_node,
     get_note,
     get_ordered_nodes,
+    insert_markdown_node,
     insert_text_node,
     merge_text_nodes,
     split_text_node,
+    update_markdown_node,
     update_text_node,
 )
 
@@ -83,9 +86,29 @@ def create_node_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> NodeResponse:
-    """Create a text node in a note, optionally positioned between neighbours."""
+    """Create a node in a note, optionally positioned between neighbours."""
     _validate_note_in_notebook(session, notebook_id, note_id)
-    if body.after_node_id is not None or body.before_node_id is not None:
+    has_neighbors = body.after_node_id is not None or body.before_node_id is not None
+    if body.block_type is not None:
+        if has_neighbors:
+            node = insert_markdown_node(
+                session,
+                note_id=note_id,
+                author_id=user_id,
+                payload=body.payload,
+                block_type=body.block_type,
+                after_node_id=body.after_node_id,
+                before_node_id=body.before_node_id,
+            )
+        else:
+            node = add_markdown_node(
+                session,
+                note_id=note_id,
+                author_id=user_id,
+                payload=body.payload,
+                block_type=body.block_type,
+            )
+    elif has_neighbors:
         node = insert_text_node(
             session,
             note_id=note_id,
@@ -118,12 +141,21 @@ def patch_node_endpoint(
     """Update a node's payload or merge another node into it."""
     _get_node_in_note(session, notebook_id, note_id, node_id)
     if isinstance(body, NodeUpdate):
-        node = update_text_node(
-            session,
-            node_id=node_id,
-            payload=body.payload,
-            expected_version=body.expected_version,
-        )
+        if body.block_type is not None:
+            node = update_markdown_node(
+                session,
+                node_id=node_id,
+                payload=body.payload,
+                block_type=body.block_type,
+                expected_version=body.expected_version,
+            )
+        else:
+            node = update_text_node(
+                session,
+                node_id=node_id,
+                payload=body.payload,
+                expected_version=body.expected_version,
+            )
     else:
         _validate_source_in_note(session, note_id, body.source_node_id)
         node = merge_text_nodes(

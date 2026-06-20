@@ -71,12 +71,14 @@ from sqlalchemy import select, update
 
 from assistant.models.schema import (
     AttachmentMetadata,
+    MarkdownBlockType,
     Node,
     NodeType,
     Note,
     Notebook,
 )
 from assistant.notes.exceptions import (
+    InvalidBlockTypeError,
     InvalidNodeTypeError,
     NodeNotFoundError,
     NodeVersionConflictError,
@@ -350,6 +352,141 @@ def insert_text_node(  # noqa: PLR0913
     )
     session.add(node)
     _touch_note(session, note_id)
+    session.flush()
+    return node
+
+
+# ---------------------------------------------------------------------------
+# Markdown node operations
+# ---------------------------------------------------------------------------
+
+
+def _validate_block_type(block_type: str) -> MarkdownBlockType:
+    try:
+        return MarkdownBlockType(block_type)
+    except ValueError:
+        valid = ", ".join(bt.value for bt in MarkdownBlockType)
+        msg = f"Invalid block type '{block_type}'. Must be one of: {valid}"
+        raise InvalidBlockTypeError(msg) from None
+
+
+def _ensure_markdown_node(node: Node) -> None:
+    if node.node_type != NodeType.MARKDOWN:
+        msg = f"Node {node.id} is {node.node_type}, expected markdown"
+        raise InvalidNodeTypeError(msg)
+
+
+def add_markdown_node(
+    session: Session,
+    note_id: uuid.UUID,
+    author_id: uuid.UUID,
+    payload: str,
+    block_type: str,
+) -> Node:
+    """Append a markdown node at the end of a note's content list."""
+    validated_bt = _validate_block_type(block_type)
+    last = _last_position(session, note_id, lock=True)
+    position = generate_position_between(last, None)
+    node = Node(
+        note_id=note_id,
+        position=position,
+        author_id=author_id,
+        node_type=NodeType.MARKDOWN,
+        payload=payload,
+        block_type=validated_bt.value,
+    )
+    session.add(node)
+    _touch_note(session, note_id)
+    session.flush()
+    return node
+
+
+def insert_markdown_node(  # noqa: PLR0913
+    session: Session,
+    note_id: uuid.UUID,
+    author_id: uuid.UUID,
+    payload: str,
+    block_type: str,
+    after_node_id: uuid.UUID | None = None,
+    before_node_id: uuid.UUID | None = None,
+) -> Node:
+    """Insert a markdown node between two existing nodes.
+
+    At least one of *after_node_id* or *before_node_id* must be provided.
+    """
+    validated_bt = _validate_block_type(block_type)
+    before_pos: str | None = None
+    after_pos: str | None = None
+
+    if after_node_id is not None:
+        after_node = session.execute(
+            select(Node).where(Node.id == after_node_id).with_for_update(),
+        ).scalar_one_or_none()
+        if after_node is None:
+            raise NodeNotFoundError(str(after_node_id))
+        after_pos = after_node.position
+
+    if before_node_id is not None:
+        before_node = session.execute(
+            select(Node).where(Node.id == before_node_id).with_for_update(),
+        ).scalar_one_or_none()
+        if before_node is None:
+            raise NodeNotFoundError(str(before_node_id))
+        before_pos = before_node.position
+
+    position = generate_position_between(after_pos, before_pos)
+    node = Node(
+        note_id=note_id,
+        position=position,
+        author_id=author_id,
+        node_type=NodeType.MARKDOWN,
+        payload=payload,
+        block_type=validated_bt.value,
+    )
+    session.add(node)
+    _touch_note(session, note_id)
+    session.flush()
+    return node
+
+
+def update_markdown_node(
+    session: Session,
+    node_id: uuid.UUID,
+    payload: str,
+    block_type: str,
+    expected_version: int,
+) -> Node:
+    """Update a markdown node's payload and block type.
+
+    Uses the same optimistic locking as ``update_text_node``.
+    """
+    validated_bt = _validate_block_type(block_type)
+    node = session.get(Node, node_id)
+    if node is None:
+        raise NodeNotFoundError(str(node_id))
+    _ensure_markdown_node(node)
+    stmt = (
+        update(Node)
+        .where(Node.id == node_id, Node.version == expected_version)
+        .values(
+            payload=payload,
+            block_type=validated_bt.value,
+            version=Node.version + 1,
+            update_timestamp=datetime.now(UTC),
+        )
+    )
+    rowcount: int = session.execute(stmt).rowcount  # type: ignore[attr-defined]
+    if rowcount == 0:
+        session.expire(node)
+        raise NodeVersionConflictError(
+            node_id,
+            expected_version,
+            node.version,
+        )
+    session.expire_all()
+    node = session.get(Node, node_id)
+    assert node is not None
+    _touch_note(session, node.note_id)
     session.flush()
     return node
 

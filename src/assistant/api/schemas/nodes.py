@@ -13,12 +13,14 @@ class NodeCreate(BaseModel):
     payload: str
     after_node_id: uuid.UUID | None = None
     before_node_id: uuid.UUID | None = None
+    block_type: str | None = None
 
 
 class NodeUpdate(BaseModel):
     type: Literal["update"]
     payload: str
     expected_version: int
+    block_type: str | None = None
 
 
 class NodeMerge(BaseModel):
@@ -44,6 +46,7 @@ class NodeResponse(BaseModel):
     author_id: uuid.UUID
     node_type: str
     payload: str | None
+    block_type: str | None = None
     version: int
     update_timestamp: datetime
 
