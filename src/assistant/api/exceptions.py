@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from assistant.notes.exceptions import (
+    InvalidBlockTypeError,
     NodeVersionConflictError,
     NotesServiceError,
     UserNotFoundError,
@@ -27,6 +28,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: UserNotFoundError,
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidBlockTypeError)
+    async def invalid_block_type_handler(
+        request: Request,  # noqa: ARG001
+        exc: InvalidBlockTypeError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
 
     @app.exception_handler(NodeVersionConflictError)
     async def version_conflict_handler(

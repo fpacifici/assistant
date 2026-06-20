@@ -32,6 +32,10 @@ class InvalidNodeTypeError(NotesServiceError):
     """Raised when an operation is applied to the wrong node type."""
 
 
+class InvalidBlockTypeError(NotesServiceError):
+    """Raised when an invalid markdown block type is provided."""
+
+
 class NodeVersionConflictError(NotesServiceError):
     """Raised when optimistic locking detects a version conflict."""
 

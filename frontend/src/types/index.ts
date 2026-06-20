@@ -20,12 +20,15 @@ export interface Note {
   update_timestamp: string;
 }
 
+export type MarkdownBlockType = 'paragraph' | 'heading' | 'blockquote' | 'list_item' | 'image' | 'code_block';
+
 export interface NoteNode {
   id: string;
   note_id: string;
   author_id: string;
   node_type: string;
   payload: string | null;
+  block_type: string | null;
   version: number;
   update_timestamp: string;
 }

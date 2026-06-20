@@ -6,6 +6,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from assistant.notes.service import (
+    add_markdown_node,
     add_text_node,
     create_note,
     create_notebook,
@@ -433,3 +434,105 @@ def test_delete_node_wrong_notebook(
         f"/notebook/{other_nb.id}/note/{note.id}/node/{node.id}",
     )
     assert response.status_code == 404
+
+
+# --- Markdown nodes ---
+
+
+def test_create_markdown_node(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    response = client.post(
+        f"/notebook/{nb.id}/note/{note.id}/node",
+        json={"payload": "# Title", "block_type": "heading"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["node_type"] == "markdown"
+    assert data["block_type"] == "heading"
+    assert data["payload"] == "# Title"
+
+
+def test_create_markdown_node_invalid_block_type(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    response = client.post(
+        f"/notebook/{nb.id}/note/{note.id}/node",
+        json={"payload": "text", "block_type": "invalid"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_update_markdown_node(
+    client: TestClient,
+    auth_headers: dict[str, str],  # noqa: ARG001
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    node = add_markdown_node(db_session, note.id, test_user.uid, "old", "paragraph")
+
+    response = client.patch(
+        f"/notebook/{nb.id}/note/{note.id}/node/{node.id}",
+        json={
+            "type": "update",
+            "payload": "# new heading",
+            "block_type": "heading",
+            "expected_version": 1,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["payload"] == "# new heading"
+    assert data["block_type"] == "heading"
+    assert data["version"] == 2
+
+
+def test_list_nodes_includes_block_type(
+    client: TestClient,
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    add_text_node(db_session, note.id, test_user.uid, "plain text")
+    add_markdown_node(db_session, note.id, test_user.uid, "# Title", "heading")
+
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["block_type"] is None
+    assert data[1]["block_type"] == "heading"
+
+
+def test_create_markdown_node_with_position(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    db_session: Session,
+) -> None:
+    nb, note = _setup(db_session, test_user)
+    n1 = add_markdown_node(db_session, note.id, test_user.uid, "# H1", "heading")
+    add_markdown_node(db_session, note.id, test_user.uid, "para", "paragraph")
+
+    response = client.post(
+        f"/notebook/{nb.id}/note/{note.id}/node",
+        json={
+            "payload": "> quote",
+            "block_type": "blockquote",
+            "after_node_id": str(n1.id),
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["block_type"] == "blockquote"

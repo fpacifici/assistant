@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-check dev
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-check dev dev-stop
 
 # Default target
 help:
@@ -23,6 +23,7 @@ help:
 	@echo "  make frontend-lint       - Lint frontend code"
 	@echo "  make frontend-check      - Run all frontend checks"
 	@echo "  make dev                 - Start both backend and frontend dev servers"
+	@echo "  make dev-stop            - Stop backend and frontend dev servers"
 	@echo "  make clean               - Remove generated files and cache"
 
 # Install uv package manager
@@ -151,6 +152,13 @@ frontend-check: frontend-lint
 dev:
 	@echo "Starting backend and frontend..."
 	@.venv/bin/python -m assistant.cli.api_server & cd frontend && npm run dev
+
+# Stop backend and frontend dev servers
+dev-stop:
+	@echo "Stopping dev servers..."
+	@lsof -ti:8000 | xargs kill 2>/dev/null || true
+	@lsof -ti:5173 | xargs kill 2>/dev/null || true
+	@echo "Dev servers stopped"
 
 # Quick development setup (run once)
 dev-setup: setup install pre-commit-install

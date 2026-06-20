@@ -19,6 +19,7 @@ erDiagram
     User ||--o{ Note : "owns"
     Notebook ||--o{ Note : "contains"
     Note ||--o{ TextNode : "composed"
+    Note ||--o{ MarkdownNode : "composed"
     Note ||--o{ AttachmentNode : "composed"
     AttachmentNode ||--|| AttachmentMetadata : "composed"
 
@@ -50,6 +51,15 @@ erDiagram
         position: VARCHAR
         author: UUID FK
         payload: STRING
+    }
+
+    MarkdownNode {
+        id: UUID PK
+        note_id: UUID FK
+        position: VARCHAR
+        author: UUID FK
+        payload: STRING
+        block_type: STRING
     }
 
     AttachmentNode {

@@ -1,15 +1,50 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
-import { fetchNodes, updateNode } from '../api/nodes';
-import type { NoteNode } from '../types';
+import { fetchNodes } from '../api/nodes';
+import { BlockList } from '../markdown/blockList';
+import type { BlockNode } from '../markdown/blockList';
+import { executeSave } from '../markdown/reconcile';
+import { useUser } from '../contexts/UserContext';
+
+function lineFromCharOffset(text: string, charOffset: number): number {
+  let line = 0;
+  for (let i = 0; i < charOffset && i < text.length; i++) {
+    if (text[i] === '\n') line++;
+  }
+  return line;
+}
+
+function charOffsetOfBlock(bl: BlockList, target: BlockNode): number {
+  let offset = 0;
+  let current = bl.head;
+  while (current !== null && current !== target) {
+    offset += current.content.length + 2; // +2 for \n\n separator
+    current = current.next;
+  }
+  return offset;
+}
+
+function charLengthAfterBlock(block: BlockNode): number {
+  let length = 0;
+  let current = block.next;
+  while (current !== null) {
+    length += 2 + current.content.length; // +2 for \n\n separator
+    current = current.next;
+  }
+  return length;
+}
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
   const queryClient = useQueryClient();
+  const { userId } = useUser();
   const [text, setText] = useState('');
-  const [currentNode, setCurrentNode] = useState<NoteNode | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const blockListRef = useRef<BlockList>(new BlockList());
+  const currentBlockRef = useRef<BlockNode | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ['nodes', notebookId, noteId],
@@ -18,36 +53,94 @@ export default function NoteEditor() {
   });
 
   useEffect(() => {
-    if (nodes && nodes.length > 0) {
-      const node = nodes[0];
-      setCurrentNode(node);
-      setText(node.payload ?? '');
-      setStatus(null);
-    }
+    if (!nodes || nodes.length === 0) return;
+
+    const bl = blockListRef.current;
+    bl.buildFromServerNodes(nodes);
+    setText(bl.toText());
+    currentBlockRef.current = bl.head;
+    setStatus(null);
   }, [nodes]);
 
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      updateNode(
-        notebookId!,
-        noteId!,
-        currentNode!.id,
-        text,
-        currentNode!.version,
-      ),
-    onSuccess: (updated) => {
-      setCurrentNode(updated);
+  const handleTextChange = useCallback((newText: string) => {
+    const bl = blockListRef.current;
+    const cursorPos = textareaRef.current?.selectionStart ?? 0;
+    const cursorLine = lineFromCharOffset(newText, cursorPos);
+
+    const currentBlock = currentBlockRef.current ?? bl.head;
+    if (!currentBlock) {
+      setText(newText);
+      return;
+    }
+
+    const blockStart = charOffsetOfBlock(bl, currentBlock);
+    const afterLength = charLengthAfterBlock(currentBlock);
+    const blockEnd = newText.length - afterLength;
+    const blockContent = newText.slice(blockStart, blockEnd);
+
+    const doubleNewlineIdx = blockContent.indexOf('\n\n');
+    if (doubleNewlineIdx !== -1) {
+      const topContent = blockContent.slice(0, doubleNewlineIdx);
+      const bottomContent = blockContent.slice(doubleNewlineIdx + 2);
+
+      bl.updateBlock(currentBlock, topContent);
+      const newBlock = bl.insertAfter(currentBlock, 'paragraph', bottomContent);
+      bl.updateBlock(newBlock, bottomContent);
+      currentBlockRef.current = newBlock;
+
+      const rebuilt = bl.toText();
+      setText(rebuilt);
+      setStatus(null);
+      return;
+    }
+
+    // Check for merge: if extracted content is longer than the current block
+    // plus the next block, the separator between them was removed
+    if (currentBlock.next && blockEnd > blockStart + currentBlock.content.length + 2 + currentBlock.next.content.length) {
+      bl.updateBlock(currentBlock, blockContent);
+      if (currentBlock.next) {
+        bl.remove(currentBlock.next);
+      }
+      const rebuilt = bl.toText();
+      setText(rebuilt);
+      currentBlockRef.current = currentBlock;
+      setStatus(null);
+      return;
+    }
+
+    bl.updateBlock(currentBlock, blockContent);
+
+    currentBlockRef.current = bl.getBlockAtLine(cursorLine);
+    setText(newText);
+    setStatus(null);
+  }, []);
+
+  const handleCursorMove = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const cursorLine = lineFromCharOffset(text, textarea.selectionStart);
+    const bl = blockListRef.current;
+    currentBlockRef.current = bl.getBlockAtLine(cursorLine);
+  }, [text]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    setStatus(null);
+
+    try {
+      await executeSave(notebookId!, noteId!, blockListRef.current, userId);
       setStatus('Saved');
       queryClient.invalidateQueries({ queryKey: ['nodes', notebookId, noteId] });
-    },
-    onError: (err) => {
+    } catch (err) {
       if (err instanceof Error && err.message.includes('409')) {
         setStatus('Conflict: note was modified externally. Please refresh.');
       } else {
-        setStatus(`Error: ${err.message}`);
+        setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
-    },
-  });
+    } finally {
+      setSaving(false);
+    }
+  }, [notebookId, noteId, userId, queryClient]);
 
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
@@ -55,27 +148,28 @@ export default function NoteEditor() {
 
   if (isLoading) return <div>Loading...</div>;
 
-  if (!currentNode) {
+  if (blockListRef.current.head === null && (!nodes || nodes.length === 0)) {
     return <div className="editor-placeholder">No content</div>;
   }
 
-  const isDirty = text !== (currentNode.payload ?? '');
+  const isDirty = blockListRef.current.toArray().some(b => b.dirty)
+    || blockListRef.current.deletedNodeIds.length > 0;
 
   return (
     <div className="note-editor">
       <textarea
+        ref={textareaRef}
         value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setStatus(null);
-        }}
+        onChange={(e) => handleTextChange(e.target.value)}
+        onSelect={handleCursorMove}
+        onKeyUp={handleCursorMove}
       />
       <div className="editor-toolbar">
         <button
-          onClick={() => saveMutation.mutate()}
-          disabled={!isDirty || saveMutation.isPending}
+          onClick={handleSave}
+          disabled={!isDirty || saving}
         >
-          {saveMutation.isPending ? 'Saving...' : 'Save'}
+          {saving ? 'Saving...' : 'Save'}
         </button>
         {status && <span className={`status ${status.startsWith('Error') || status.startsWith('Conflict') ? 'error' : 'success'}`}>{status}</span>}
       </div>
