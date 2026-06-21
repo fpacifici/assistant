@@ -1,3 +1,5 @@
+/** Debug panel that visualizes the internal BlockList state alongside the editor. */
+
 import type { MarkdownBlockType } from '../types';
 
 export interface DebugBlockSnapshot {

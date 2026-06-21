@@ -1,3 +1,8 @@
+/**
+ * Markdown block parser: splits raw text into typed blocks at structural
+ * boundaries (blank lines, headings, fences, etc.) for the block-level editor.
+ */
+
 import type { MarkdownBlockType } from '../types';
 
 export interface ParsedBlock {
@@ -6,6 +11,7 @@ export interface ParsedBlock {
   lineCount: number;
 }
 
+/** Determines the block type by inspecting the first line of content. */
 export function classifyBlockType(content: string): MarkdownBlockType {
   const firstLine = content.split('\n')[0].trimStart();
   if (/^#{1,6}\s/.test(firstLine)) return 'heading';
@@ -24,6 +30,7 @@ function startsNewBlock(line: string): boolean {
   return false;
 }
 
+/** Splits markdown text into an ordered array of blocks. Always returns at least one block. */
 export function parseMarkdownBlocks(text: string): ParsedBlock[] {
   if (text === '') {
     return [{ blockType: 'paragraph', content: '', lineCount: 1 }];

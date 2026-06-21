@@ -1,3 +1,5 @@
+/** Sidebar list of notes within the selected notebook. Create/delete via React Query mutations. */
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';

@@ -1,3 +1,5 @@
+/** Two-panel layout: sidebar (notebooks + notes) and main area (editor). URL params drive visibility. */
+
 import { useParams } from 'react-router';
 import NotebookList from './NotebookList';
 import NoteList from './NoteList';

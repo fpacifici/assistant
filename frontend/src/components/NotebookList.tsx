@@ -1,3 +1,5 @@
+/** Sidebar list of notebooks with create/delete. Navigates to the selected notebook's notes. */
+
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
