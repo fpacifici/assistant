@@ -86,19 +86,49 @@ describe('parseMarkdownBlocks', () => {
   it('parses mixed block types', () => {
     const text = '# Title\n\nSome paragraph\n\n> A quote\n\n- item 1\n- item 2';
     const blocks = parseMarkdownBlocks(text);
-    expect(blocks).toHaveLength(4);
+    expect(blocks).toHaveLength(5);
     expect(blocks[0].blockType).toBe('heading');
     expect(blocks[1].blockType).toBe('paragraph');
     expect(blocks[2].blockType).toBe('blockquote');
     expect(blocks[3].blockType).toBe('list_item');
+    expect(blocks[3].content).toBe('- item 1');
+    expect(blocks[4].blockType).toBe('list_item');
+    expect(blocks[4].content).toBe('- item 2');
   });
 
-  it('treats consecutive non-blank lines as one block', () => {
+  it('treats consecutive non-blank paragraph lines as one block', () => {
     const text = 'line one\nline two\nline three';
     const blocks = parseMarkdownBlocks(text);
     expect(blocks).toHaveLength(1);
     expect(blocks[0].content).toBe('line one\nline two\nline three');
     expect(blocks[0].lineCount).toBe(3);
+  });
+
+  it('splits consecutive list items without blank line', () => {
+    const text = '- first\n- second\n- third';
+    const blocks = parseMarkdownBlocks(text);
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toEqual({ blockType: 'list_item', content: '- first', lineCount: 1 });
+    expect(blocks[1]).toEqual({ blockType: 'list_item', content: '- second', lineCount: 1 });
+    expect(blocks[2]).toEqual({ blockType: 'list_item', content: '- third', lineCount: 1 });
+  });
+
+  it('splits heading from following text without blank line', () => {
+    const text = '# Title\nsome paragraph text';
+    const blocks = parseMarkdownBlocks(text);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].blockType).toBe('heading');
+    expect(blocks[0].content).toBe('# Title');
+    expect(blocks[1].blockType).toBe('paragraph');
+    expect(blocks[1].content).toBe('some paragraph text');
+  });
+
+  it('keeps blockquote continuation lines as one block', () => {
+    const text = '> line one\n> line two';
+    const blocks = parseMarkdownBlocks(text);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].blockType).toBe('blockquote');
+    expect(blocks[0].content).toBe('> line one\n> line two');
   });
 
   it('parses a fenced code block', () => {

@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 import { fetchNodes } from '../api/nodes';
 import { BlockList } from '../markdown/blockList';
 import type { BlockNode } from '../markdown/blockList';
+import { parseMarkdownBlocks } from '../markdown/parser';
 import { executeSave } from '../markdown/reconcile';
 import { useUser } from '../contexts/UserContext';
 
@@ -90,6 +91,19 @@ export default function NoteEditor() {
 
       const rebuilt = bl.toText();
       setText(rebuilt);
+      setStatus(null);
+      return;
+    }
+
+    const parsed = parseMarkdownBlocks(blockContent);
+    if (parsed.length > 1) {
+      bl.updateBlock(currentBlock, parsed[0].content);
+      let after = currentBlock;
+      for (let k = 1; k < parsed.length; k++) {
+        after = bl.insertAfter(after, parsed[k].blockType, parsed[k].content);
+      }
+      currentBlockRef.current = bl.getBlockAtLine(cursorLine);
+      setText(bl.toText());
       setStatus(null);
       return;
     }
