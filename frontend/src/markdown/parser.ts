@@ -16,6 +16,14 @@ export function classifyBlockType(content: string): MarkdownBlockType {
   return 'paragraph';
 }
 
+function startsNewBlock(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (/^#{1,6}\s/.test(trimmed)) return true;
+  if (/^[-*+]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed)) return true;
+  if (trimmed.startsWith('![')) return true;
+  return false;
+}
+
 export function parseMarkdownBlocks(text: string): ParsedBlock[] {
   if (text === '') {
     return [{ blockType: 'paragraph', content: '', lineCount: 1 }];
@@ -43,8 +51,13 @@ export function parseMarkdownBlocks(text: string): ParsedBlock[] {
     }
 
     const startLine = i;
-    while (i < lines.length && lines[i] !== '' && !lines[i].startsWith('```')) {
-      i++;
+    const firstLineType = classifyBlockType(lines[i]);
+    i++;
+    if (firstLineType !== 'heading' && firstLineType !== 'image') {
+      while (i < lines.length && lines[i] !== '' && !lines[i].startsWith('```')) {
+        if (startsNewBlock(lines[i])) break;
+        i++;
+      }
     }
 
     if (i > startLine) {

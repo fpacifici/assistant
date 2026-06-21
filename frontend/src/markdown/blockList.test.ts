@@ -86,6 +86,22 @@ describe('BlockList', () => {
       expect(blocks[1].dirty).toBe(true);
     });
 
+    it('splits text nodes containing consecutive list items', () => {
+      const bl = new BlockList();
+      bl.buildFromServerNodes([
+        makeNode({ id: 'n1', node_type: 'text', payload: '- first\n- second', block_type: null }),
+      ]);
+      const blocks = bl.toArray();
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].content).toBe('- first');
+      expect(blocks[0].blockType).toBe('list_item');
+      expect(blocks[0].serverState).toEqual({ nodeId: 'n1', version: 1, nodeType: 'text' });
+      expect(blocks[1].content).toBe('- second');
+      expect(blocks[1].blockType).toBe('list_item');
+      expect(blocks[1].serverState).toBeNull();
+      expect(blocks[1].dirty).toBe(true);
+    });
+
     it('handles null payload as empty string', () => {
       const bl = new BlockList();
       bl.buildFromServerNodes([makeNode({ payload: null })]);
