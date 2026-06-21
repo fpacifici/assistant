@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-check dev dev-stop
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check dev dev-stop
 
 # Default target
 help:
@@ -21,6 +21,7 @@ help:
 	@echo "  make frontend-dev        - Start frontend dev server"
 	@echo "  make frontend-build      - Build frontend for production"
 	@echo "  make frontend-lint       - Lint frontend code"
+	@echo "  make frontend-test       - Run frontend tests (vitest)"
 	@echo "  make frontend-check      - Run all frontend checks"
 	@echo "  make dev                 - Start both backend and frontend dev servers"
 	@echo "  make dev-stop            - Stop backend and frontend dev servers"
@@ -144,8 +145,13 @@ frontend-lint:
 	@echo "Linting frontend..."
 	@cd frontend && npm run lint
 
+# Run frontend tests
+frontend-test:
+	@echo "Running frontend tests..."
+	@cd frontend && npm test
+
 # Run all frontend checks
-frontend-check: frontend-lint
+frontend-check: frontend-lint frontend-test
 	@echo "✅ Frontend checks passed"
 
 # Start both backend and frontend dev servers
@@ -161,7 +167,7 @@ dev-stop:
 	@echo "Dev servers stopped"
 
 # Quick development setup (run once)
-dev-setup: setup install pre-commit-install
+dev-setup: setup install pre-commit-install frontend-install
 	@echo ""
 	@echo "✅ Development environment ready!"
 	@echo ""
