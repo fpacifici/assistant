@@ -1,3 +1,9 @@
+/**
+ * Block-level markdown editor. Loads server nodes into a BlockList, maps
+ * keystrokes to block operations (update/split/merge), and reconciles
+ * dirty blocks back to the server on save.
+ */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';

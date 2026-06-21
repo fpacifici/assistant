@@ -1,3 +1,9 @@
+/**
+ * Sync engine: reconciles the in-memory BlockList with the server by walking
+ * dirty/deleted blocks and issuing DELETE, CREATE, and PATCH calls in order.
+ * Uses optimistic concurrency control (expected_version) on updates.
+ */
+
 import type { BlockList, BlockNode } from './blockList';
 import { createNode, deleteNode, updateNode } from '../api/nodes';
 

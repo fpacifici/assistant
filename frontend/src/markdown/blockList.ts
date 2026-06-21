@@ -1,3 +1,9 @@
+/**
+ * Doubly-linked list of markdown blocks that serves as the in-memory document
+ * model for the editor. Each node tracks its server-side state so the
+ * reconciler can diff local edits into API calls on save.
+ */
+
 import type { MarkdownBlockType, NoteNode } from '../types';
 import { classifyBlockType, parseMarkdownBlocks } from './parser';
 
