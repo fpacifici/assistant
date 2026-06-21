@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import { fetchNodes } from '../api/nodes';
@@ -7,6 +7,8 @@ import type { BlockNode } from '../markdown/blockList';
 import { parseMarkdownBlocks } from '../markdown/parser';
 import { executeSave } from '../markdown/reconcile';
 import { useUser } from '../contexts/UserContext';
+import DebugBlockView from './DebugBlockView';
+import type { DebugBlockSnapshot } from './DebugBlockView';
 
 function lineFromCharOffset(text: string, charOffset: number): number {
   let line = 0;
@@ -43,6 +45,8 @@ export default function NoteEditor() {
   const [text, setText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugVersion, setDebugVersion] = useState(0);
   const blockListRef = useRef<BlockList>(new BlockList());
   const currentBlockRef = useRef<BlockNode | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -62,6 +66,10 @@ export default function NoteEditor() {
     currentBlockRef.current = bl.head;
     setStatus(null);
   }, [nodes]);
+
+  const bumpDebugVersion = useCallback(() => {
+    setDebugVersion(v => v + 1);
+  }, []);
 
   const handleTextChange = useCallback((newText: string) => {
     const bl = blockListRef.current;
@@ -92,6 +100,7 @@ export default function NoteEditor() {
       const rebuilt = bl.toText();
       setText(rebuilt);
       setStatus(null);
+      bumpDebugVersion();
       return;
     }
 
@@ -105,6 +114,7 @@ export default function NoteEditor() {
       currentBlockRef.current = bl.getBlockAtLine(cursorLine);
       setText(bl.toText());
       setStatus(null);
+      bumpDebugVersion();
       return;
     }
 
@@ -119,6 +129,7 @@ export default function NoteEditor() {
       setText(rebuilt);
       currentBlockRef.current = currentBlock;
       setStatus(null);
+      bumpDebugVersion();
       return;
     }
 
@@ -127,7 +138,8 @@ export default function NoteEditor() {
     currentBlockRef.current = bl.getBlockAtLine(cursorLine);
     setText(newText);
     setStatus(null);
-  }, []);
+    bumpDebugVersion();
+  }, [bumpDebugVersion]);
 
   const handleCursorMove = useCallback(() => {
     const textarea = textareaRef.current;
@@ -135,7 +147,8 @@ export default function NoteEditor() {
     const cursorLine = lineFromCharOffset(text, textarea.selectionStart);
     const bl = blockListRef.current;
     currentBlockRef.current = bl.getBlockAtLine(cursorLine);
-  }, [text]);
+    bumpDebugVersion();
+  }, [text, bumpDebugVersion]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -156,6 +169,31 @@ export default function NoteEditor() {
     }
   }, [notebookId, noteId, userId, queryClient]);
 
+  const debugBlocks = useMemo((): DebugBlockSnapshot[] => {
+    if (!debugOpen) return [];
+    const blocks: DebugBlockSnapshot[] = [];
+    let current = blockListRef.current.head;
+    let index = 0;
+    while (current !== null) {
+      blocks.push({
+        index,
+        blockType: current.blockType,
+        content: current.content,
+        lineStart: current.lineStart,
+        lineCount: current.lineCount,
+        dirty: current.dirty,
+        hasServerState: current.serverState !== null,
+        nodeId: current.serverState?.nodeId ?? null,
+        version: current.serverState?.version ?? null,
+        isCurrent: current === currentBlockRef.current,
+      });
+      current = current.next;
+      index++;
+    }
+    return blocks;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debugOpen, debugVersion]);
+
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
   }
@@ -171,19 +209,28 @@ export default function NoteEditor() {
 
   return (
     <div className="note-editor">
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => handleTextChange(e.target.value)}
-        onSelect={handleCursorMove}
-        onKeyUp={handleCursorMove}
-      />
+      <div className={`editor-content${debugOpen ? ' with-debug' : ''}`}>
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => handleTextChange(e.target.value)}
+          onSelect={handleCursorMove}
+          onKeyUp={handleCursorMove}
+        />
+        {debugOpen && <DebugBlockView blocks={debugBlocks} />}
+      </div>
       <div className="editor-toolbar">
         <button
           onClick={handleSave}
           disabled={!isDirty || saving}
         >
           {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          className="debug-toggle"
+          onClick={() => setDebugOpen(prev => !prev)}
+        >
+          {debugOpen ? 'Hide Debug' : 'Debug'}
         </button>
         {status && <span className={`status ${status.startsWith('Error') || status.startsWith('Conflict') ? 'error' : 'success'}`}>{status}</span>}
       </div>
