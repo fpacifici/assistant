@@ -10,6 +10,7 @@ import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
 import { useUser } from '../contexts/UserContext';
 import MarkdownToolbar from './MarkdownToolbar';
+import DebugBlockView from './DebugBlockView';
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
@@ -18,6 +19,8 @@ export default function NoteEditor() {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugTick, setDebugTick] = useState(0);
 
   const registry = useRef(new ServerRegistry());
   const snapshotRef = useRef<Map<string, string>>(new Map());
@@ -53,6 +56,7 @@ export default function NoteEditor() {
     const unsubscribe = editor.onChange(() => {
       setIsDirty(true);
       setStatus(null);
+      setDebugTick((t) => t + 1);
     });
     return unsubscribe;
   }, [editor]);
@@ -95,16 +99,30 @@ export default function NoteEditor() {
   return (
     <div className="note-editor">
       <MarkdownToolbar editor={editor} />
-      <div className="editor-content">
+      <div className={`editor-content${debugOpen ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}
           theme="light"
           portalElements={{ default: null }}
         />
+        {debugOpen && (
+          <DebugBlockView
+            key={debugTick}
+            blocks={editor.document}
+            editor={editor}
+            registry={registry.current}
+          />
+        )}
       </div>
       <div className="editor-toolbar">
         <button onClick={handleSave} disabled={!isDirty || saving}>
           {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          className="debug-toggle"
+          onClick={() => setDebugOpen((prev) => !prev)}
+        >
+          {debugOpen ? 'Hide Debug' : 'Debug'}
         </button>
         {status && (
           <span
