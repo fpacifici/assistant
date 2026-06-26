@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-The frontend is a React single-page application that provides a notebook/note editing interface backed by the REST API. It is built with Vite, TypeScript, React Router, and TanStack React Query.
+The frontend is a React single-page application that provides a notebook/note editing interface backed by the REST API. It is built with Vite, TypeScript, React Router, TanStack React Query, and **BlockNote** (WYSIWYG block editor).
 
 ## High-Level Overview
 
@@ -12,7 +12,8 @@ graph TB
         Router["React Router"]
         RQ["React Query Cache"]
         API["API Client (apiFetch)"]
-        MD["Markdown Engine<br/>(parser + BlockList + reconcile)"]
+        BN["BlockNote Editor"]
+        MD["Markdown Engine<br/>(mapper + ServerRegistry + reconcile)"]
     end
 
     subgraph Backend["Backend API (:8000)"]
@@ -26,8 +27,10 @@ graph TB
     API -- "HTTP (JSON)" --> REST
     REST --> DB
 
+    BN -- "editor.document" --> MD
     MD -- "executeSave()" --> API
     RQ -- "nodes response" --> MD
+    MD -- "replaceBlocks()" --> BN
 ```
 
 The frontend runs as a Node/Vite dev server on port 5173 and communicates with the Python backend API on port 8000 over HTTP/JSON. All server state is managed through React Query; there is no client-side persistence.
@@ -62,12 +65,12 @@ graph TD
     Layout --> NotebookList
     Layout --> NoteList
     Layout --> NoteEditor
-    NoteEditor --> DebugBlockView
 
     NotebookList -- "React Query" --> API_Notebooks["api/notebooks"]
     NoteList -- "React Query" --> API_Notes["api/notes"]
     NoteEditor -- "React Query" --> API_Nodes["api/nodes"]
-    NoteEditor --> BlockList["BlockList (ref)"]
+    NoteEditor --> BlockNoteView["BlockNoteView (WYSIWYG)"]
+    NoteEditor --> ServerRegistry["ServerRegistry (ref)"]
     NoteEditor -- "save" --> Reconcile["reconcile.executeSave()"]
     Reconcile --> API_Nodes
 ```
@@ -88,53 +91,48 @@ Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD 
 
 ### NoteEditor
 
-The main editing surface (`components/NoteEditor.tsx`). This is the most complex component, connecting the textarea UI to the markdown block engine:
+The main editing surface (`components/NoteEditor.tsx`). Uses BlockNote (`useCreateBlockNote`) to create a WYSIWYG block editor that replaces the old textarea. Key responsibilities:
 
-1. **Load**: Fetches `NoteNode[]` from the server, builds a `BlockList`, serializes to text for the textarea.
-2. **Edit**: On each keystroke, identifies the current block by cursor position and applies the appropriate operation (update, split on double-newline, or merge when a separator is deleted).
-3. **Save**: Calls `executeSave()` to reconcile dirty blocks with the server. Handles 409 conflicts.
+1. **Load**: Fetches `NoteNode[]` from the server via React Query. Calls `buildBlocksFromNodes()` to convert server nodes into BlockNote blocks and populate `ServerRegistry`. Calls `editor.replaceBlocks()` to set the document, then snapshots the initial serialized state.
+2. **Edit**: The `BlockNoteView` component provides a rich WYSIWYG editing experience with a built-in formatting toolbar (bold, italic, headings, lists, code, tables, text colors, etc.). Changes are tracked via `editor.onChange()` to set the dirty flag.
+3. **Save**: Calls `executeSave()` to reconcile the current document against the server. Updates the snapshot on success. Handles 409 conflicts.
 
-Holds a `BlockList` instance in a ref that persists across renders.
-
-### DebugBlockView
-
-Optional side panel toggled from the editor toolbar (`components/DebugBlockView.tsx`). Renders a visual representation of the internal `BlockList` state showing block types, dirty/synced status, line positions, and the block under the cursor.
+Holds a `ServerRegistry` and a block snapshot in refs that persist across renders.
 
 ## Markdown Engine
 
-The `src/markdown/` module is the core data layer of the editor. Three files work together to parse text into blocks, maintain them in a linked list, and sync changes to the server.
+The `src/markdown/` module is the core data layer of the editor. Three files work together to bridge BlockNote's document model with the server's node-per-block API.
 
-### Parser (`markdown/parser.ts`)
+### ServerRegistry (`markdown/serverRegistry.ts`)
 
-Converts raw markdown text into an array of `ParsedBlock` objects. Each block has a `blockType`, `content`, and `lineCount`.
-
-- `classifyBlockType(content)` -- inspects the first line to determine the block type (heading, blockquote, list_item, image, code_block, or paragraph).
-- `parseMarkdownBlocks(text)` -- splits text at block boundaries. Code blocks are delimited by triple-backtick fences. Headings and images are always single-line blocks. Other types consume consecutive non-blank lines until a type change or blank line.
-
-### BlockList (`markdown/blockList.ts`)
-
-A doubly-linked list of `BlockNode` objects that represents the in-memory document structure. Each node tracks:
-- Content and block type
-- Line position metadata (`lineStart`, `lineCount`)
-- Server state (`nodeId`, `version`, `nodeType`) -- `null` for unsaved blocks
-- A `dirty` flag set on any local modification
+A side table that maps **BlockNote block IDs → server node state** (`nodeId`, `version`, `nodeType`). This is the block identity invariant: every BlockNote block that has a corresponding server node is registered here.
 
 Key operations:
-- `buildFromServerNodes(nodes)` -- constructs the list from API response. Handles both `markdown` nodes (1:1 mapping) and legacy `text` nodes (parsed into multiple blocks for migration).
-- `insertAfter()` / `remove()` / `updateBlock()` -- structural mutations that mark blocks dirty and recompute line starts.
-- `splitBlock()` / `mergeWithNext()` -- used by the editor when the user creates or removes block separators.
-- `toText()` -- serializes the list back to a string (blocks joined by `\n\n`).
+- `set(blockId, state)` — registers a block's server identity on load or after create.
+- `get(blockId)` — looks up server state for a given block.
+- `markDeleted(blockId)` — moves the block's server node ID to the deleted queue.
+- `consumeDeletedIds()` — drains the deleted queue (used by the reconciler before DELETE calls).
+- `updateVersion(blockId, version)` — updates the version after a successful PATCH.
+- `clear()` — resets the registry on note change.
 
-The list also maintains a `deletedNodeIds` array to track server nodes that need deletion on the next save.
+### Mapper (`markdown/mapper.ts`)
+
+Converts `NoteNode[]` from the API into BlockNote blocks and populates the `ServerRegistry`.
+
+- `buildBlocksFromNodes(nodes, editor, registry)` — for each server node, calls `editor.tryParseMarkdownToBlocks(node.payload)` to parse markdown into block(s). The first parsed block is the primary block and gets registered against the server node ID. If a node payload parses into multiple blocks, extra blocks are appended but are flagged for creation on the next save.
+- `buildSnapshot(blocks, editor)` — serializes the current block array into a `Map<blockId, string>` used by the reconciler to detect content changes.
 
 ### Reconcile (`markdown/reconcile.ts`)
 
-The sync engine that persists local changes to the server. `executeSave()` runs four sequential phases:
+The sync engine that persists changes to the server. `executeSave()` runs these phases:
 
-1. **Delete removed blocks** -- deletes server nodes for blocks that were removed from the list.
-2. **Migrate TEXT nodes** -- deletes legacy TEXT-type server nodes so they can be re-created as MARKDOWN nodes.
-3. **Create new blocks** -- creates server nodes for blocks with no `serverState`, using positional hints (`afterNodeId`, `beforeNodeId`) to maintain ordering.
-4. **Update dirty blocks** -- patches blocks that have server state but were modified locally. Uses optimistic concurrency control via `expected_version`.
+1. **Detect deleted blocks** — blocks present in the previous snapshot but absent from `editor.document` are marked deleted in the registry.
+2. **Delete server nodes** — drains `registry.consumeDeletedIds()` and issues `DELETE` calls.
+3. **Create / migrate / update blocks** — iterates `editor.document` in order:
+   - New blocks (no registry entry): `CREATE` with `afterNodeId`/`beforeNodeId` positional hints.
+   - Legacy `text` nodes: delete old node, re-create as `markdown`.
+   - Changed blocks (registry entry exists, content differs from snapshot): `PATCH` with `expected_version`.
+4. **Return new snapshot** — serialized state of the saved document, used as the baseline for the next save.
 
 ## API Layer
 
@@ -148,7 +146,12 @@ Modules: `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`.
 ## Data Flow Summary
 
 ```
-Load:  Server nodes --> BlockList.buildFromServerNodes() --> BlockList.toText() --> textarea
-Edit:  Keystroke --> handleTextChange() --> BlockList update/split/merge --> textarea
-Save:  executeSave() --> DELETE/CREATE/PATCH API calls --> update serverState, clear dirty
+Load:  NoteNode[] --> buildBlocksFromNodes() --> editor.replaceBlocks() --> BlockNoteView
+                  ↳ ServerRegistry populated   ↳ snapshot captured
+
+Edit:  User types / formats --> BlockNote internal state --> editor.onChange → isDirty=true
+
+Save:  executeSave() --> diff snapshot vs editor.document
+                     --> DELETE/CREATE/PATCH API calls
+                     --> registry updated, new snapshot returned
 ```

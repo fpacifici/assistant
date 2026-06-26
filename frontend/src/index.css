@@ -149,22 +149,55 @@ ul {
   height: 100%;
 }
 
-.note-editor textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 400px;
-  padding: 16px;
-  border: 1px solid #ddd;
+/* Persistent formatting toolbar above the editor */
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid #e0e0e0;
   border-radius: 4px;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 15px;
-  line-height: 1.6;
-  resize: vertical;
+  background: #fafafa;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
-.note-editor textarea:focus {
-  outline: none;
-  border-color: #6366f1;
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.toolbar-btn {
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: #444;
+  font-family: system-ui, -apple-system, sans-serif;
+  min-width: 26px;
+  line-height: 1.4;
+}
+
+.toolbar-btn:hover {
+  background: #ebebeb;
+  border-color: #d0d0d0;
+}
+
+.toolbar-btn.font-bold { font-weight: 700; }
+.toolbar-btn.font-italic { font-style: italic; }
+.toolbar-btn.font-underline { text-decoration: underline; }
+.toolbar-btn.font-strike { text-decoration: line-through; }
+.toolbar-btn.font-code { font-family: 'SF Mono', Monaco, monospace; font-size: 11px; }
+
+.toolbar-divider {
+  width: 1px;
+  height: 18px;
+  background: #d0d0d0;
+  margin: 0 6px;
 }
 
 .editor-toolbar {
@@ -205,151 +238,14 @@ ul {
   color: #c00;
 }
 
-/* Editor content area (textarea + optional debug panel) */
+/* Editor content area (BlockNote WYSIWYG) */
 
 .editor-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-.editor-content.with-debug {
-  flex-direction: row;
-  gap: 16px;
-}
-
-.editor-content.with-debug textarea {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Debug toggle button (secondary style) */
-
-.debug-toggle {
-  padding: 8px 16px;
-  border: 1px solid #ccc !important;
-  background: #fff !important;
-  color: #666 !important;
-}
-
-.debug-toggle:hover:not(:disabled) {
-  background: #f0f0f0 !important;
-  color: #333 !important;
-}
-
-/* Debug panel */
-
-.debug-panel {
-  width: 320px;
-  min-width: 280px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  background: #f8f8fc;
-  overflow-y: auto;
-  font-size: 12px;
-  display: flex;
-  flex-direction: column;
-}
-
-.debug-panel-header {
-  padding: 8px 12px;
-  font-weight: 600;
-  font-size: 13px;
-  border-bottom: 1px solid #ddd;
-  background: #f0f0f5;
-  position: sticky;
-  top: 0;
-}
-
-.debug-block-list {
-  padding: 12px;
-}
-
-.debug-block {
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 10px;
-  background: #fff;
-}
-
-.debug-block-current {
-  border-color: #6366f1;
-  border-width: 2px;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
-}
-
-.debug-block-dirty {
-  border-left: 3px solid #f59e0b;
-}
-
-.debug-block-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.debug-block-type {
-  font-weight: 600;
-  color: #6366f1;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.5px;
-}
-
-.debug-block-line {
-  color: #666;
-  font-size: 11px;
-}
-
-.debug-block-badge {
-  font-size: 10px;
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
-.debug-block-badge.dirty {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.debug-block-badge.synced {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.debug-block-content {
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  font-size: 11px;
-  color: #444;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 60px;
   overflow: hidden;
-}
-
-.debug-block-id {
-  font-size: 10px;
-  color: #999;
-  margin-top: 4px;
-}
-
-.debug-connector {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 4px 0;
-}
-
-.debug-connector-line {
-  width: 1px;
-  height: 8px;
-  background: #999;
-}
-
-.debug-connector-label {
-  font-size: 10px;
-  color: #999;
-  line-height: 1;
 }
