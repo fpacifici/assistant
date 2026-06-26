@@ -11,7 +11,6 @@ export async function executeSave(
   notebookId: string,
   noteId: string,
   blockList: BlockList,
-  userId: string,
 ): Promise<void> {
   // 1. Delete removed blocks
   for (const nodeId of blockList.deletedNodeIds) {
@@ -37,7 +36,6 @@ export async function executeSave(
         blockType: block.blockType,
         afterNodeId: afterNodeId ?? undefined,
         beforeNodeId: beforeNodeId ?? undefined,
-        userId,
       });
       block.serverState = { nodeId: created.id, version: created.version, nodeType: 'markdown' };
       block.dirty = false;

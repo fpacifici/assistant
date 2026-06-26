@@ -4,6 +4,13 @@ import Layout from './Layout';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { Route, Routes } from 'react-router';
 
+vi.mock('../contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: { uid: 'u1', email: 'a@b.com', firstname: 'Test', lastname: 'User' },
+    logout: vi.fn(),
+  }),
+}));
+
 vi.mock('./NotebookList', () => ({
   default: () => <div data-testid="notebook-list">NotebookList</div>,
 }));

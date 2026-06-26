@@ -8,21 +8,18 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { userId?: string } = {},
+  options: RequestInit = {},
 ): Promise<T> {
-  const { userId, ...fetchOptions } = options;
   const headers: Record<string, string> = {};
 
-  if (fetchOptions.body) {
+  if (options.body) {
     headers['Content-Type'] = 'application/json';
-  }
-  if (userId) {
-    headers['X-User-Id'] = userId;
   }
 
   const response = await fetch(`${BASE_URL}${path}`, {
-    ...fetchOptions,
-    headers: { ...headers, ...(fetchOptions.headers as Record<string, string>) },
+    ...options,
+    credentials: 'include',
+    headers: { ...headers, ...(options.headers as Record<string, string>) },
   });
 
   if (!response.ok) {

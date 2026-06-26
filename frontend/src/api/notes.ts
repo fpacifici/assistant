@@ -5,11 +5,10 @@ export function fetchNotes(notebookId: string): Promise<Note[]> {
   return apiFetch<Note[]>(`/notebook/${notebookId}/note`);
 }
 
-export function createNote(userId: string, notebookId: string, title: string): Promise<Note> {
+export function createNote(notebookId: string, title: string): Promise<Note> {
   return apiFetch<Note>(`/notebook/${notebookId}/note`, {
     method: 'POST',
     body: JSON.stringify({ title }),
-    userId,
   });
 }
 

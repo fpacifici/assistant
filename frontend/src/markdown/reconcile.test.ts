@@ -41,14 +41,13 @@ describe('executeSave', () => {
     const bl = new BlockList();
     bl.buildFromText('new content');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockCreateNode).toHaveBeenCalledOnce();
     expect(mockCreateNode).toHaveBeenCalledWith('nb-1', 'note-1', 'new content', {
       blockType: 'paragraph',
       afterNodeId: undefined,
       beforeNodeId: undefined,
-      userId: 'user-1',
     });
   });
 
@@ -59,7 +58,7 @@ describe('executeSave', () => {
     ]);
     bl.updateBlock(bl.head!, 'updated content');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockUpdateNode).toHaveBeenCalledOnce();
     expect(mockUpdateNode).toHaveBeenCalledWith(
@@ -75,7 +74,7 @@ describe('executeSave', () => {
     ]);
     bl.remove(bl.tail!);
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockDeleteNode).toHaveBeenCalledWith('nb-1', 'note-1', 'n2');
     expect(bl.deletedNodeIds).toEqual([]);
@@ -88,7 +87,7 @@ describe('executeSave', () => {
     ]);
     bl.updateBlock(bl.head!, 'updated');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockDeleteNode).toHaveBeenCalledWith('nb-1', 'note-1', 'text-1');
     expect(mockCreateNode).toHaveBeenCalled();
@@ -100,7 +99,7 @@ describe('executeSave', () => {
       makeServerNode({ id: 'n1', payload: 'unchanged' }),
     ]);
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockCreateNode).not.toHaveBeenCalled();
     expect(mockUpdateNode).not.toHaveBeenCalled();
@@ -114,7 +113,7 @@ describe('executeSave', () => {
     const bl = new BlockList();
     bl.buildFromText('first\n\nsecond');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(mockCreateNode).toHaveBeenCalledTimes(2);
     const firstCallOpts = mockCreateNode.mock.calls[0][3];
@@ -130,7 +129,7 @@ describe('executeSave', () => {
     const bl = new BlockList();
     bl.buildFromText('new');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     const block = bl.head!;
     expect(block.serverState).toEqual({ nodeId: 'new-id', version: 5, nodeType: 'markdown' });
@@ -144,7 +143,7 @@ describe('executeSave', () => {
     bl.buildFromServerNodes([makeServerNode({ id: 'n1', version: 3 })]);
     bl.updateBlock(bl.head!, 'changed');
 
-    await executeSave('nb-1', 'note-1', bl, 'user-1');
+    await executeSave('nb-1', 'note-1', bl);
 
     expect(bl.head!.serverState!.version).toBe(10);
     expect(bl.head!.dirty).toBe(false);
