@@ -59,7 +59,7 @@ describe('executeSave — delete removed blocks', () => {
     const snapshot = new Map([['b1', 'old content']]);
     const editor = makeEditor([], serialize); // b1 no longer in document
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockDelete).toHaveBeenCalledWith('nb', 'note', 'n1');
   });
@@ -70,7 +70,7 @@ describe('executeSave — delete removed blocks', () => {
     const snapshot = new Map([['b1', serialize([block])]]);
     const editor = makeEditor([block], serialize);
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockDelete).not.toHaveBeenCalled();
   });
@@ -89,7 +89,7 @@ describe('executeSave — create new blocks', () => {
     const block = makeBlock('b-new', 'paragraph');
     const editor = makeEditor([block], serialize);
 
-    await executeSave('nb', 'note', editor, registry, new Map(), 'user');
+    await executeSave('nb', 'note', editor, registry, new Map());
 
     expect(mockCreate).toHaveBeenCalledWith('nb', 'note', serialize([block]), expect.objectContaining({
       blockType: 'paragraph',
@@ -101,7 +101,7 @@ describe('executeSave — create new blocks', () => {
     const editor = makeEditor([block], serialize);
     mockCreate.mockResolvedValue({ ...makeNode('node-created', 1) });
 
-    await executeSave('nb', 'note', editor, registry, new Map(), 'user');
+    await executeSave('nb', 'note', editor, registry, new Map());
 
     expect(registry.get('b-new')).toMatchObject({ nodeId: 'node-created' });
   });
@@ -113,7 +113,7 @@ describe('executeSave — create new blocks', () => {
     const snapshot = new Map([['b1', serialize([b1])]]);
     const editor = makeEditor([b1, b2], serialize);
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
       afterNodeId: 'n1',
@@ -127,7 +127,7 @@ describe('executeSave — create new blocks', () => {
     const snapshot = new Map([['b2', serialize([b2])]]);
     const editor = makeEditor([b1, b2], serialize);
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
       beforeNodeId: 'n2',
@@ -150,7 +150,7 @@ describe('executeSave — update changed blocks', () => {
     const snapshot = new Map([['b1', 'old content']]);
     const editor = makeEditor([block], () => 'new content');
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockUpdate).toHaveBeenCalledWith('nb', 'note', 'n1', 'new content', 1, 'paragraph');
   });
@@ -161,7 +161,7 @@ describe('executeSave — update changed blocks', () => {
     const editor = makeEditor([block], () => 'same content');
     const snapshot = new Map([['b1', 'same content']]);
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockUpdate).not.toHaveBeenCalled();
   });
@@ -173,7 +173,7 @@ describe('executeSave — update changed blocks', () => {
     const editor = makeEditor([block], () => 'changed');
     const snapshot = new Map([['b1', 'original']]);
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(registry.get('b1')?.version).toBe(7);
   });
@@ -203,7 +203,7 @@ describe('executeSave — block type mapping', () => {
   it.each(cases)('maps %s → %s', async (blockNoteType, serverType) => {
     const block = makeBlock('b1', blockNoteType);
     const editor = makeEditor([block], () => 'text');
-    await executeSave('nb', 'note', editor, registry, new Map(), 'user');
+    await executeSave('nb', 'note', editor, registry, new Map());
     expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
       blockType: serverType,
     }));
@@ -226,7 +226,7 @@ describe('executeSave — legacy TEXT node migration', () => {
     const snapshot = new Map([['b1', 'original']]);
     const editor = makeEditor([block], () => 'text');
 
-    await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockDelete).toHaveBeenCalledWith('nb', 'note', 'n-text');
     expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.anything());
@@ -248,7 +248,7 @@ describe('executeSave — returned snapshot', () => {
     const snapshot = new Map([['b1', 'old']]);
     const editor = makeEditor([block], () => 'new content');
 
-    const newSnapshot = await executeSave('nb', 'note', editor, registry, snapshot, 'user');
+    const newSnapshot = await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(newSnapshot.get('b1')).toBe('new content');
   });

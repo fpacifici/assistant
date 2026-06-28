@@ -23,7 +23,6 @@ export async function executeSave(
   editor: BlockNoteEditor,
   registry: ServerRegistry,
   snapshot: Map<string, string>,
-  userId: string,
 ): Promise<Map<string, string>> {
   const currentBlocks = editor.document;
   const currentIds = new Set(currentBlocks.map((b) => b.id));
@@ -53,7 +52,6 @@ export async function executeSave(
         blockType: serverBlockType,
         afterNodeId: findAfterNodeId(currentBlocks, i, registry),
         beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),
-        userId,
       });
       registry.set(block.id, {
         nodeId: created.id,
@@ -67,7 +65,6 @@ export async function executeSave(
         blockType: serverBlockType,
         afterNodeId: findAfterNodeId(currentBlocks, i, registry),
         beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),
-        userId,
       });
       registry.set(block.id, {
         nodeId: created.id,

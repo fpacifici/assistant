@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -77,6 +78,81 @@ class User(Base):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    credentials: Mapped[list[Credential]] = relationship(
+        "Credential",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class Credential(Base):
+    """User credential — one row per authentication provider per user."""
+
+    __tablename__ = "credentials"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_credential_user_provider"),
+        UniqueConstraint(
+            "provider",
+            "provider_subject",
+            name="uq_credential_provider_subject",
+        ),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    credential_hash: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    provider_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    user: Mapped[User] = relationship("User", back_populates="credentials")
+
+
+class RefreshToken(Base):
+    """Refresh token with family tracking for rotation and replay detection."""
+
+    __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        Index("ix_refresh_tokens_token_hash", "token_hash", unique=True),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    family_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="refresh_tokens")
 
 
 class Notebook(Base):

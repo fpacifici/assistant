@@ -11,10 +11,6 @@ vi.mock('../api/notes', () => ({
   deleteNote: vi.fn(),
 }));
 
-vi.mock('../contexts/UserContext', () => ({
-  useUser: () => ({ userId: 'test-user' }),
-}));
-
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
 
 const mockFetchNotes = vi.mocked(fetchNotes);
@@ -91,7 +87,7 @@ describe('NoteList', () => {
     await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(mockCreateNote).toHaveBeenCalledWith('test-user', 'nb-1', 'My Note');
+      expect(mockCreateNote).toHaveBeenCalledWith('nb-1', 'My Note');
     });
   });
 

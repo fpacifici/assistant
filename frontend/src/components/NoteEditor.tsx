@@ -8,14 +8,12 @@ import { fetchNodes } from '../api/nodes';
 import { ServerRegistry } from '../markdown/serverRegistry';
 import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
-import { useUser } from '../contexts/UserContext';
 import MarkdownToolbar from './MarkdownToolbar';
 import DebugBlockView from './DebugBlockView';
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
   const queryClient = useQueryClient();
-  const { userId } = useUser();
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -73,7 +71,6 @@ export default function NoteEditor() {
         editor,
         registry.current,
         snapshotRef.current,
-        userId,
       );
       snapshotRef.current = newSnapshot;
       setIsDirty(false);
@@ -88,7 +85,7 @@ export default function NoteEditor() {
     } finally {
       setSaving(false);
     }
-  }, [notebookId, noteId, editor, userId, queryClient]);
+  }, [notebookId, noteId, editor, queryClient]);
 
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;

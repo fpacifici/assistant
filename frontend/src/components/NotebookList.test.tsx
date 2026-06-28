@@ -10,10 +10,6 @@ vi.mock('../api/notebooks', () => ({
   deleteNotebook: vi.fn(),
 }));
 
-vi.mock('../contexts/UserContext', () => ({
-  useUser: () => ({ userId: 'test-user' }),
-}));
-
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
 
 const mockFetch = vi.mocked(fetchNotebooks);
@@ -68,7 +64,7 @@ describe('NotebookList', () => {
     await user.click(screen.getByText('Create'));
 
     await waitFor(() => {
-      expect(mockCreate).toHaveBeenCalledWith('test-user', 'New NB');
+      expect(mockCreate).toHaveBeenCalledWith('New NB');
     });
   });
 

@@ -34,17 +34,19 @@ def _setup(
 
 def test_list_nodes_empty(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
     nb, note = _setup(db_session, test_user)
-    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node", headers=auth_headers)
     assert response.status_code == 200
     assert response.json() == []
 
 
 def test_list_nodes_ordered(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -53,7 +55,7 @@ def test_list_nodes_ordered(
     add_text_node(db_session, note.id, test_user.uid, "Second")
     add_text_node(db_session, note.id, test_user.uid, "Third")
 
-    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 3
@@ -62,12 +64,15 @@ def test_list_nodes_ordered(
 
 def test_list_nodes_wrong_notebook(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
     _nb, note = _setup(db_session, test_user)
     other_nb = create_notebook(db_session, "Other", test_user.uid)
-    response = client.get(f"/notebook/{other_nb.id}/note/{note.id}/node")
+    response = client.get(
+        f"/notebook/{other_nb.id}/note/{note.id}/node", headers=auth_headers
+    )
     assert response.status_code == 404
 
 
@@ -119,7 +124,7 @@ def test_create_node_wrong_notebook(
     test_user: User,
     db_session: Session,
 ) -> None:
-    nb, note = _setup(db_session, test_user)
+    _nb, note = _setup(db_session, test_user)
     other_nb = create_notebook(db_session, "Other", test_user.uid)
     response = client.post(
         f"/notebook/{other_nb.id}/note/{note.id}/node",
@@ -139,7 +144,7 @@ def test_create_node_missing_header(
         f"/notebook/{nb.id}/note/{note.id}/node",
         json={"payload": "No auth"},
     )
-    assert response.status_code == 422
+    assert response.status_code == 401
 
 
 # --- Update node ---
@@ -147,6 +152,7 @@ def test_create_node_missing_header(
 
 def test_update_node_payload(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -160,6 +166,7 @@ def test_update_node_payload(
             "payload": "New",
             "expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 200
     data = response.json()
@@ -169,6 +176,7 @@ def test_update_node_payload(
 
 def test_update_node_version_conflict(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -182,16 +190,18 @@ def test_update_node_version_conflict(
             "payload": "New",
             "expected_version": 99,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 409
 
 
 def test_update_node_wrong_notebook(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
-    nb, note = _setup(db_session, test_user)
+    _nb, note = _setup(db_session, test_user)
     other_nb = create_notebook(db_session, "Other", test_user.uid)
     node = add_text_node(db_session, note.id, test_user.uid, "Text")
 
@@ -202,12 +212,14 @@ def test_update_node_wrong_notebook(
             "payload": "Sneaky",
             "expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
 
 def test_update_node_wrong_note(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -222,6 +234,7 @@ def test_update_node_wrong_note(
             "payload": "Sneaky",
             "expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
@@ -231,6 +244,7 @@ def test_update_node_wrong_note(
 
 def test_merge_nodes(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -246,6 +260,7 @@ def test_merge_nodes(
             "expected_version": 1,
             "source_expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 200
     data = response.json()
@@ -255,6 +270,7 @@ def test_merge_nodes(
 
 def test_merge_version_conflict(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -270,12 +286,14 @@ def test_merge_version_conflict(
             "expected_version": 99,
             "source_expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 409
 
 
 def test_merge_source_not_in_note(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -292,12 +310,14 @@ def test_merge_source_not_in_note(
             "expected_version": 1,
             "source_expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
 
 def test_merge_source_not_found(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -312,6 +332,7 @@ def test_merge_source_not_found(
             "expected_version": 1,
             "source_expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
@@ -364,7 +385,7 @@ def test_split_node_wrong_notebook(
     test_user: User,
     db_session: Session,
 ) -> None:
-    nb, note = _setup(db_session, test_user)
+    _nb, note = _setup(db_session, test_user)
     other_nb = create_notebook(db_session, "Other", test_user.uid)
     node = add_text_node(db_session, note.id, test_user.uid, "Text")
 
@@ -397,6 +418,7 @@ def test_split_node_not_found(
 
 def test_delete_node(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -405,33 +427,38 @@ def test_delete_node(
 
     response = client.delete(
         f"/notebook/{nb.id}/note/{note.id}/node/{node.id}",
+        headers=auth_headers,
     )
     assert response.status_code == 204
 
 
 def test_delete_node_idempotent(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
     nb, note = _setup(db_session, test_user)
     response = client.delete(
         f"/notebook/{nb.id}/note/{note.id}/node/{uuid.uuid4()}",
+        headers=auth_headers,
     )
     assert response.status_code == 204
 
 
 def test_delete_node_wrong_notebook(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
-    nb, note = _setup(db_session, test_user)
+    _nb, note = _setup(db_session, test_user)
     other_nb = create_notebook(db_session, "Other", test_user.uid)
     node = add_text_node(db_session, note.id, test_user.uid, "Text")
 
     response = client.delete(
         f"/notebook/{other_nb.id}/note/{note.id}/node/{node.id}",
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
@@ -475,7 +502,7 @@ def test_create_markdown_node_invalid_block_type(
 
 def test_update_markdown_node(
     client: TestClient,
-    auth_headers: dict[str, str],  # noqa: ARG001
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -490,6 +517,7 @@ def test_update_markdown_node(
             "block_type": "heading",
             "expected_version": 1,
         },
+        headers=auth_headers,
     )
     assert response.status_code == 200
     data = response.json()
@@ -500,6 +528,7 @@ def test_update_markdown_node(
 
 def test_list_nodes_includes_block_type(
     client: TestClient,
+    auth_headers: dict[str, str],
     test_user: User,
     db_session: Session,
 ) -> None:
@@ -507,7 +536,7 @@ def test_list_nodes_includes_block_type(
     add_text_node(db_session, note.id, test_user.uid, "plain text")
     add_markdown_node(db_session, note.id, test_user.uid, "# Title", "heading")
 
-    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node")
+    response = client.get(f"/notebook/{nb.id}/note/{note.id}/node", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 2
