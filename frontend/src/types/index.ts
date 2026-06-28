@@ -20,8 +20,6 @@ export interface Note {
   update_timestamp: string;
 }
 
-export type MarkdownBlockType = 'paragraph' | 'heading' | 'blockquote' | 'list_item' | 'image' | 'code_block';
-
 export interface NoteNode {
   id: string;
   note_id: string;

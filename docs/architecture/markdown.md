@@ -1,79 +1,89 @@
 # Markdown Support
 
-We support multiple notes format. At this point we support Markdown
-only. This document describes the architecture of the Markdown
-support.
+Notes are stored and rendered as markdown. The web UI provides a WYSIWYG editing experience via **BlockNote**, which renders and formats markdown inline. The backend stores note content as text (one block per API node); the markdown structure is entirely managed on the client side.
 
-## Overall architecture
+## Overall Architecture
 
-We store notes through a sequence of nodes - [`Notes Service`](../architecture/notesservice.md). We are going to leverage Nodes to identify markdown blocks.
+Notes are stored as sequences of API nodes — see [`Notes Service`](../architecture/notesservice.md). Each node holds the markdown payload of one block. This one-block-per-node design enables future concurrent modifications: independent block edits can be reconciled without full-document conflicts.
 
-This will allow us to permit concurrent modifications. This means we represent
-the Note with a Node per block and that the client must be aware of a nodes
-data structure so it can decide which nodes to update and where to insert a Node.
+The WYSIWYG editor uses **BlockNote** (`@blocknote/core`, `@blocknote/react`, `@blocknote/mantine`) as its document model and rendering layer. BlockNote provides block-level editing, an inline formatting toolbar, and built-in support for colors, tables, code blocks, lists, and headings.
 
-## Matkdown blocks
+## Block Identity
 
-These are the blocks that we model as nodes:
+The critical invariant is a strict 1:1 mapping between **BlockNote blocks** and **server nodes**:
 
-- Headings (all of them and in both the single line and multiline form)
+```
+Server Node ←→ BlockNote Block
+  id              registry entry: { nodeId }
+  version         registry entry: { version }
+  block_type      block.type (BlockNote's native type string)
+  payload         blocksToMarkdownLossy([block]).trim()
+```
 
-- Paragraph. Each paragraph is a Node. Emphasis does not breal the paragraph node.
-  Links are not breaking Node.
+BlockNote assigns each block a stable UUID (`block.id`). The `ServerRegistry` side table maps these UUIDs to server node state. This enables the reconciler to issue targeted `CREATE`, `PATCH`, and `DELETE` calls without scanning the full document.
 
-- Blockquotes. Nested quotes do not break the Node. Same is true for sub blocks
-  in a Blockquote
+## Supported Block Types
 
-- Each element of a list is a Node
+BlockNote's default schema provides these block types (stored as the `block_type` field on server nodes):
 
-- Images
+| BlockNote type       | Rendered as             |
+|----------------------|-------------------------|
+| `paragraph`          | `<p>` text              |
+| `heading`            | `<h1>`–`<h6>`           |
+| `bulletListItem`     | `<ul>` item             |
+| `numberedListItem`   | `<ol>` item             |
+| `checkListItem`      | Checkbox list item      |
+| `codeBlock`          | Fenced code block       |
+| `table`              | HTML table              |
+| `quote`              | Blockquote              |
+| `image`              | Inline image            |
 
-- Code blocks (each block is a Node)
+Inline content (bold, italic, underline, strikethrough, code, links, text color, background color) is handled within blocks by BlockNote.
 
-## Data model
+## Color Support
 
-We have a Markdown Node type in `NodeType` enum. The Markdown node contains
-information on the node type: paragraph, header, etc. The text in the node
-is the markdown content of the block.
+Text and background colors are supported via BlockNote's built-in formatting toolbar. Colors are applied as CSS classes in the WYSIWYG view.
 
-This means that we can concatenate the The payloads of all the nodes adding
-a newline between each nodes and we have a renderable version of the document.
+**Serialization limitation**: When blocks are serialized to markdown for server storage with `blocksToMarkdownLossy()`, color annotations are not preserved. Colors are a UI-only feature in the web client and will be lost after a save/reload cycle. Other clients (e.g., the TUI) reading the raw payload will see uncolored text.
 
-The client has an in memory data structure to represent the document that
-reflects the one in the server and allows us to map a line number in the
-textbox to the node so we can tell where to add a Node or which one to update.
-
-The client data structure is a sequence of blocks. Each block corresponds to a
-node and contains the Markdown content. This sequence is modeled as a doubly
-linked list and also contains information on the number of lines the node
-contains.
+## Data Flow
 
 ```mermaid
 flowchart LR
 
-subgraph note["Clientside Note"]
-    node1["Node 1 - Header; content: # Title; lines: 1"]
-    node2["Node 2 - Paragraph; content: text; lines: 5"]
-    node3["Node 3 - Bullet; content: - bullet; lines: 1"]
-
-    node1 --> node2
-    node2 --> node3
-    node2 --> node1
-    node3 --> node2
+subgraph server["Server"]
+    node1["Node 1 — heading\npayload: '# Title'"]
+    node2["Node 2 — paragraph\npayload: 'Some text'"]
+    node3["Node 3 — bulletListItem\npayload: '- Item'"]
 end
-cursor["UI cursor - line: 3"]
 
-cursor --> node2
+subgraph client["BlockNote Editor (client)"]
+    block1["Block 1 — heading\nid: 'abc...'"]
+    block2["Block 2 — paragraph\nid: 'def...'"]
+    block3["Block 3 — bulletListItem\nid: 'ghi...'"]
+end
+
+subgraph registry["ServerRegistry"]
+    r1["'abc...' → node1.id, v1"]
+    r2["'def...' → node2.id, v1"]
+    r3["'ghi...' → node3.id, v1"]
+end
+
+node1 --"tryParseMarkdownToBlocks()"--> block1
+node2 --"tryParseMarkdownToBlocks()"--> block2
+node3 --"tryParseMarkdownToBlocks()"--> block3
+
+block1 --> r1
+block2 --> r2
+block3 --> r3
 ```
 
-Each client node contains the number of lines the block contains. The UI code
-keeps a reference between the cursor position (the line number) and the Node.
+## Reconciliation
 
-- If a user types enter to create a new block, the block is added in the linked
-  list in the right place.
+On save, the reconciler diffs `editor.document` against a snapshot taken at the last successful save:
 
-- When the cursor moves we scan the list and update the reference to the right
-  node.
+- **Deleted blocks** (in snapshot, not in current document): server node is `DELETE`d.
+- **New blocks** (in current document, not in registry): server node is `CREATE`d with positional hints (`afterNodeId`, `beforeNodeId`) to maintain ordering.
+- **Changed blocks** (in registry, content differs from snapshot): server node is `PATCH`ed with the new payload and `expected_version` for optimistic concurrency control.
 
-When we save the node it is easier to compute the updates we did to the linked
-list and turn them into calls to the api that adds, delete and updates nodes.
+See [`reconcile.ts`](../../frontend/src/markdown/reconcile.ts) and [`serverRegistry.ts`](../../frontend/src/markdown/serverRegistry.ts) for implementation details.
