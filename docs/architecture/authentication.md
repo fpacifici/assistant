@@ -30,7 +30,7 @@ integrations for now.
 
 ### Access Token (JWT)
 
-- **Lifetime:** 15 minutes
+- **Lifetime:** 5 minutes
 - **Format:** Signed JWT
 - **Claims:** `sub` (user UUID), `exp`, `iat`
 - **Validation:** Stateless — signature and expiry check only. No DB

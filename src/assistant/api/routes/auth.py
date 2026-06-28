@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
-
-from fastapi import APIRouter, Cookie, HTTPException, Response
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 
 from assistant.api.dependencies import CurrentUserId, SessionDep
@@ -21,18 +19,20 @@ from assistant.notes.user_service import get_user
 
 router = APIRouter()
 
-_COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
-_ACCESS_MAX_AGE = 15 * 60
+_ACCESS_MAX_AGE = 5 * 60
 _REFRESH_MAX_AGE = 7 * 24 * 60 * 60
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def _set_auth_cookies(
+    request: Request, response: Response, access_token: str, refresh_token: str
+) -> None:
+    secure = request.url.scheme == "https"
     response.set_cookie(
         "access_token",
         access_token,
         httponly=True,
         samesite="lax",
-        secure=_COOKIE_SECURE,
+        secure=secure,
         max_age=_ACCESS_MAX_AGE,
         path="/",
     )
@@ -41,7 +41,7 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         refresh_token,
         httponly=True,
         samesite="lax",
-        secure=_COOKIE_SECURE,
+        secure=secure,
         max_age=_REFRESH_MAX_AGE,
         path="/auth/refresh",
     )
@@ -74,6 +74,7 @@ def register(
 def login(
     body: LoginRequest,
     session: SessionDep,
+    request: Request,
     response: Response,
 ) -> UserResponse:
     try:
@@ -82,13 +83,14 @@ def login(
         raise HTTPException(status_code=401, detail="Invalid credentials") from exc
 
     access, refresh = issue_tokens(session, user.uid)
-    _set_auth_cookies(response, access, refresh)
+    _set_auth_cookies(request, response, access, refresh)
     return UserResponse.model_validate(user)
 
 
 @router.post("/refresh", response_model=UserResponse)
 def refresh(
     session: SessionDep,
+    request: Request,
     response: Response,
     refresh_token: str | None = Cookie(default=None),
 ) -> UserResponse:
@@ -100,7 +102,7 @@ def refresh(
         _clear_auth_cookies(response)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
-    _set_auth_cookies(response, new_access, new_refresh)
+    _set_auth_cookies(request, response, new_access, new_refresh)
     user = get_user(session, user_id)
     return UserResponse.model_validate(user)
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Response
 
-from assistant.api.dependencies import CurrentUserId, SessionDep
+from assistant.api.dependencies import CurrentUserId, SessionDep, require_notebook_owner
 from assistant.api.schemas.notes import NoteCreate, NoteResponse, NoteUpdate
 from assistant.api.schemas.pagination import Pagination
 from assistant.models.schema import Note
@@ -16,22 +16,11 @@ from assistant.notes.service import (
     create_note,
     delete_note,
     get_note,
-    get_notebook,
     list_notes,
     update_note,
 )
 
 router = APIRouter()
-
-
-def _require_notebook_owner(
-    session: SessionDep,
-    notebook_id: uuid.UUID,
-    user_id: uuid.UUID,
-) -> None:
-    notebook = get_notebook(session, notebook_id)
-    if notebook.owner_id != user_id:
-        raise HTTPException(status_code=404, detail="Notebook not found")
 
 
 def _get_note_in_notebook(
@@ -56,7 +45,7 @@ def create_note_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> NoteResponse:
-    _require_notebook_owner(session, notebook_id, user_id)
+    require_notebook_owner(session, notebook_id, user_id)
     note = create_note(
         session,
         notebook_id=notebook_id,
@@ -77,7 +66,7 @@ def list_notes_endpoint(
     user_id: CurrentUserId,
     pagination: Pagination,
 ) -> list[NoteResponse]:
-    _require_notebook_owner(session, notebook_id, user_id)
+    require_notebook_owner(session, notebook_id, user_id)
     notes = list_notes(
         session,
         notebook_id=notebook_id,
@@ -97,7 +86,7 @@ def get_note_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> NoteResponse:
-    _require_notebook_owner(session, notebook_id, user_id)
+    require_notebook_owner(session, notebook_id, user_id)
     note = _get_note_in_notebook(session, notebook_id, note_id)
     return NoteResponse.model_validate(note)
 
@@ -113,7 +102,7 @@ def update_note_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> NoteResponse:
-    _require_notebook_owner(session, notebook_id, user_id)
+    require_notebook_owner(session, notebook_id, user_id)
     _get_note_in_notebook(session, notebook_id, note_id)
     note = update_note(session, note_id, title=body.title)
     return NoteResponse.model_validate(note)
@@ -129,7 +118,7 @@ def delete_note_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> Response:
-    _require_notebook_owner(session, notebook_id, user_id)
+    require_notebook_owner(session, notebook_id, user_id)
     _get_note_in_notebook(session, notebook_id, note_id)
     delete_note(session, note_id)
     return Response(status_code=204)
