@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import uuid
 from collections.abc import Generator, Iterator
 
 import pytest
@@ -12,9 +14,20 @@ from sqlalchemy.pool import StaticPool
 
 from assistant.api.app import create_app
 from assistant.api.dependencies import get_session
+from assistant.auth.service import create_access_token
 from assistant.models import schema as _schema  # noqa: F401
 from assistant.models.database import Base
-from assistant.models.schema import User
+from assistant.models.schema import Credential, User
+
+_TEST_JWT_SECRET = "test-jwt-secret-do-not-use-in-production"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_jwt_secret() -> Generator[None]:
+    """Ensure JWT_SECRET is set for the entire test session."""
+    os.environ["JWT_SECRET"] = _TEST_JWT_SECRET
+    yield
+    os.environ.pop("JWT_SECRET", None)
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +77,6 @@ def db_session(
     transaction = connection.begin()
     session = Session(bind=connection)
 
-    # Start a savepoint so nested session.begin() calls work
     nested = connection.begin_nested()
 
     @event.listens_for(session, "after_transaction_end")
@@ -95,7 +107,7 @@ def client(db_session: Session) -> Iterator[TestClient]:
 
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as tc:
+    with TestClient(app, raise_server_exceptions=True) as tc:
         yield tc
 
 
@@ -108,9 +120,23 @@ def test_user(db_session: Session) -> User:
     )
     db_session.add(user)
     db_session.flush()
+
+    credential = Credential(
+        user_id=user.uid,
+        provider="password",
+        credential_hash="$argon2id$v=19$m=65536,t=3,p=4$placeholder$placeholder",
+    )
+    db_session.add(credential)
+    db_session.flush()
     return user
+
+
+def make_auth_headers(user_id: uuid.UUID) -> dict[str, str]:
+    """Create Authorization headers with a valid JWT for the given user."""
+    token = create_access_token(user_id)
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def auth_headers(test_user: User) -> dict[str, str]:
-    return {"X-User-Id": str(test_user.uid)}
+    return make_auth_headers(test_user.uid)

@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
     from assistant.models.schema import User
 
+from tests.api.conftest import make_auth_headers
+
 
 class TestCreateNotebook:
     def test_create_notebook(
@@ -39,7 +41,7 @@ class TestCreateNotebook:
             "/notebook",
             json={"name": "My Notebook"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 401
 
 
 class TestListNotebooks:
@@ -95,7 +97,7 @@ class TestListNotebooks:
 
         response = client.get(
             "/notebook",
-            headers={"X-User-Id": str(test_user.uid)},
+            headers=make_auth_headers(test_user.uid),
         )
         assert len(response.json()) == 1
         assert response.json()[0]["name"] == "Mine"
@@ -105,16 +107,38 @@ class TestGetNotebook:
     def test_get_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
         nb = create_notebook(db_session, "Test NB", test_user.uid)
-        response = client.get(f"/notebook/{nb.id}")
+        response = client.get(f"/notebook/{nb.id}", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["name"] == "Test NB"
 
-    def test_get_notebook_not_found(self, client: TestClient) -> None:
-        response = client.get(f"/notebook/{uuid.uuid4()}")
+    def test_get_notebook_not_found(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        response = client.get(f"/notebook/{uuid.uuid4()}", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_get_notebook_other_user_returns_404(
+        self,
+        client: TestClient,
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        other = UserModel(email="other2@test.com", firstname="O", lastname="U")
+        db_session.add(other)
+        db_session.flush()
+        nb = create_notebook(db_session, "Other NB", other.uid)
+
+        response = client.get(
+            f"/notebook/{nb.id}",
+            headers=make_auth_headers(test_user.uid),
+        )
         assert response.status_code == 404
 
 
@@ -122,6 +146,7 @@ class TestUpdateNotebook:
     def test_update_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -129,6 +154,7 @@ class TestUpdateNotebook:
         response = client.patch(
             f"/notebook/{nb.id}",
             json={"name": "New Name"},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         assert response.json()["name"] == "New Name"
@@ -138,16 +164,21 @@ class TestDeleteNotebook:
     def test_delete_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
         nb = create_notebook(db_session, "To Delete", test_user.uid)
-        response = client.delete(f"/notebook/{nb.id}")
+        response = client.delete(f"/notebook/{nb.id}", headers=auth_headers)
         assert response.status_code == 204
 
-        response = client.get(f"/notebook/{nb.id}")
+        response = client.get(f"/notebook/{nb.id}", headers=auth_headers)
         assert response.status_code == 404
 
-    def test_delete_notebook_not_found(self, client: TestClient) -> None:
-        response = client.delete(f"/notebook/{uuid.uuid4()}")
+    def test_delete_notebook_not_found(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        response = client.delete(f"/notebook/{uuid.uuid4()}", headers=auth_headers)
         assert response.status_code == 404

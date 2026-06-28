@@ -12,7 +12,6 @@ import { BlockList } from '../markdown/blockList';
 import type { BlockNode } from '../markdown/blockList';
 import { parseMarkdownBlocks } from '../markdown/parser';
 import { executeSave } from '../markdown/reconcile';
-import { useUser } from '../contexts/UserContext';
 import DebugBlockView from './DebugBlockView';
 import type { DebugBlockSnapshot } from './DebugBlockView';
 
@@ -47,7 +46,6 @@ function charLengthAfterBlock(block: BlockNode): number {
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
   const queryClient = useQueryClient();
-  const { userId } = useUser();
   const [text, setText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -161,7 +159,7 @@ export default function NoteEditor() {
     setStatus(null);
 
     try {
-      await executeSave(notebookId!, noteId!, blockListRef.current, userId);
+      await executeSave(notebookId!, noteId!, blockListRef.current);
       setStatus('Saved');
       queryClient.invalidateQueries({ queryKey: ['nodes', notebookId, noteId] });
     } catch (err) {
@@ -173,7 +171,7 @@ export default function NoteEditor() {
     } finally {
       setSaving(false);
     }
-  }, [notebookId, noteId, userId, queryClient]);
+  }, [notebookId, noteId, queryClient]);
 
   const debugBlocks = useMemo((): DebugBlockSnapshot[] => {
     if (!debugOpen) return [];

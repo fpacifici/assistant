@@ -64,13 +64,14 @@ class TestCreateNote:
             f"/notebook/{nb.id}/note",
             json={"title": "My Note"},
         )
-        assert response.status_code == 422
+        assert response.status_code == 401
 
 
 class TestListNotes:
     def test_list_notes(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -78,13 +79,14 @@ class TestListNotes:
         create_note(db_session, nb.id, test_user.uid, "Note1")
         create_note(db_session, nb.id, test_user.uid, "Note2")
 
-        response = client.get(f"/notebook/{nb.id}/note")
+        response = client.get(f"/notebook/{nb.id}/note", headers=auth_headers)
         assert response.status_code == 200
         assert len(response.json()) == 2
 
     def test_list_notes_pagination(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -94,6 +96,7 @@ class TestListNotes:
 
         response = client.get(
             f"/notebook/{nb.id}/note",
+            headers=auth_headers,
             params={"offset": 0, "limit": 3},
         )
         assert response.status_code == 200
@@ -104,19 +107,21 @@ class TestGetNote:
     def test_get_note(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
         nb = create_notebook(db_session, "NB", test_user.uid)
         note = create_note(db_session, nb.id, test_user.uid, "Test")
 
-        response = client.get(f"/notebook/{nb.id}/note/{note.id}")
+        response = client.get(f"/notebook/{nb.id}/note/{note.id}", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["title"] == "Test"
 
     def test_get_note_wrong_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -124,17 +129,20 @@ class TestGetNote:
         nb2 = create_notebook(db_session, "NB2", test_user.uid)
         note = create_note(db_session, nb1.id, test_user.uid, "Test")
 
-        response = client.get(f"/notebook/{nb2.id}/note/{note.id}")
+        response = client.get(f"/notebook/{nb2.id}/note/{note.id}", headers=auth_headers)
         assert response.status_code == 404
 
     def test_get_note_not_found(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
         nb = create_notebook(db_session, "NB", test_user.uid)
-        response = client.get(f"/notebook/{nb.id}/note/{uuid.uuid4()}")
+        response = client.get(
+            f"/notebook/{nb.id}/note/{uuid.uuid4()}", headers=auth_headers
+        )
         assert response.status_code == 404
 
 
@@ -142,6 +150,7 @@ class TestUpdateNote:
     def test_update_note(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -151,6 +160,7 @@ class TestUpdateNote:
         response = client.patch(
             f"/notebook/{nb.id}/note/{note.id}",
             json={"title": "New"},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         assert response.json()["title"] == "New"
@@ -158,6 +168,7 @@ class TestUpdateNote:
     def test_update_note_wrong_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -168,6 +179,7 @@ class TestUpdateNote:
         response = client.patch(
             f"/notebook/{nb2.id}/note/{note.id}",
             json={"title": "Sneaky"},
+            headers=auth_headers,
         )
         assert response.status_code == 404
 
@@ -176,6 +188,7 @@ class TestDeleteNote:
     def test_delete_note(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -184,15 +197,17 @@ class TestDeleteNote:
 
         response = client.delete(
             f"/notebook/{nb.id}/note/{note.id}",
+            headers=auth_headers,
         )
         assert response.status_code == 204
 
-        response = client.get(f"/notebook/{nb.id}/note/{note.id}")
+        response = client.get(f"/notebook/{nb.id}/note/{note.id}", headers=auth_headers)
         assert response.status_code == 404
 
     def test_delete_note_wrong_notebook(
         self,
         client: TestClient,
+        auth_headers: dict[str, str],
         test_user: User,
         db_session: Session,
     ) -> None:
@@ -202,5 +217,6 @@ class TestDeleteNote:
 
         response = client.delete(
             f"/notebook/{nb2.id}/note/{note.id}",
+            headers=auth_headers,
         )
         assert response.status_code == 404

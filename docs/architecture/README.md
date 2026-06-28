@@ -157,3 +157,4 @@ the webui.
 - [`API`](api.md)
 - [`Markdown support`](markdown.md)
 - [`Web frontend`](frontend.md)
+- [`Authentication`](authentication.md)
