@@ -1,80 +1,120 @@
-/**
- * Sync engine: reconciles the in-memory BlockList with the server by walking
- * dirty/deleted blocks and issuing DELETE, CREATE, and PATCH calls in order.
- * Uses optimistic concurrency control (expected_version) on updates.
- */
-
-import type { BlockList, BlockNode } from './blockList';
+import type { Block, BlockNoteEditor } from '@blocknote/core';
 import { createNode, deleteNode, updateNode } from '../api/nodes';
+import type { ServerRegistry } from './serverRegistry';
+
+const BLOCKNOTE_TO_SERVER_BLOCK_TYPE: Record<string, string> = {
+  paragraph: 'paragraph',
+  heading: 'heading',
+  bulletListItem: 'list_item',
+  numberedListItem: 'list_item',
+  checkListItem: 'list_item',
+  codeBlock: 'code_block',
+  quote: 'blockquote',
+  image: 'image',
+};
+
+function toServerBlockType(blockNoteType: string): string {
+  return BLOCKNOTE_TO_SERVER_BLOCK_TYPE[blockNoteType] ?? 'paragraph';
+}
 
 export async function executeSave(
   notebookId: string,
   noteId: string,
-  blockList: BlockList,
-  userId: string,
-): Promise<void> {
-  // 1. Delete removed blocks
-  for (const nodeId of blockList.deletedNodeIds) {
+  editor: BlockNoteEditor,
+  registry: ServerRegistry,
+  snapshot: Map<string, string>,
+): Promise<Map<string, string>> {
+  const currentBlocks = editor.document;
+  const currentIds = new Set(currentBlocks.map((b) => b.id));
+
+  // 1. Mark blocks removed from the document as deleted
+  for (const [blockId] of snapshot) {
+    if (!currentIds.has(blockId)) {
+      registry.markDeleted(blockId);
+    }
+  }
+
+  // 2. Delete server nodes for removed blocks
+  for (const nodeId of registry.consumeDeletedIds()) {
     await deleteNode(notebookId, noteId, nodeId);
   }
-  blockList.deletedNodeIds = [];
 
-  // 2. Delete old TEXT nodes that need to be replaced with MARKDOWN nodes
-  const blocks = blockList.toArray();
-  for (const block of blocks) {
-    if (block.dirty && block.serverState !== null && block.serverState.nodeType === 'text') {
-      await deleteNode(notebookId, noteId, block.serverState.nodeId);
-      block.serverState = null;
-    }
-  }
+  // 3. Create new blocks and update changed blocks in document order
+  for (let i = 0; i < currentBlocks.length; i++) {
+    const block = currentBlocks[i];
+    const serialized = editor.blocksToMarkdownLossy([block]).trim();
+    const state = registry.get(block.id);
 
-  // 3. Create new blocks (in order, so afterNodeId is available)
-  for (const block of blocks) {
-    if (block.serverState === null) {
-      const afterNodeId = findPreviousServerNodeId(block);
-      const beforeNodeId = findNextServerNodeId(block);
-      const created = await createNode(notebookId, noteId, block.content, {
-        blockType: block.blockType,
-        afterNodeId: afterNodeId ?? undefined,
-        beforeNodeId: beforeNodeId ?? undefined,
-        userId,
+    const serverBlockType = toServerBlockType(block.type);
+
+    if (!state) {
+      const created = await createNode(notebookId, noteId, serialized, {
+        blockType: serverBlockType,
+        afterNodeId: findAfterNodeId(currentBlocks, i, registry),
+        beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),
       });
-      block.serverState = { nodeId: created.id, version: created.version, nodeType: 'markdown' };
-      block.dirty = false;
+      registry.set(block.id, {
+        nodeId: created.id,
+        version: created.version,
+        nodeType: 'markdown',
+      });
+    } else if (state.nodeType === 'text') {
+      // Migrate legacy TEXT node to markdown
+      await deleteNode(notebookId, noteId, state.nodeId);
+      const created = await createNode(notebookId, noteId, serialized, {
+        blockType: serverBlockType,
+        afterNodeId: findAfterNodeId(currentBlocks, i, registry),
+        beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),
+      });
+      registry.set(block.id, {
+        nodeId: created.id,
+        version: created.version,
+        nodeType: 'markdown',
+      });
+    } else {
+      const previousSerialized = snapshot.get(block.id);
+      if (previousSerialized !== undefined && previousSerialized !== serialized) {
+        const updated = await updateNode(
+          notebookId,
+          noteId,
+          state.nodeId,
+          serialized,
+          state.version,
+          serverBlockType,
+        );
+        registry.updateVersion(block.id, updated.version);
+      }
     }
   }
 
-  // 4. Update dirty markdown blocks
-  for (const block of blocks) {
-    if (block.dirty && block.serverState !== null) {
-      const updated = await updateNode(
-        notebookId,
-        noteId,
-        block.serverState.nodeId,
-        block.content,
-        block.serverState.version,
-        block.blockType,
-      );
-      block.serverState.version = updated.version;
-      block.dirty = false;
-    }
+  // Return updated snapshot
+  const newSnapshot = new Map<string, string>();
+  for (const block of currentBlocks) {
+    newSnapshot.set(block.id, editor.blocksToMarkdownLossy([block]).trim());
   }
+  return newSnapshot;
 }
 
-function findPreviousServerNodeId(block: BlockNode): string | null {
-  let prev = block.prev;
-  while (prev !== null) {
-    if (prev.serverState) return prev.serverState.nodeId;
-    prev = prev.prev;
+function findAfterNodeId(
+  blocks: Block[],
+  index: number,
+  registry: ServerRegistry,
+): string | undefined {
+  for (let i = index - 1; i >= 0; i--) {
+    const state = registry.get(blocks[i].id);
+    if (state) return state.nodeId;
   }
-  return null;
+  return undefined;
 }
 
-function findNextServerNodeId(block: BlockNode): string | null {
-  let next = block.next;
-  while (next !== null) {
-    if (next.serverState) return next.serverState.nodeId;
-    next = next.next;
+function findBeforeNodeId(
+  blocks: Block[],
+  index: number,
+  registry: ServerRegistry,
+): string | undefined {
+  for (let i = index + 1; i < blocks.length; i++) {
+    const state = registry.get(blocks[i].id);
+    if (state) return state.nodeId;
   }
-  return null;
+  return undefined;
 }

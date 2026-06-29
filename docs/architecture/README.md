@@ -158,3 +158,4 @@ the webui.
 - [`Markdown support`](markdown.md)
 - [`Web frontend`](frontend.md)
 - [`Attachments`](attachments.md)
+- [`Authentication`](authentication.md)

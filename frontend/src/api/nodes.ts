@@ -13,7 +13,6 @@ export function createNode(
     blockType?: string;
     afterNodeId?: string;
     beforeNodeId?: string;
-    userId?: string;
   } = {},
 ): Promise<NoteNode> {
   const body: Record<string, string> = { payload };
@@ -23,7 +22,6 @@ export function createNode(
   return apiFetch<NoteNode>(`/notebook/${notebookId}/note/${noteId}/node`, {
     method: 'POST',
     body: JSON.stringify(body),
-    userId: opts.userId,
   });
 }
 

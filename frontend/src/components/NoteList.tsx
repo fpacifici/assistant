@@ -4,14 +4,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
-import { useUser } from '../contexts/UserContext';
 
 export default function NoteList() {
-  const { notebookId } = useParams();
-  const { userId } = useUser();
+  const { notebookId, noteId } = useParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { noteId } = useParams();
   const [newTitle, setNewTitle] = useState('');
 
   const { data: notes = [], isLoading } = useQuery({
@@ -21,7 +18,7 @@ export default function NoteList() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (title: string) => createNote(userId, notebookId!, title),
+    mutationFn: (title: string) => createNote(notebookId!, title),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
       setNewTitle('');

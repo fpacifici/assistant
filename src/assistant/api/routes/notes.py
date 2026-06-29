@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Response
 
-from assistant.api.dependencies import CurrentUserId, SessionDep
+from assistant.api.dependencies import CurrentUserId, SessionDep, require_notebook_owner
 from assistant.api.schemas.notes import NoteCreate, NoteResponse, NoteUpdate
 from assistant.api.schemas.pagination import Pagination
 from assistant.models.schema import Note
@@ -45,6 +45,7 @@ def create_note_endpoint(
     session: SessionDep,
     user_id: CurrentUserId,
 ) -> NoteResponse:
+    require_notebook_owner(session, notebook_id, user_id)
     note = create_note(
         session,
         notebook_id=notebook_id,
@@ -62,8 +63,10 @@ def create_note_endpoint(
 def list_notes_endpoint(
     notebook_id: uuid.UUID,
     session: SessionDep,
+    user_id: CurrentUserId,
     pagination: Pagination,
 ) -> list[NoteResponse]:
+    require_notebook_owner(session, notebook_id, user_id)
     notes = list_notes(
         session,
         notebook_id=notebook_id,
@@ -81,7 +84,9 @@ def get_note_endpoint(
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> NoteResponse:
+    require_notebook_owner(session, notebook_id, user_id)
     note = _get_note_in_notebook(session, notebook_id, note_id)
     return NoteResponse.model_validate(note)
 
@@ -95,7 +100,9 @@ def update_note_endpoint(
     note_id: uuid.UUID,
     body: NoteUpdate,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> NoteResponse:
+    require_notebook_owner(session, notebook_id, user_id)
     _get_note_in_notebook(session, notebook_id, note_id)
     note = update_note(session, note_id, title=body.title)
     return NoteResponse.model_validate(note)
@@ -109,7 +116,9 @@ def delete_note_endpoint(
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> Response:
+    require_notebook_owner(session, notebook_id, user_id)
     _get_note_in_notebook(session, notebook_id, note_id)
     delete_note(session, note_id)
     return Response(status_code=204)

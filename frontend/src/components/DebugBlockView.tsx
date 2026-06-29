@@ -1,62 +1,50 @@
-/** Debug panel that visualizes the internal BlockList state alongside the editor. */
-
-import type { MarkdownBlockType } from '../types';
-
-export interface DebugBlockSnapshot {
-  index: number;
-  blockType: MarkdownBlockType;
-  content: string;
-  lineStart: number;
-  lineCount: number;
-  dirty: boolean;
-  hasServerState: boolean;
-  nodeId: string | null;
-  version: number | null;
-  isCurrent: boolean;
-}
+import type { Block, BlockNoteEditor } from '@blocknote/core';
+import type { ServerRegistry } from '../markdown/serverRegistry';
 
 interface DebugBlockViewProps {
-  blocks: DebugBlockSnapshot[];
+  blocks: Block[];
+  editor: BlockNoteEditor;
+  registry: ServerRegistry;
 }
 
-export default function DebugBlockView({ blocks }: DebugBlockViewProps) {
+export default function DebugBlockView({ blocks, editor, registry }: DebugBlockViewProps) {
   return (
     <div className="debug-panel">
-      <div className="debug-panel-header">
-        Block List ({blocks.length} blocks)
-      </div>
+      <div className="debug-panel-header">Block structure ({blocks.length} blocks)</div>
       <div className="debug-block-list">
-        {blocks.map((block, i) => (
-          <div key={i}>
-            <div
-              className={`debug-block${block.isCurrent ? ' debug-block-current' : ''}${block.dirty ? ' debug-block-dirty' : ''}`}
-            >
-              <div className="debug-block-header">
-                <span className="debug-block-type">{block.blockType}</span>
-                <span className="debug-block-line">L{block.lineStart}</span>
-                {block.dirty && <span className="debug-block-badge dirty">dirty</span>}
-                {block.hasServerState && (
-                  <span className="debug-block-badge synced">v{block.version}</span>
-                )}
-              </div>
-              <div className="debug-block-content">
-                {block.content.length > 80
-                  ? block.content.slice(0, 80) + '…'
-                  : block.content || '(empty)'}
-              </div>
-              {block.nodeId && (
-                <div className="debug-block-id">{block.nodeId.slice(0, 8)}…</div>
+        {blocks.map((block, i) => {
+          const state = registry.get(block.id);
+          const serialized = editor.blocksToMarkdownLossy([block]).trim();
+          return (
+            <div key={block.id}>
+              {i > 0 && (
+                <div className="debug-connector">
+                  <div className="debug-connector-line" />
+                  <div className="debug-connector-label">↓</div>
+                  <div className="debug-connector-line" />
+                </div>
               )}
-            </div>
-            {i < blocks.length - 1 && (
-              <div className="debug-connector">
-                <div className="debug-connector-line" />
-                <span className="debug-connector-label">↕</span>
-                <div className="debug-connector-line" />
+              <div className={`debug-block ${state ? 'debug-block-synced' : 'debug-block-new'}`}>
+                <div className="debug-block-header">
+                  <span className="debug-block-index">#{i}</span>
+                  <span className="debug-block-type">{block.type}</span>
+                  <span className={`debug-block-badge ${state ? 'synced' : 'new'}`}>
+                    {state ? 'server' : 'new'}
+                  </span>
+                </div>
+                <div className="debug-block-content">{serialized || <em>(empty)</em>}</div>
+                <div className="debug-block-id">
+                  bn: {block.id.slice(0, 8)}…
+                  {state && (
+                    <>
+                      {' '} | node: {state.nodeId.slice(0, 8)}… v{state.version}
+                    </>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

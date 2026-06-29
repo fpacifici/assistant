@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Response
 
-from assistant.api.dependencies import CurrentUserId, SessionDep
+from assistant.api.dependencies import CurrentUserId, SessionDep, require_notebook_owner
 from assistant.api.schemas.nodes import (
     NodeCreate,
     NodePatch,
@@ -67,8 +67,10 @@ def list_nodes_endpoint(
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> list[NodeResponse]:
     """List all nodes in a note, ordered by position."""
+    require_notebook_owner(session, notebook_id, user_id)
     _validate_note_in_notebook(session, notebook_id, note_id)
     nodes = get_ordered_nodes(session, note_id)
     return [NodeResponse.model_validate(n) for n in nodes]
@@ -87,6 +89,7 @@ def create_node_endpoint(
     user_id: CurrentUserId,
 ) -> NodeResponse:
     """Create a node in a note, optionally positioned between neighbours."""
+    require_notebook_owner(session, notebook_id, user_id)
     _validate_note_in_notebook(session, notebook_id, note_id)
     has_neighbors = body.after_node_id is not None or body.before_node_id is not None
     if body.block_type is not None:
@@ -131,14 +134,16 @@ def create_node_endpoint(
     "/{notebook_id}/note/{note_id}/node/{node_id}",
     response_model=NodeResponse,
 )
-def patch_node_endpoint(
+def patch_node_endpoint(  # noqa: PLR0913
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     node_id: uuid.UUID,
     body: NodePatch,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> NodeResponse:
     """Update a node's payload or merge another node into it."""
+    require_notebook_owner(session, notebook_id, user_id)
     _get_node_in_note(session, notebook_id, note_id, node_id)
     if isinstance(body, NodeUpdate):
         if body.block_type is not None:
@@ -192,6 +197,7 @@ def split_node_endpoint(  # noqa: PLR0913
     user_id: CurrentUserId,
 ) -> SplitResponse:
     """Split a text node at a character offset, producing two nodes."""
+    require_notebook_owner(session, notebook_id, user_id)
     _get_node_in_note(session, notebook_id, note_id, node_id)
     original, new = split_text_node(
         session,
@@ -215,8 +221,10 @@ def delete_node_endpoint(
     note_id: uuid.UUID,
     node_id: uuid.UUID,
     session: SessionDep,
+    user_id: CurrentUserId,
 ) -> Response:
     """Delete a node. Idempotent — returns 204 whether or not the node existed."""
+    require_notebook_owner(session, notebook_id, user_id)
     _validate_note_in_notebook(session, notebook_id, note_id)
     delete_node(session, node_id)
     return Response(status_code=204)
