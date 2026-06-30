@@ -2,9 +2,11 @@
 
 from assistant.models.database import Base, get_engine, get_session_factory
 from assistant.models.schema import (
-    AttachmentMetadata,
+    Chunk,
     Document,
     ExternalSource,
+    File,
+    FileState,
     Node,
     NodeType,
     Note,
@@ -13,10 +15,12 @@ from assistant.models.schema import (
 )
 
 __all__ = [
-    "AttachmentMetadata",
     "Base",
+    "Chunk",
     "Document",
     "ExternalSource",
+    "File",
+    "FileState",
     "Node",
     "NodeType",
     "Note",

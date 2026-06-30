@@ -155,11 +155,17 @@ This project uses strict typing:
 The Makefile contains some targets to start and stop both frontend and api
 
 ```bash
-# Start both
+# Start both frontend and backend
 make dev
 
 # Stop both
 make dev-stop
+
+# Start the backend API only
+make server
+
+# Start the frontend only
+make frontend-dev
 ```
 
 ### Chat TUI

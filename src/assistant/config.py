@@ -51,6 +51,7 @@ class AssistantConfig(TypedDict, total=False):
 
     database: DatabaseConfig
     document_storage_path: str
+    file_storage_path: str
     external_sources: ExternalSourcesConfig
 
 
@@ -273,6 +274,15 @@ class Config:
             Path to document storage directory.
         """
         storage_path = self.get("document_storage_path", "data/documents")
+        return Path(storage_path).expanduser().resolve()
+
+    def get_file_storage_path(self) -> Path:
+        """Get the path for file (attachment) storage.
+
+        Returns:
+            Path to file storage directory.
+        """
+        storage_path = self.get("file_storage_path", "data/files")
         return Path(storage_path).expanduser().resolve()
 
     def get_external_source_config(self, provider: str) -> dict[str, object]:

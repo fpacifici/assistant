@@ -1,8 +1,15 @@
+import { useRef, useState } from 'react';
 import type { BlockNoteEditor } from '@blocknote/core';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import { createFile, uploadChunk, completeFile } from '../api/files';
+import { createNode } from '../api/nodes';
+import type { NoteNode } from '../types';
 
 interface MarkdownToolbarProps {
   editor: BlockNoteEditor;
+  notebookId: string;
+  noteId: string;
+  onAttached: (node: NoteNode) => void;
 }
 
 const BLOCK_BUTTONS = [
@@ -24,7 +31,18 @@ const STYLE_BUTTONS = [
   { label: '`', title: 'Inline code', style: 'code', className: 'font-code' },
 ] as const;
 
-export default function MarkdownToolbar({ editor }: MarkdownToolbarProps) {
+const CHUNK_SIZE = 1024 * 1024; // 1 MB chunks
+
+export default function MarkdownToolbar({
+  editor,
+  notebookId,
+  noteId,
+  onAttached,
+}: MarkdownToolbarProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const applyBlockType = (
     e: ReactMouseEvent,
     type: string,
@@ -47,6 +65,44 @@ export default function MarkdownToolbar({ editor }: MarkdownToolbarProps) {
       editor.toggleStyles({ [style]: true } as any);
     } catch {
       // no-op
+    }
+  };
+
+  const handleAttachClick = (e: ReactMouseEvent) => {
+    e.preventDefault();
+    setUploadError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const fileRecord = await createFile(noteId, file.name);
+
+      const buffer = await file.arrayBuffer();
+      const totalChunks = Math.ceil(buffer.byteLength / CHUNK_SIZE) || 1;
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = buffer.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        await uploadChunk(fileRecord.id, i + 1, chunk);
+      }
+
+      await completeFile(fileRecord.id);
+
+      const node = await createNode(notebookId, noteId, { file_id: fileRecord.id });
+
+      onAttached(node);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -77,6 +133,28 @@ export default function MarkdownToolbar({ editor }: MarkdownToolbarProps) {
           </button>
         ))}
       </div>
+      <div className="toolbar-divider" />
+      <div className="toolbar-group">
+        <button
+          title="Attach file"
+          className="toolbar-btn"
+          onMouseDown={handleAttachClick}
+          disabled={uploading}
+        >
+          {uploading ? '…' : '📎'}
+        </button>
+        {uploadError && (
+          <span className="status error" title={uploadError}>
+            Upload failed
+          </span>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleFileSelected}
+      />
     </div>
   );
 }

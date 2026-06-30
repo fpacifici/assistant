@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from assistant.attachments.storage import FileStorage
 from assistant.auth.service import AuthError, decode_access_token
 from assistant.models.schema import Notebook
 from assistant.notes.service import get_notebook
@@ -74,5 +75,10 @@ def require_notebook_owner(
     return notebook
 
 
+def get_storage(request: Request) -> FileStorage:
+    return request.app.state.file_storage  # type: ignore[no-any-return]
+
+
 SessionDep = Annotated[Session, Depends(get_session)]
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
+StorageDep = Annotated[FileStorage, Depends(get_storage)]

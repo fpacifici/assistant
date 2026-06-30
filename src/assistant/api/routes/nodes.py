@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 
-from assistant.api.dependencies import CurrentUserId, SessionDep, require_notebook_owner
+from assistant.api.dependencies import (
+    CurrentUserId,
+    SessionDep,
+    StorageDep,
+    require_notebook_owner,
+)
 from assistant.api.schemas.nodes import (
     NodeCreate,
     NodePatch,
@@ -15,9 +20,11 @@ from assistant.api.schemas.nodes import (
     NodeUpdate,
     SplitResponse,
 )
-from assistant.models.schema import Node
+from assistant.attachments.service import delete_file_record
+from assistant.models.schema import Node, NodeType
 from assistant.notes.exceptions import NodeNotFoundError, NoteNotFoundError
 from assistant.notes.service import (
+    add_attachment_node,
     add_markdown_node,
     add_text_node,
     delete_node,
@@ -91,6 +98,20 @@ def create_node_endpoint(
     """Create a node in a note, optionally positioned between neighbours."""
     require_notebook_owner(session, notebook_id, user_id)
     _validate_note_in_notebook(session, notebook_id, note_id)
+
+    if body.file_id is not None:
+        try:
+            node = add_attachment_node(session, note_id, user_id, body.file_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return NodeResponse.model_validate(node)
+
+    if body.payload is None:
+        raise HTTPException(
+            status_code=422,
+            detail="payload is required when file_id is not set",
+        )
+
     has_neighbors = body.after_node_id is not None or body.before_node_id is not None
     if body.block_type is not None:
         if has_neighbors:
@@ -216,15 +237,24 @@ def split_node_endpoint(  # noqa: PLR0913
     "/{notebook_id}/note/{note_id}/node/{node_id}",
     status_code=204,
 )
-def delete_node_endpoint(
+def delete_node_endpoint(  # noqa: PLR0913
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     node_id: uuid.UUID,
     session: SessionDep,
+    storage: StorageDep,
     user_id: CurrentUserId,
 ) -> Response:
     """Delete a node. Idempotent — returns 204 whether or not the node existed."""
     require_notebook_owner(session, notebook_id, user_id)
     _validate_note_in_notebook(session, notebook_id, note_id)
+    node = session.get(Node, node_id)
+    file_id = (
+        node.attachment_id
+        if node is not None and node.node_type == NodeType.ATTACHMENT
+        else None
+    )
     delete_node(session, node_id)
+    if file_id is not None:
+        delete_file_record(session, storage, file_id)
     return Response(status_code=204)

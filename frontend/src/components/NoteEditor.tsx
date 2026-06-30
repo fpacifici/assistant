@@ -9,7 +9,9 @@ import { ServerRegistry } from '../markdown/serverRegistry';
 import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
 import MarkdownToolbar from './MarkdownToolbar';
+import AttachmentList from './AttachmentList';
 import DebugBlockView from './DebugBlockView';
+import type { NoteNode } from '../types';
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
@@ -22,6 +24,7 @@ export default function NoteEditor() {
 
   const registry = useRef(new ServerRegistry());
   const snapshotRef = useRef<Map<string, string>>(new Map());
+  const [attachmentNodes, setAttachmentNodes] = useState<NoteNode[]>([]);
 
   const editor = useCreateBlockNote();
 
@@ -31,11 +34,14 @@ export default function NoteEditor() {
     enabled: !!notebookId && !!noteId,
   });
 
-  // Load server nodes into the BlockNote editor
+  // Load server nodes into the BlockNote editor; keep attachments separate
   useEffect(() => {
     if (!nodes) return;
 
-    const blocks = buildBlocksFromNodes(nodes, editor, registry.current);
+    const contentNodes = nodes.filter((n) => n.node_type !== 'attachment');
+    setAttachmentNodes(nodes.filter((n) => n.node_type === 'attachment'));
+
+    const blocks = buildBlocksFromNodes(contentNodes, editor, registry.current);
     if (blocks.length === 0) {
       editor.replaceBlocks(editor.document, [{ type: 'paragraph', content: [] }]);
       snapshotRef.current = new Map();
@@ -87,6 +93,10 @@ export default function NoteEditor() {
     }
   }, [notebookId, noteId, editor, queryClient]);
 
+  const handleAttached = useCallback((node: NoteNode) => {
+    setAttachmentNodes((prev) => [...prev, node]);
+  }, []);
+
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
   }
@@ -95,7 +105,12 @@ export default function NoteEditor() {
 
   return (
     <div className="note-editor">
-      <MarkdownToolbar editor={editor} />
+      <MarkdownToolbar
+        editor={editor}
+        notebookId={notebookId}
+        noteId={noteId}
+        onAttached={handleAttached}
+      />
       <div className={`editor-content${debugOpen ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}
@@ -111,6 +126,7 @@ export default function NoteEditor() {
           />
         )}
       </div>
+      <AttachmentList nodes={attachmentNodes} />
       <div className="editor-toolbar">
         <button onClick={handleSave} disabled={!isDirty || saving}>
           {saving ? 'Saving...' : 'Save'}

@@ -10,10 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class NodeCreate(BaseModel):
-    payload: str
+    payload: str | None = None
     after_node_id: uuid.UUID | None = None
     before_node_id: uuid.UUID | None = None
     block_type: str | None = None
+    file_id: uuid.UUID | None = None
 
 
 class NodeUpdate(BaseModel):

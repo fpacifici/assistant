@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from assistant.models.schema import (
-    AttachmentMetadata,
+    File,
+    FileState,
     Node,
     NodeType,
     Note,
@@ -117,8 +118,8 @@ def test_create_attachment_node(db_session: Session) -> None:
     notebook = _create_notebook(db_session, user)
     note = _create_note(db_session, notebook, user)
 
-    attachment = AttachmentMetadata(path="/files/image.png")
-    db_session.add(attachment)
+    file = File(note_id=note.id, file_name="image.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
 
     node = Node(
@@ -126,15 +127,16 @@ def test_create_attachment_node(db_session: Session) -> None:
         position="a0",
         author_id=user.uid,
         node_type=NodeType.ATTACHMENT,
-        attachment_id=attachment.id,
+        attachment_id=file.id,
+        payload=f"[image.png](/files/{file.id})",
     )
     db_session.add(node)
     db_session.flush()
 
     assert node.node_type == NodeType.ATTACHMENT
-    assert node.payload is None
+    assert node.payload is not None
     assert node.attachment is not None
-    assert node.attachment.path == "/files/image.png"
+    assert node.attachment.file_name == "image.png"
 
 
 def test_note_nodes_ordered_by_position(db_session: Session) -> None:
