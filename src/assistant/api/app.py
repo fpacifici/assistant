@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
@@ -9,10 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from assistant.api.exceptions import register_exception_handlers
 from assistant.api.routes.auth import router as auth_router
+from assistant.api.routes.files import router as files_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
 from assistant.api.routes.users import router as users_router
+from assistant.attachments.storage import FileStorage, LocalFileStorage
+from assistant.config import Config
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -20,6 +24,8 @@ if TYPE_CHECKING:
 
 def create_app(
     session_factory: sessionmaker[Session] | None = None,
+    file_storage: FileStorage | None = None,
+    file_storage_path: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Assistant API", version="0.1.0")
 
@@ -28,6 +34,12 @@ def create_app(
 
         session_factory = get_session_factory()
     app.state.session_factory = session_factory
+
+    if file_storage is None:
+        storage_path = file_storage_path or Config().get_file_storage_path()
+        storage_path.mkdir(parents=True, exist_ok=True)
+        file_storage = LocalFileStorage(storage_path)
+    app.state.file_storage = file_storage
 
     app.add_middleware(
         CORSMiddleware,
@@ -44,5 +56,6 @@ def create_app(
     app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
     app.include_router(notes_router, prefix="/notebook", tags=["notes"])
     app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
+    app.include_router(files_router, tags=["files"])
 
     return app

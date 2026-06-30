@@ -48,7 +48,8 @@ export async function executeSave(
     const serverBlockType = toServerBlockType(block.type);
 
     if (!state) {
-      const created = await createNode(notebookId, noteId, serialized, {
+      const created = await createNode(notebookId, noteId, {
+        payload: serialized,
         blockType: serverBlockType,
         afterNodeId: findAfterNodeId(currentBlocks, i, registry),
         beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),
@@ -61,7 +62,8 @@ export async function executeSave(
     } else if (state.nodeType === 'text') {
       // Migrate legacy TEXT node to markdown
       await deleteNode(notebookId, noteId, state.nodeId);
-      const created = await createNode(notebookId, noteId, serialized, {
+      const created = await createNode(notebookId, noteId, {
+        payload: serialized,
         blockType: serverBlockType,
         afterNodeId: findAfterNodeId(currentBlocks, i, registry),
         beforeNodeId: findBeforeNodeId(currentBlocks, i, registry),

@@ -5,20 +5,25 @@ export function fetchNodes(notebookId: string, noteId: string): Promise<NoteNode
   return apiFetch<NoteNode[]>(`/notebook/${notebookId}/note/${noteId}/node`);
 }
 
+export interface NodeCreateOpts {
+  payload?: string;
+  blockType?: string;
+  afterNodeId?: string;
+  beforeNodeId?: string;
+  file_id?: string;
+}
+
 export function createNode(
   notebookId: string,
   noteId: string,
-  payload: string,
-  opts: {
-    blockType?: string;
-    afterNodeId?: string;
-    beforeNodeId?: string;
-  } = {},
+  opts: NodeCreateOpts,
 ): Promise<NoteNode> {
-  const body: Record<string, string> = { payload };
+  const body: Record<string, string> = {};
+  if (opts.payload !== undefined) body.payload = opts.payload;
   if (opts.blockType) body.block_type = opts.blockType;
   if (opts.afterNodeId) body.after_node_id = opts.afterNodeId;
   if (opts.beforeNodeId) body.before_node_id = opts.beforeNodeId;
+  if (opts.file_id) body.file_id = opts.file_id;
   return apiFetch<NoteNode>(`/notebook/${notebookId}/note/${noteId}/node`, {
     method: 'POST',
     body: JSON.stringify(body),

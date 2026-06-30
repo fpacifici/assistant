@@ -70,7 +70,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select, update
 
 from assistant.models.schema import (
-    AttachmentMetadata,
+    File,
+    FileState,
     MarkdownBlockType,
     Node,
     NodeType,
@@ -290,10 +291,30 @@ def add_attachment_node(
     session: Session,
     note_id: uuid.UUID,
     author_id: uuid.UUID,
-    attachment_id: uuid.UUID,
+    file_id: uuid.UUID,
 ) -> Node:
-    """Append an attachment node at the end of a note's content list."""
-    session.get(AttachmentMetadata, attachment_id)
+    """Append an attachment node at the end of a note's content list.
+
+    The file must be complete and must belong to the given note. The node
+    payload is a pre-formatted markdown link so the editor can render it
+    without special handling.
+
+    Raises:
+        ValueError: If the file is not found, not complete, or belongs to a
+            different note.
+    """
+    file = session.get(File, file_id)
+    if file is None:
+        msg = f"File not found: {file_id}"
+        raise ValueError(msg)
+    if file.state != FileState.COMPLETE.value:
+        msg = f"File {file_id} is not complete (state={file.state})"
+        raise ValueError(msg)
+    if file.note_id != note_id:
+        msg = f"File {file_id} does not belong to note {note_id}"
+        raise ValueError(msg)
+
+    payload = f"[{file.file_name}](/files/{file_id})"
     last = _last_position(session, note_id, lock=True)
     position = generate_position_between(last, None)
     node = Node(
@@ -301,7 +322,8 @@ def add_attachment_node(
         position=position,
         author_id=author_id,
         node_type=NodeType.ATTACHMENT,
-        attachment_id=attachment_id,
+        attachment_id=file_id,
+        payload=payload,
     )
     session.add(node)
     _touch_note(session, note_id)

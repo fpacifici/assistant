@@ -38,6 +38,15 @@ class NodeType(str, Enum):
     MARKDOWN = "markdown"
 
 
+class FileState(str, Enum):
+    """Upload state for a File."""
+
+    PENDING = "pending"
+    UPLOADING = "uploading"
+    COMPLETE = "complete"
+    EXPIRED = "expired"
+
+
 class MarkdownBlockType(str, Enum):
     """Markdown block type enumeration."""
 
@@ -230,12 +239,17 @@ class Note(Base):
         cascade="all, delete-orphan",
         order_by="Node.position",
     )
+    files: Mapped[list[File]] = relationship(
+        "File",
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
 
 
-class AttachmentMetadata(Base):
-    """Attachment metadata model."""
+class File(Base):
+    """Upload file metadata — tracks chunked upload lifecycle."""
 
-    __tablename__ = "attachment_metadata"
+    __tablename__ = "files"
     __table_args__ = {"schema": "assistant"}  # noqa: RUF012
 
     id: Mapped[uuid_module.UUID] = mapped_column(
@@ -243,7 +257,55 @@ class AttachmentMetadata(Base):
         primary_key=True,
         default=uuid_module.uuid4,
     )
-    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id"),
+        nullable=False,
+    )
+    file_name: Mapped[str] = mapped_column(String(1024), nullable=False)
+    creation_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=FileState.PENDING.value
+    )
+
+    note: Mapped[Note] = relationship("Note", back_populates="files")
+    chunks: Mapped[list[Chunk]] = relationship(
+        "Chunk",
+        back_populates="file",
+        cascade="all, delete-orphan",
+        order_by="Chunk.part_number",
+    )
+
+
+class Chunk(Base):
+    """One part of a chunked upload, stored as a file on disk."""
+
+    __tablename__ = "chunks"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    file_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.files.id"),
+        nullable=False,
+    )
+    part_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_name: Mapped[str] = mapped_column(String(1024), nullable=False)
+    creation_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    file: Mapped[File] = relationship("File", back_populates="chunks")
 
 
 class Node(Base):
@@ -255,7 +317,7 @@ class Node(Base):
             "(node_type = 'text' AND payload IS NOT NULL"
             " AND attachment_id IS NULL AND block_type IS NULL)"
             " OR "
-            "(node_type = 'attachment' AND payload IS NULL"
+            "(node_type = 'attachment' AND payload IS NOT NULL"
             " AND attachment_id IS NOT NULL AND block_type IS NULL)"
             " OR "
             "(node_type = 'markdown' AND payload IS NOT NULL"
@@ -287,7 +349,7 @@ class Node(Base):
     block_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     attachment_id: Mapped[uuid_module.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assistant.attachment_metadata.id"),
+        ForeignKey("assistant.files.id"),
         nullable=True,
     )
     version: Mapped[int] = mapped_column(
@@ -306,9 +368,7 @@ class Node(Base):
         back_populates="nodes",
     )
     author: Mapped[User] = relationship("User")
-    attachment: Mapped[AttachmentMetadata | None] = relationship(
-        "AttachmentMetadata",
-    )
+    attachment: Mapped[File | None] = relationship("File")
 
 
 class Document(Base):

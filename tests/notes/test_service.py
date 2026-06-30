@@ -8,7 +8,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from assistant.models.schema import (
-    AttachmentMetadata,
+    File,
+    FileState,
     Node,
     NodeType,
     Note,
@@ -189,13 +190,14 @@ def test_add_attachment_node(db_session: Session) -> None:
     user = _make_user(db_session)
     nb = create_notebook(db_session, "NB", user.uid)
     note = create_note(db_session, nb.id, user.uid, "N")
-    att = AttachmentMetadata(path="/f.png")
-    db_session.add(att)
+    file = File(note_id=note.id, file_name="f.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
 
-    node = add_attachment_node(db_session, note.id, user.uid, att.id)
+    node = add_attachment_node(db_session, note.id, user.uid, file.id)
     assert node.node_type == NodeType.ATTACHMENT
-    assert node.attachment_id == att.id
+    assert node.attachment_id == file.id
+    assert "[f.png]" in (node.payload or "")
 
 
 def test_insert_text_node_between(db_session: Session) -> None:
@@ -240,12 +242,12 @@ def test_mixed_text_and_attachment_nodes(db_session: Session) -> None:
     user = _make_user(db_session)
     nb = create_notebook(db_session, "NB", user.uid)
     note = create_note(db_session, nb.id, user.uid, "N")
-    att = AttachmentMetadata(path="/img.png")
-    db_session.add(att)
+    file = File(note_id=note.id, file_name="img.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
 
     n1 = add_text_node(db_session, note.id, user.uid, "text1")
-    n2 = add_attachment_node(db_session, note.id, user.uid, att.id)
+    n2 = add_attachment_node(db_session, note.id, user.uid, file.id)
     n3 = add_text_node(db_session, note.id, user.uid, "text2")
 
     nodes = get_ordered_nodes(db_session, note.id)
@@ -394,10 +396,10 @@ def test_split_rejects_attachment_node(db_session: Session) -> None:
     user = _make_user(db_session)
     nb = create_notebook(db_session, "NB", user.uid)
     note = create_note(db_session, nb.id, user.uid, "N")
-    att = AttachmentMetadata(path="/f.png")
-    db_session.add(att)
+    file = File(note_id=note.id, file_name="f.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
-    node = add_attachment_node(db_session, note.id, user.uid, att.id)
+    node = add_attachment_node(db_session, note.id, user.uid, file.id)
 
     with pytest.raises(InvalidNodeTypeError):
         split_text_node(db_session, node.id, user.uid, 0, 1)
@@ -407,11 +409,11 @@ def test_merge_rejects_attachment_source(db_session: Session) -> None:
     user = _make_user(db_session)
     nb = create_notebook(db_session, "NB", user.uid)
     note = create_note(db_session, nb.id, user.uid, "N")
-    att = AttachmentMetadata(path="/f.png")
-    db_session.add(att)
+    file = File(note_id=note.id, file_name="f.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
     text_node = add_text_node(db_session, note.id, user.uid, "text")
-    att_node = add_attachment_node(db_session, note.id, user.uid, att.id)
+    att_node = add_attachment_node(db_session, note.id, user.uid, file.id)
 
     with pytest.raises(InvalidNodeTypeError):
         merge_text_nodes(db_session, att_node.id, text_node.id, 1, 1)
@@ -421,11 +423,11 @@ def test_merge_rejects_attachment_target(db_session: Session) -> None:
     user = _make_user(db_session)
     nb = create_notebook(db_session, "NB", user.uid)
     note = create_note(db_session, nb.id, user.uid, "N")
-    att = AttachmentMetadata(path="/f.png")
-    db_session.add(att)
+    file = File(note_id=note.id, file_name="f.png", state=FileState.COMPLETE.value)
+    db_session.add(file)
     db_session.flush()
     text_node = add_text_node(db_session, note.id, user.uid, "text")
-    att_node = add_attachment_node(db_session, note.id, user.uid, att.id)
+    att_node = add_attachment_node(db_session, note.id, user.uid, file.id)
 
     with pytest.raises(InvalidNodeTypeError):
         merge_text_nodes(db_session, text_node.id, att_node.id, 1, 1)

@@ -13,6 +13,9 @@ database:
 # Document storage path (can be overridden with DOCUMENT_STORAGE_PATH env var)
 document_storage_path: data/documents
 
+# File (attachment) storage path (can be overridden with FILE_STORAGE_PATH env var)
+file_storage_path: data/files
+
 # External source configurations
 external_sources:
   fake:

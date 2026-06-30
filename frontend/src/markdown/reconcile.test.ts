@@ -54,7 +54,7 @@ describe('executeSave — delete removed blocks', () => {
   });
 
   it('deletes server node when block is removed from document', async () => {
-    const block = makeBlock('b1');
+    makeBlock('b1');
     registry.set('b1', { nodeId: 'n1', version: 1, nodeType: 'markdown' });
     const snapshot = new Map([['b1', 'old content']]);
     const editor = makeEditor([], serialize); // b1 no longer in document
@@ -65,10 +65,10 @@ describe('executeSave — delete removed blocks', () => {
   });
 
   it('does not delete when block remains in document', async () => {
-    const block = makeBlock('b1');
+    const b1 = makeBlock('b1');
     registry.set('b1', { nodeId: 'n1', version: 1, nodeType: 'markdown' });
-    const snapshot = new Map([['b1', serialize([block])]]);
-    const editor = makeEditor([block], serialize);
+    const snapshot = new Map([['b1', serialize([b1])]]);
+    const editor = makeEditor([b1], serialize);
 
     await executeSave('nb', 'note', editor, registry, snapshot);
 
@@ -91,7 +91,8 @@ describe('executeSave — create new blocks', () => {
 
     await executeSave('nb', 'note', editor, registry, new Map());
 
-    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', serialize([block]), expect.objectContaining({
+    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.objectContaining({
+      payload: serialize([block]),
       blockType: 'paragraph',
     }));
   });
@@ -115,7 +116,7 @@ describe('executeSave — create new blocks', () => {
 
     await executeSave('nb', 'note', editor, registry, snapshot);
 
-    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
+    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.objectContaining({
       afterNodeId: 'n1',
     }));
   });
@@ -129,7 +130,7 @@ describe('executeSave — create new blocks', () => {
 
     await executeSave('nb', 'note', editor, registry, snapshot);
 
-    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
+    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.objectContaining({
       beforeNodeId: 'n2',
     }));
   });
@@ -204,7 +205,7 @@ describe('executeSave — block type mapping', () => {
     const block = makeBlock('b1', blockNoteType);
     const editor = makeEditor([block], () => 'text');
     await executeSave('nb', 'note', editor, registry, new Map());
-    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.objectContaining({
+    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.objectContaining({
       blockType: serverType,
     }));
   });
@@ -229,7 +230,7 @@ describe('executeSave — legacy TEXT node migration', () => {
     await executeSave('nb', 'note', editor, registry, snapshot);
 
     expect(mockDelete).toHaveBeenCalledWith('nb', 'note', 'n-text');
-    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.any(String), expect.anything());
+    expect(mockCreate).toHaveBeenCalledWith('nb', 'note', expect.anything());
   });
 });
 

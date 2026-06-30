@@ -6,16 +6,23 @@ import uuid
 
 from fastapi import APIRouter, Response
 
-from assistant.api.dependencies import CurrentUserId, SessionDep, require_notebook_owner
+from assistant.api.dependencies import (
+    CurrentUserId,
+    SessionDep,
+    StorageDep,
+    require_notebook_owner,
+)
 from assistant.api.schemas.notes import NoteCreate, NoteResponse, NoteUpdate
 from assistant.api.schemas.pagination import Pagination
-from assistant.models.schema import Note
+from assistant.attachments.service import delete_file_record
+from assistant.models.schema import NodeType, Note
 from assistant.notes.exceptions import NoteNotFoundError
 from assistant.notes.service import (
     add_text_node,
     create_note,
     delete_note,
     get_note,
+    get_ordered_nodes,
     list_notes,
     update_note,
 )
@@ -116,9 +123,18 @@ def delete_note_endpoint(
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     session: SessionDep,
+    storage: StorageDep,
     user_id: CurrentUserId,
 ) -> Response:
     require_notebook_owner(session, notebook_id, user_id)
     _get_note_in_notebook(session, notebook_id, note_id)
+    nodes = get_ordered_nodes(session, note_id)
+    file_ids = [
+        n.attachment_id
+        for n in nodes
+        if n.node_type == NodeType.ATTACHMENT and n.attachment_id is not None
+    ]
     delete_note(session, note_id)
+    for file_id in file_ids:
+        delete_file_record(session, storage, file_id)
     return Response(status_code=204)
