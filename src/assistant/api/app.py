@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,9 +42,18 @@ def create_app(
         file_storage = LocalFileStorage(storage_path)
     app.state.file_storage = file_storage
 
+    # Behind the nginx-fronted deployment, the frontend and API share an origin and
+    # this middleware never runs for browser traffic; it only matters for local dev
+    # (Vite on :5173) and any other cross-origin caller. Override with a
+    # comma-separated list when a cross-origin frontend is actually in play.
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:5173"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

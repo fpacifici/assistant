@@ -1,6 +1,7 @@
 import { apiFetch, ApiError } from './client';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// See client.ts for why this is `??` and not `||`.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export interface FileRecord {
   id: string;

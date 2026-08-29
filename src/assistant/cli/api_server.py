@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 logging.basicConfig(
@@ -49,6 +50,15 @@ def main() -> int:
         host=args.host,
         port=args.port,
         reload=args.reload,
+        # Behind nginx, uvicorn only ever sees the proxy's IP and the original
+        # scheme is carried in X-Forwarded-Proto/X-Forwarded-For. Trust those
+        # headers so request.url.scheme reflects the client's actual scheme
+        # (auth.py relies on this to set the `secure` cookie flag correctly).
+        # The backend Service isn't exposed outside the cluster, so trusting
+        # the immediate peer unconditionally is safe here; narrow it with
+        # FORWARDED_ALLOW_IPS if that changes.
+        proxy_headers=True,
+        forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "*"),
     )
     return 0
 
