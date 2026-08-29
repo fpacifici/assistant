@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check dev dev-stop
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop
 
 # Default target
 help:
@@ -17,6 +17,10 @@ help:
 	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
 	@echo "  make services-down      - Stop and remove Docker Compose services (Postgres)"
 	@echo "  make server              - Start the FastAPI API server"
+	@echo "  make docker-build        - Build the API server Docker image"
+	@echo "  make docker-server       - Start the FastAPI API server in Docker"
+	@echo "  make docker-build-frontend - Build the nginx-fronted frontend Docker image"
+	@echo "  make docker-frontend     - Run the frontend image against the dockerized API server"
 	@echo "  make frontend-install    - Install frontend dependencies"
 	@echo "  make frontend-dev        - Start frontend dev server"
 	@echo "  make frontend-build      - Build frontend for production"
@@ -122,6 +126,44 @@ clean:
 server:
 	@echo "Starting API server on http://localhost:8000 ..."
 	@.venv/bin/python -m assistant.cli.api_server
+
+# Build the API server Docker image
+docker-build:
+	@echo "Building assistant-api Docker image..."
+	@docker build -f docker/backend/Dockerfile -t assistant-api .
+	@echo "✅ Docker image built"
+
+# Start the FastAPI API server in Docker (requires services-up for Postgres)
+docker-server: docker-build services-up
+	@echo "Starting API server in Docker on http://localhost:8000 ..."
+	@docker network create assistant-net >/dev/null 2>&1 || true
+	@docker run --rm -it \
+		--name assistant-api \
+		--network assistant-net \
+		-p 8000:8000 \
+		--add-host=host.docker.internal:host-gateway \
+		--env-file .env \
+		-e DATABASE_URL=postgresql://$${POSTGRES_USER:-assistant}:$${POSTGRES_PASSWORD:-assistant}@host.docker.internal:$${POSTGRES_PORT:-5432}/$${POSTGRES_DB:-assistant} \
+		assistant-api
+
+# Build the nginx-fronted frontend Docker image
+docker-build-frontend:
+	@echo "Building assistant-frontend Docker image..."
+	@docker build -f docker/frontend/Dockerfile -t assistant-frontend .
+	@echo "✅ Frontend Docker image built"
+
+# Run the frontend image, proxying API calls to the dockerized backend.
+# Requires `make docker-server` running in another shell (same assistant-net network).
+docker-frontend: docker-build-frontend
+	@echo "Starting frontend in Docker on http://localhost:8080 ..."
+	@docker network create assistant-net >/dev/null 2>&1 || true
+	@docker run --rm -it \
+		--name assistant-frontend \
+		--network assistant-net \
+		-p 8080:80 \
+		-e BACKEND_HOST=assistant-api \
+		-e BACKEND_PORT=8000 \
+		assistant-frontend
 
 # Install frontend dependencies
 frontend-install:

@@ -1,4 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+// `??` (not `||`): an empty string is a deliberate "same origin, use relative URLs"
+// setting for production builds behind a reverse proxy, and must not fall through
+// to the localhost default.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
