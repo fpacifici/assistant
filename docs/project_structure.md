@@ -33,6 +33,7 @@ assistant/
 ├── docs/                       # Documentation
 │   ├── architecture/           # System architecture
 │   ├── adr/                    # Architecture Decision Records
+│   ├── specs/                  # Specifications
 │   └── modules/                # Module documentation
 │       └── registry/
 ├── .claude/                    # Claude AI configuration

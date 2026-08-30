@@ -33,6 +33,9 @@ When working on the frontend:
 - Support for notes format: [`Markdown support`](docs/architecture/markdown.md)
 - Frontend architecture: [`Web frontend`](docs/architecture/frontend.md)
 
+## Specificaitons
+
+You find sepcs that defines constraints of what to implement in `docs/specs`
 
 ## Quick Start
 
