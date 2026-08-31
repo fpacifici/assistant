@@ -16,6 +16,7 @@ from assistant.models.schema import (
     User,
 )
 from assistant.notes.exceptions import (
+    DuplicateNotebookNameError,
     InvalidBlockTypeError,
     InvalidNodeTypeError,
     NodeNotFoundError,
@@ -32,7 +33,9 @@ from assistant.notes.service import (
     delete_node,
     delete_note,
     delete_notebook,
+    find_or_create_notebook,
     get_note,
+    get_note_by_external_id,
     get_notebook,
     get_ordered_nodes,
     insert_markdown_node,
@@ -40,6 +43,7 @@ from assistant.notes.service import (
     list_notebooks,
     list_notes,
     merge_text_nodes,
+    replace_markdown_nodes,
     split_text_node,
     update_markdown_node,
     update_text_node,
@@ -106,6 +110,41 @@ def test_delete_notebook_not_found(db_session: Session) -> None:
         delete_notebook(db_session, uuid.uuid4())
 
 
+def test_create_notebook_duplicate_name_raises(db_session: Session) -> None:
+    user = _make_user(db_session)
+    create_notebook(db_session, "Work", user.uid)
+
+    with pytest.raises(DuplicateNotebookNameError):
+        create_notebook(db_session, "Work", user.uid)
+
+
+def test_find_or_create_notebook_creates_when_absent(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = find_or_create_notebook(db_session, "Personal", user.uid)
+    assert nb.name == "Personal"
+    assert nb.owner_id == user.uid
+
+
+def test_find_or_create_notebook_returns_existing(db_session: Session) -> None:
+    user = _make_user(db_session)
+    created = create_notebook(db_session, "Personal", user.uid)
+
+    found = find_or_create_notebook(db_session, "Personal", user.uid)
+    assert found.id == created.id
+
+
+def test_find_or_create_notebook_returns_existing_regardless_of_owner(
+    db_session: Session,
+) -> None:
+    owner = _make_user(db_session, "owner@test.com")
+    other = _make_user(db_session, "other@test.com")
+    created = create_notebook(db_session, "Shared", owner.uid)
+
+    found = find_or_create_notebook(db_session, "Shared", other.uid)
+    assert found.id == created.id
+    assert found.owner_id == owner.uid
+
+
 # -----------------------------------------------------------------------
 # Note CRUD
 # -----------------------------------------------------------------------
@@ -142,6 +181,48 @@ def test_list_notes(db_session: Session) -> None:
     create_note(db_session, nb.id, user.uid, "Note 2")
 
     assert len(list_notes(db_session, nb.id)) == 2
+
+
+def test_create_note_with_external_id(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "My Note", external_id="abc123")
+
+    assert note.external_id == "abc123"
+
+
+def test_create_note_without_external_id_defaults_to_none(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "My Note")
+
+    assert note.external_id is None
+
+
+def test_get_note_by_external_id_found(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "My Note", external_id="abc123")
+
+    found = get_note_by_external_id(db_session, nb.id, "abc123")
+    assert found is not None
+    assert found.id == note.id
+
+
+def test_get_note_by_external_id_not_found(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user.uid)
+
+    assert get_note_by_external_id(db_session, nb.id, "missing") is None
+
+
+def test_get_note_by_external_id_scoped_per_notebook(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb1 = create_notebook(db_session, "Work", user.uid)
+    nb2 = create_notebook(db_session, "Personal", user.uid)
+    create_note(db_session, nb1.id, user.uid, "Note", external_id="same-hash")
+
+    assert get_note_by_external_id(db_session, nb2.id, "same-hash") is None
 
 
 def test_delete_note_cascades_nodes(db_session: Session) -> None:
@@ -600,3 +681,55 @@ def test_delete_markdown_node(db_session: Session) -> None:
 
     nodes = get_ordered_nodes(db_session, note.id)
     assert len(nodes) == 0
+
+
+# -----------------------------------------------------------------------
+# Replace markdown nodes (bulk import override)
+# -----------------------------------------------------------------------
+
+
+def test_replace_markdown_nodes_on_empty_note(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+
+    created = replace_markdown_nodes(
+        db_session,
+        note.id,
+        user.uid,
+        [("heading", "# Title"), ("paragraph", "Body text")],
+    )
+
+    assert [n.payload for n in created] == ["# Title", "Body text"]
+    nodes = get_ordered_nodes(db_session, note.id)
+    assert [n.payload for n in nodes] == ["# Title", "Body text"]
+    assert [n.block_type for n in nodes] == ["heading", "paragraph"]
+    assert nodes[0].position < nodes[1].position
+
+
+def test_replace_markdown_nodes_deletes_existing(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+    add_markdown_node(db_session, note.id, user.uid, "old content", "paragraph")
+
+    replace_markdown_nodes(db_session, note.id, user.uid, [("paragraph", "new content")])
+
+    nodes = get_ordered_nodes(db_session, note.id)
+    assert len(nodes) == 1
+    assert nodes[0].payload == "new content"
+
+
+def test_replace_markdown_nodes_touches_note_timestamp(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user.uid)
+    note = create_note(db_session, nb.id, user.uid, "N")
+    original_ts = note.update_timestamp.replace(tzinfo=None)
+
+    replace_markdown_nodes(db_session, note.id, user.uid, [("paragraph", "content")])
+
+    db_session.expire(note)
+    updated_ts = note.update_timestamp
+    if updated_ts.tzinfo is not None:
+        updated_ts = updated_ts.replace(tzinfo=None)
+    assert updated_ts >= original_ts

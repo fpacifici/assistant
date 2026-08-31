@@ -168,7 +168,10 @@ class Notebook(Base):
     """Notebook model."""
 
     __tablename__ = "notebooks"
-    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_notebook_name"),
+        {"schema": "assistant"},
+    )
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -197,7 +200,14 @@ class Note(Base):
     """Note model."""
 
     __tablename__ = "notes"
-    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+    __table_args__ = (
+        UniqueConstraint(
+            "notebook_id",
+            "external_id",
+            name="uq_note_notebook_external_id",
+        ),
+        {"schema": "assistant"},
+    )
 
     id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -215,6 +225,7 @@ class Note(Base):
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     creation_timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

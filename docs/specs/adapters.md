@@ -56,9 +56,10 @@ notes-import path, not removed, deleted, or migrated in this iteration.
 8. As the person running the import, I want links inside notes preserved, so
    that references to other pages or notes still work after import.
 9. As the person running the import, I want to know that tables and images are
-   not yet supported and are safely dropped rather than mangled into garbage
-   paragraphs, so that I get a clean (if incomplete) note instead of corrupted
-   content.
+   not yet supported, and to see a clear placeholder marking where they were
+   skipped rather than either mangled garbage paragraphs or silently missing
+   content, so that I get a clean, honest note instead of corrupted or
+   unexplained gaps.
 10. As the person running the import, I want everything not explicitly handled
     to fall back to a plain paragraph, so that no content is silently lost even
     when the parser doesn't understand its original structure.
@@ -151,8 +152,33 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     `MarkdownBlockType` has no separate ordered/unordered type).
   - `<h2>`–`<h6>` → `heading` blocks.
   - Links are preserved inline within block text.
-  - Tables and images are **ignored** for this iteration (dropped cleanly,
-    not converted into garbled text) and tracked as explicit TODOs.
+  - Tables and images are not rendered, but they are **not silently dropped**
+    either: each produces a single placeholder `paragraph` block, in its
+    original position, stating what kind of block was skipped (a table
+    becomes a paragraph reading `Skipped block: table`; an image becomes
+    `Skipped block: image`), so the note's structure and block count reflect
+    the original content. Real table/image rendering remains a TODO for a
+    future iteration (see Out of Scope).
+  - This placeholder treatment applies only to element types the parser
+    recognizes and deliberately does not render (currently: `table`, `img`).
+    It does **not** apply to inline `style`/`class` attributes, which
+    continue to be silently ignored throughout — a "skipped block"
+    placeholder is about skipped *content*, not skipped *styling*.
+  - Unhandled **container** elements (`div`, `article`, `section`, and the
+    like) are recursed into rather than treated as opaque: their handled
+    descendants still produce their normal structured blocks (headings,
+    list items, table/image placeholders) in document order, and the first
+    `<h1>` is consumed as the title wherever it sits in the tree, not only
+    at the top level. Only genuinely unhandled *leaf* content — an element
+    with no handled descendants — collapses to a single `paragraph`.
+  - When a container mixes loose text directly inside it alongside at
+    least one block-level child element (e.g. `<div>Some text<p>Body</p>
+    </div>`), only the block-level children are emitted as blocks; the
+    loose sibling text is not separately captured as its own `paragraph`.
+    This matches real-world exports, where meaningful content is
+    consistently wrapped in its own element rather than left as bare text
+    beside a block sibling — bare stray text next to a block is treated as
+    incidental whitespace/formatting, not content to preserve.
   - Everything else not explicitly handled → `paragraph`.
   - Inline styling (CSS) is ignored throughout.
 

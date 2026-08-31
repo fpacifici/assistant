@@ -20,6 +20,14 @@ class NotebookNotFoundError(NotesServiceError):
     """Raised when a notebook is not found."""
 
 
+class DuplicateNotebookNameError(NotesServiceError):
+    """Raised when creating a notebook whose name already exists."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"Notebook name already exists: {name}")
+
+
 class NoteNotFoundError(NotesServiceError):
     """Raised when a note is not found."""
 

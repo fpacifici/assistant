@@ -67,7 +67,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 
 from assistant.models.schema import (
     File,
@@ -79,6 +80,7 @@ from assistant.models.schema import (
     Notebook,
 )
 from assistant.notes.exceptions import (
+    DuplicateNotebookNameError,
     InvalidBlockTypeError,
     InvalidNodeTypeError,
     NodeNotFoundError,
@@ -105,8 +107,29 @@ def create_notebook(
 ) -> Notebook:
     notebook = Notebook(name=name, owner_id=owner_id)
     session.add(notebook)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateNotebookNameError(name) from None
     return notebook
+
+
+def find_or_create_notebook(
+    session: Session,
+    name: str,
+    owner_id: uuid.UUID,
+) -> Notebook:
+    """Return the existing Notebook named `name`, or create one owned by owner_id.
+
+    Notebook.name is globally unique, so an existing match may belong to a
+    different owner than owner_id — it is returned as-is, ownership is never
+    reassigned.
+    """
+    existing = session.scalar(select(Notebook).where(Notebook.name == name))
+    if existing is not None:
+        return existing
+    return create_notebook(session, name, owner_id)
 
 
 def get_notebook(
@@ -164,11 +187,14 @@ def create_note(
     notebook_id: uuid.UUID,
     owner_id: uuid.UUID,
     title: str,
+    *,
+    external_id: str | None = None,
 ) -> Note:
     note = Note(
         notebook_id=notebook_id,
         owner_id=owner_id,
         title=title,
+        external_id=external_id,
         update_timestamp=datetime.now(UTC),
     )
     session.add(note)
@@ -258,6 +284,20 @@ def get_ordered_nodes(
     """Return all nodes for a note, sorted by position."""
     stmt = select(Node).where(Node.note_id == note_id).order_by(Node.position)
     return list(session.scalars(stmt))
+
+
+def get_note_by_external_id(
+    session: Session,
+    notebook_id: uuid.UUID,
+    external_id: str,
+) -> Note | None:
+    """Look up a Note by its (notebook_id, external_id) dedup key. None if absent."""
+    return session.scalar(
+        select(Note).where(
+            Note.notebook_id == notebook_id,
+            Note.external_id == external_id,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +694,30 @@ def merge_text_nodes(
     _touch_note(session, target.note_id)
     session.flush()
     return target
+
+
+def replace_markdown_nodes(
+    session: Session,
+    note_id: uuid.UUID,
+    author_id: uuid.UUID,
+    blocks: list[tuple[str, str]],
+) -> list[Node]:
+    """Delete all of a note's existing nodes and recreate them from `blocks`.
+
+    `blocks` is a list of (block_type, payload) pairs, in order. Each
+    recreated node touches the note itself via `add_markdown_node`; if
+    `blocks` is empty, no nodes are created so the note is touched directly
+    here instead.
+    """
+    session.execute(delete(Node).where(Node.note_id == note_id))
+    if not blocks:
+        _touch_note(session, note_id)
+        session.flush()
+        return []
+    return [
+        add_markdown_node(session, note_id, author_id, payload, block_type)
+        for block_type, payload in blocks
+    ]
 
 
 def delete_node(

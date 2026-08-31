@@ -135,6 +135,7 @@ def init_database(engine: Engine | None = None) -> None:
     # Migrate existing databases: update node constraints for file-based attachments
     if engine.dialect.name == "postgresql":
         _migrate_node_attachment_constraints(engine)
+        _migrate_note_notebook_constraints(engine)
 
     with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
         checkpointer.setup()
@@ -200,5 +201,50 @@ def _migrate_node_attachment_constraints(engine: Engine) -> None:
                 text("ALTER TABLE assistant.nodes DROP CONSTRAINT ck_node_type_fields")
             )
             conn.execute(text(_new_ck))
+
+        conn.commit()
+
+
+def _migrate_note_notebook_constraints(engine: Engine) -> None:
+    """Add the Note/Notebook uniqueness constraints needed for notes-import dedup.
+
+    Safe to run on a fresh database (no-ops when create_all already created them).
+    """
+    _notebook_name_query = text("""
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        JOIN pg_namespace n ON t.relnamespace = n.oid
+        WHERE n.nspname = 'assistant'
+          AND t.relname = 'notebooks'
+          AND c.conname = 'uq_notebook_name'
+    """)
+    _note_external_id_query = text("""
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        JOIN pg_namespace n ON t.relnamespace = n.oid
+        WHERE n.nspname = 'assistant'
+          AND t.relname = 'notes'
+          AND c.conname = 'uq_note_notebook_external_id'
+    """)
+
+    with engine.connect() as conn:
+        if not conn.execute(_notebook_name_query).fetchone():
+            conn.execute(
+                text(
+                    "ALTER TABLE assistant.notebooks"
+                    " ADD CONSTRAINT uq_notebook_name UNIQUE (name)"
+                )
+            )
+
+        if not conn.execute(_note_external_id_query).fetchone():
+            conn.execute(
+                text(
+                    "ALTER TABLE assistant.notes"
+                    " ADD CONSTRAINT uq_note_notebook_external_id"
+                    " UNIQUE (notebook_id, external_id)"
+                )
+            )
 
         conn.commit()
