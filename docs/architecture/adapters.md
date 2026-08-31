@@ -148,3 +148,31 @@ A CLI script is also added to trigger this flow.
 - A `plugin` submodules contains the implementations, while the interface is inside the `adapters` module.
 - This is not the only module using postgres. All the SQLAlchemy models and postgres
   connection code is in a `models` module, directly in `assistant` package.
+
+## Notes Import
+
+Alongside `ExternalSource` (incremental sync into the RAG `Document`/vector-store
+pipeline), the adapters module also defines `ImportSource`: an abstraction for
+one-shot bulk imports of external content directly into the notes system
+(`Notebook`/`Note`/`Node`), bypassing `Document` and the vector store entirely.
+
+`ImportSource` mirrors `ExternalSource`'s two-method shape but is not
+incremental — there is no `since` cursor, and fetching a document returns
+content already parsed into storable blocks rather than raw bytes:
+
+- `list_documents()` — returns identifiers for every document available to
+  import (source-specific traversal, e.g. walking a directory tree).
+- `get_note(document_id)` — fetches and parses one document, returning its
+  target notebook name, title, and ordered blocks ready to persist as
+  `MarkdownNode`s.
+
+The only implementation today is `HTMLFileImportSource`, which treats a root
+directory's immediate subdirectories as notebooks and each `.html` file inside
+as one note. There is no `Registry`/DB-config layer for `ImportSource`
+instances yet — a single implementation is constructed directly by its CLI
+entrypoint. Import runs are orchestrated by a pipeline (`notes_import.py`,
+shaped like `dataload.py`) that drives an `ImportSource` and writes through
+`notes/service.py`.
+
+See `docs/specs/adapters.md` for the HTML adapter's detailed parsing and
+import/override semantics.
