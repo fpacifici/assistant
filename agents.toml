@@ -19,3 +19,7 @@ source = "garrytan/gstack"
 [[skills]]
 name = "grill-me"
 source = "mattpocock/skills"
+
+[[skills]]
+name = "grill-with-docs"
+source = "mattpocock/skills"
