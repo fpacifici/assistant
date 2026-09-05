@@ -24,69 +24,69 @@ erDiagram
     AttachmentNode ||--|| AttachmentMetadata : "composed"
 
     User {
-        uid: UUID PK
-        email: STRING
-        firstname: STRING
-        lastname: STRING
+        UUID uid PK
+        STRING email
+        STRING firstname
+        STRING lastname
     }
 
     Notebook {
-        id: UUID PK
-        name: STRING
-        owner: UUID FK
+        UUID id PK
+        STRING name
+        UUID owner FK
     }
 
     Note {
-        id: UUID PK
-        notebook: UUID FK
-        owner: UUID FK
-        title: STRING
-        creation_timestamp: DATETIME
-        update_timestamp: DATETIME
+        UUID id PK
+        UUID notebook FK
+        UUID owner FK
+        STRING title
+        DATETIME creation_timestamp
+        DATETIME update_timestamp
     }
 
     TextNode {
-        id: UUID PK
-        note_id: UUID FK
-        position: VARCHAR
-        author: UUID FK
-        payload: STRING
+        UUID id PK
+        UUID note_id FK
+        VARCHAR position
+        UUID author FK
+        STRING payload
     }
 
     MarkdownNode {
-        id: UUID PK
-        note_id: UUID FK
-        position: VARCHAR
-        author: UUID FK
-        payload: STRING
-        block_type: STRING
+        UUID id PK
+        UUID note_id FK
+        VARCHAR position
+        UUID author FK
+        STRING payload
+        STRING block_type
     }
 
     AttachmentNode {
-        id: UUID PK
-        note_id: UUID FK
-        position: VARCHAR
-        author: UUID FK
-        attachment: UUID FK
+        UUID id PK
+        UUID note_id FK
+        VARCHAR position
+        UUID author FK
+        UUID attachment FK
     }
 
     AttachmentMetadata {
-        id: UUID PK
-        path: STRING
+        UUID id PK
+        STRING path
     }
 
     Permission {
-        name: STRING
+        STRING name
     }
 
     Entitlement {
-        principal: UUID FK
-        permission: STRING FK
-        subject: UUID FK
+        UUID principal FK
+        STRING permission FK
+        UUID subject FK
     }
 
     Role {
-        name: STRING PK
+        STRING name PK
     }
 
     User ||--o{ Entitlement : "has"
