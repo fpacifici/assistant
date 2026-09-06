@@ -53,12 +53,12 @@ def client(db_session: Session, file_storage: LocalFileStorage) -> Iterator[Test
 
 @pytest.fixture
 def notebook(db_session: Session, test_user: User) -> Notebook:
-    return create_notebook(db_session, "NB", test_user.uid)
+    return create_notebook(db_session, "NB", test_user)
 
 
 @pytest.fixture
 def note(db_session: Session, test_user: User, notebook: Notebook) -> Note:
-    return create_note(db_session, notebook.id, test_user.uid, "Note")
+    return create_note(db_session, notebook.id, test_user, "Note")
 
 
 # ── POST /files ───────────────────────────────────────────────────────────────

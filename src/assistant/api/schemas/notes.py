@@ -7,6 +7,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from assistant.models.schema import PermissionName
+
 
 class NoteCreate(BaseModel):
     title: str
@@ -25,3 +27,4 @@ class NoteResponse(BaseModel):
     title: str
     creation_timestamp: datetime
     update_timestamp: datetime
+    permissions: list[PermissionName]

@@ -12,6 +12,7 @@ from assistant.notes.exceptions import (
     InvalidBlockTypeError,
     NodeVersionConflictError,
     NotesServiceError,
+    PermissionDeniedError,
     UserNotFoundError,
 )
 
@@ -42,6 +43,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: NodeVersionConflictError,
     ) -> JSONResponse:
         return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(PermissionDeniedError)
+    async def permission_denied_handler(
+        request: Request,  # noqa: ARG001
+        exc: PermissionDeniedError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(

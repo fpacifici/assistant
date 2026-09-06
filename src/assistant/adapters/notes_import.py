@@ -21,11 +21,10 @@ from assistant.notes.service import (
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.orm import Session
 
     from assistant.adapters.import_source import ImportSource
+    from assistant.models.schema import User
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ def compute_external_id(title: str) -> str:
 def run_import(
     session: Session,
     import_source: ImportSource,
-    owner_id: uuid.UUID,
+    owner: User,
     *,
     override: bool = False,
 ) -> ImportStats:
@@ -72,7 +71,7 @@ def run_import(
     Args:
         session: Database session.
         import_source: Source to list and fetch documents from.
-        owner_id: User who will own every notebook/note created by this run.
+        owner: User who will own every notebook/note created by this run.
         override: If True, wholesale-replace already-imported notes' nodes
             with freshly parsed content instead of skipping them.
 
@@ -93,7 +92,7 @@ def run_import(
                 notes_skipped_web_clip += 1
                 continue
 
-            notebook = find_or_create_notebook(session, imported.notebook_name, owner_id)
+            notebook = find_or_create_notebook(session, imported.notebook_name, owner)
             notebooks_touched.add(imported.notebook_name)
 
             external_id = compute_external_id(imported.parsed.title)
@@ -104,16 +103,16 @@ def run_import(
                 note = create_note(
                     session,
                     notebook.id,
-                    owner_id,
+                    owner,
                     imported.parsed.title,
                     external_id=external_id,
                 )
                 for block_type, payload in blocks:
-                    add_markdown_node(session, note.id, owner_id, payload, block_type)
+                    add_markdown_node(session, note.id, owner, payload, block_type)
                 session.commit()
                 notes_created += 1
             elif override:
-                replace_markdown_nodes(session, existing.id, owner_id, blocks)
+                replace_markdown_nodes(session, existing.id, owner, blocks)
                 session.commit()
                 notes_overridden += 1
             else:

@@ -140,3 +140,28 @@ def make_auth_headers(user_id: uuid.UUID) -> dict[str, str]:
 @pytest.fixture
 def auth_headers(test_user: User) -> dict[str, str]:
     return make_auth_headers(test_user.uid)
+
+
+@pytest.fixture
+def other_user(db_session: Session) -> User:
+    user = User(
+        email="other@example.com",
+        firstname="Other",
+        lastname="User",
+    )
+    db_session.add(user)
+    db_session.flush()
+
+    credential = Credential(
+        user_id=user.uid,
+        provider="password",
+        credential_hash="$argon2id$v=19$m=65536,t=3,p=4$placeholder$placeholder",
+    )
+    db_session.add(credential)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def other_auth_headers(other_user: User) -> dict[str, str]:
+    return make_auth_headers(other_user.uid)

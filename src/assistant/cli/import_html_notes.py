@@ -82,7 +82,7 @@ def main() -> int:
             return 1
 
         import_source = HTMLFileImportSource(args.root_dir)
-        stats = run_import(session, import_source, user.uid, override=args.override)
+        stats = run_import(session, import_source, user, override=args.override)
         logger.info("Import complete: %s", stats)
 
     return 0

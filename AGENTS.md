@@ -287,7 +287,9 @@ pytest tests/test_specific.py::test_function_name
 
 API route handlers must not mutate ORM entities directly. All data
 operations (create, read, update, delete) go through service functions in
-`src/assistant/notes/service.py` or `src/assistant/notes/user_service.py`.
+`src/assistant/notes/service.py`, `src/assistant/notes/user_service.py`,
+`src/assistant/notes/entitlements.py` (grant/revoke access), or
+`src/assistant/notes/permissions.py` (read-only permission evaluation).
 The service layer owns flush/transaction semantics; the API layer owns
 HTTP concerns (request parsing, response serialization, session commit).
 

@@ -13,25 +13,23 @@ The API is an OpenAPI implemented with FastAPI. It follows the REST principles.
 
 ### Authentication
 
-We support two modes for authentication:
+We support two modes for authentication, both JWT-based:
 
-- JWT Token + refresh token passed as Httponly cookies. This is for interactions
-  with the web UI
+- A short-lived access token + a refresh token, passed as `Authorization:
+  Bearer` headers. This is for direct API access.
+- The same tokens, passed as `HttpOnly` cookies (`access_token`,
+  `refresh_token`) instead. This is for the web UI.
 
-- Oauth2 style access token + refresh token for direct API access and mobile apps.
+A request may use the Bearer header or the cookie, never both at once — the
+API rejects a request that supplies both with a 401. `POST /auth/login`
+authenticates with email/password (identities stored in the DB, password
+hashed) and returns both tokens; `POST /auth/refresh` rotates them.
 
-We will support two authentication mechanisms:
+Every endpoint below that needs to know the acting user (essentially all
+notebook/note/node/sharing endpoints) resolves it from the access token —
+there is no `X-User-Id` header or other unauthenticated identification.
 
-- user name and password. Identities are stored in the DB
-
-- Google OAuth2 authentication
-
-All tokens are stored in the DB for now.
-
-**Current state**: Authentication is not yet implemented. The API uses an
-`X-User-Id` header to identify the acting user. Endpoints that need to
-know the current user (creating notebooks, listing notebooks, creating
-notes) require this header. It will be replaced by JWT-based auth.
+Google OAuth2 authentication is planned but not yet implemented.
 
 ### User
 
@@ -84,7 +82,8 @@ Request body:
 
 `POST /notebook`
 
-Create a notebook. Requires `X-User-Id` header.
+Create a notebook. The caller becomes its owner (auto-granted the
+`notebook_owner` role).
 
 Request body:
 ```json
@@ -98,24 +97,35 @@ Response (201):
 {
     "id": "uuid",
     "name": "My Notebook",
-    "owner_id": "uuid"
+    "owner_id": "uuid",
+    "permissions": ["view_notebook", "update_notebook", "..."]
 }
 ```
 
+`permissions` is the caller's own effective permission set on this exact
+object (see Sharing below) — every Notebook/Note response carries it, not
+just this one.
+
 `GET /notebook`
 
-List notebooks for the current user. Requires `X-User-Id` header.
-Supports pagination via query parameters:
+List notebooks visible to the current user: notebooks they have an
+entitlement on directly, plus any notebook containing at least one note
+they have an entitlement on (only that note is then visible when listing
+its notes). Supports pagination via query parameters:
 - `offset` (default: 0)
 - `limit` (default: 20, max: 100)
 
 `GET /notebook/{id}`
 
-Retrieve a single notebook by UUID. Returns 404 if not found.
+Retrieve a single notebook by UUID. Returns 404 if the caller cannot even
+view it (whether or not it exists — visibility and existence are
+indistinguishable to an unauthorized caller).
 
 `PATCH /notebook/{id}`
 
-Update a notebook. Currently only `name` can be updated.
+Update a notebook. Currently only `name` can be updated. Requires the
+`update_notebook` permission; 403 if the caller can view the notebook but
+lacks it.
 
 Request body:
 ```json
@@ -126,14 +136,16 @@ Request body:
 
 `DELETE /notebook/{id}`
 
-Delete a notebook and all its notes (cascade). Returns 204 on success,
-404 if not found.
+Delete a notebook and all its notes (cascade). Requires `delete_notebook`.
+Returns 204 on success, 404 if not visible, 403 if visible but lacking the
+permission.
 
 ### Notes
 
 `POST /notebook/{notebook_id}/note`
 
-Create a note in a notebook. Requires `X-User-Id` header.
+Create a note in a notebook. Requires the `create_notes` permission on the
+notebook; the caller becomes the note's owner (auto-granted `note_owner`).
 When creating a note we do not provide the nodes.
 
 Request body:
@@ -151,24 +163,28 @@ Response (201):
     "owner_id": "uuid",
     "title": "My Note",
     "creation_timestamp": "2026-01-01T00:00:00Z",
-    "update_timestamp": "2026-01-01T00:00:00Z"
+    "update_timestamp": "2026-01-01T00:00:00Z",
+    "permissions": ["view_note", "update", "delete_note", "share_note"]
 }
 ```
 
 `GET /notebook/{notebook_id}/note`
 
-List notes in a notebook. Supports pagination via `offset` and `limit`
-query parameters.
+List notes visible to the caller in this notebook: all of them if the
+caller holds `list_notes`/`view_notes`/`own_notes` on the notebook,
+otherwise only the notes the caller has a direct entitlement on. Supports
+pagination via `offset` and `limit` query parameters.
 
 `GET /notebook/{notebook_id}/note/{note_id}`
 
 Retrieve a single note. The note must belong to the specified notebook,
-otherwise returns 404.
+otherwise returns 404. Also 404 if the caller lacks `view_note`.
 
 `PATCH /notebook/{notebook_id}/note/{note_id}`
 
 Update a note. Currently only `title` can be updated. The note must
-belong to the specified notebook.
+belong to the specified notebook. Requires `update`; 403 if visible but
+lacking it.
 
 Request body:
 ```json
@@ -180,7 +196,9 @@ Request body:
 `DELETE /notebook/{notebook_id}/note/{note_id}`
 
 Delete a note and all its nodes (cascade). The note must belong to
-the specified notebook. Returns 204 on success, 404 if not found.
+the specified notebook. Allowed via `delete_note` on the note directly, or
+`delete_notes`/`own_notes` on the parent notebook. Returns 204 on success,
+404 if not visible, 403 if visible but lacking the permission.
 
 ### Nodes
 
@@ -217,7 +235,7 @@ Response (200):
 
 `POST /notebook/{notebook_id}/note/{note_id}/node`
 
-Requires `X-User-Id` header.
+Requires `update` on the note (node mutations are note content edits).
 
 Request body:
 ```json
@@ -321,6 +339,44 @@ Response (201):
 
 Deletes a node. Idempotent — returns 204 whether or not the node existed.
 
+### Sharing
+
+Granting/revoking access — one pair of mirrored endpoint sets, nested under
+notebooks and notes respectively. See
+`docs/specs/0003_role_based_access_control.md` for the full role/permission
+catalog and escalation rules.
+
+```
+POST   /notebook/{notebook_id}/share      body: {email, role}   -> Entitlement (201)
+GET    /notebook/{notebook_id}/share                             -> list[Entitlement]
+DELETE /notebook/{notebook_id}/share/{entitlement_id}            -> 204
+
+POST   /notebook/{notebook_id}/note/{note_id}/share   body: {email, role}  -> Entitlement (201)
+GET    /notebook/{notebook_id}/note/{note_id}/share                        -> list[Entitlement]
+DELETE /notebook/{notebook_id}/note/{note_id}/share/{entitlement_id}       -> 204
+```
+
+`role` must be one of the three notebook roles (`notebook_owner`,
+`notebook_viewer`, `notebook_editor`) for the notebook endpoints, or one of
+the three note roles (`note_owner`, `note_viewer`, `note_editor`) for the
+note endpoints — a role from the wrong subject type is a 422, not a 403.
+
+Sharing/listing/revoking all require `share_notebook`/`share_note` on the
+subject, and a grant or revoke can never exceed the caller's own current
+effective permission level there (403 if it would). Sharing with an email
+that has no account is a 404 — there is no pending-invite flow.
+
+Entitlement response shape:
+```json
+{
+    "id": "uuid",
+    "principal_id": "uuid",
+    "principal_email": "grantee@example.com",
+    "role": "notebook_viewer",
+    "created_at": "2026-01-01T00:00:00Z"
+}
+```
+
 ### Error Responses
 
 All error responses follow the format:
@@ -331,7 +387,12 @@ All error responses follow the format:
 ```
 
 Status codes:
-- 404: Resource not found
+- 401: Not authenticated (missing/invalid/ambiguous credentials)
+- 403: Authenticated and can view the resource, but lacks the specific
+  permission for the action (RBAC)
+- 404: Resource not found, or the caller cannot even view it (a subject
+  that exists but is invisible to the caller is indistinguishable from one
+  that doesn't exist)
 - 409: Conflict (duplicate email, version conflict)
 - 422: Validation error (missing/invalid fields or headers)
 

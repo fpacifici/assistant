@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+from assistant.models.schema import Entitlement, RoleName
 from assistant.models.schema import User as UserModel
 from assistant.notes.service import create_notebook
 
@@ -32,6 +33,17 @@ class TestCreateNotebook:
         data = response.json()
         assert data["name"] == "My Notebook"
         assert "id" in data
+        assert set(data["permissions"]) == {
+            "view_notebook",
+            "update_notebook",
+            "delete_notebook",
+            "create_notes",
+            "list_notes",
+            "own_notes",
+            "delete_notes",
+            "view_notes",
+            "share_notebook",
+        }
 
     def test_create_notebook_missing_header(
         self,
@@ -52,8 +64,8 @@ class TestListNotebooks:
         test_user: User,
         db_session: Session,
     ) -> None:
-        create_notebook(db_session, "NB1", test_user.uid)
-        create_notebook(db_session, "NB2", test_user.uid)
+        create_notebook(db_session, "NB1", test_user)
+        create_notebook(db_session, "NB2", test_user)
 
         response = client.get("/notebook", headers=auth_headers)
         assert response.status_code == 200
@@ -68,7 +80,7 @@ class TestListNotebooks:
         db_session: Session,
     ) -> None:
         for i in range(5):
-            create_notebook(db_session, f"NB{i}", test_user.uid)
+            create_notebook(db_session, f"NB{i}", test_user)
 
         response = client.get(
             "/notebook",
@@ -92,8 +104,8 @@ class TestListNotebooks:
         db_session.add(other)
         db_session.flush()
 
-        create_notebook(db_session, "Mine", test_user.uid)
-        create_notebook(db_session, "Theirs", other.uid)
+        create_notebook(db_session, "Mine", test_user)
+        create_notebook(db_session, "Theirs", other)
 
         response = client.get(
             "/notebook",
@@ -111,7 +123,7 @@ class TestGetNotebook:
         test_user: User,
         db_session: Session,
     ) -> None:
-        nb = create_notebook(db_session, "Test NB", test_user.uid)
+        nb = create_notebook(db_session, "Test NB", test_user)
         response = client.get(f"/notebook/{nb.id}", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["name"] == "Test NB"
@@ -133,7 +145,7 @@ class TestGetNotebook:
         other = UserModel(email="other2@test.com", firstname="O", lastname="U")
         db_session.add(other)
         db_session.flush()
-        nb = create_notebook(db_session, "Other NB", other.uid)
+        nb = create_notebook(db_session, "Other NB", other)
 
         response = client.get(
             f"/notebook/{nb.id}",
@@ -150,7 +162,7 @@ class TestUpdateNotebook:
         test_user: User,
         db_session: Session,
     ) -> None:
-        nb = create_notebook(db_session, "Old Name", test_user.uid)
+        nb = create_notebook(db_session, "Old Name", test_user)
         response = client.patch(
             f"/notebook/{nb.id}",
             json={"name": "New Name"},
@@ -158,6 +170,46 @@ class TestUpdateNotebook:
         )
         assert response.status_code == 200
         assert response.json()["name"] == "New Name"
+
+    def test_update_notebook_by_other_user_returns_404(
+        self,
+        client: TestClient,
+        test_user: User,
+        other_auth_headers: dict[str, str],
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "Old Name", test_user)
+        response = client.patch(
+            f"/notebook/{nb.id}",
+            json={"name": "Sneaky"},
+            headers=other_auth_headers,
+        )
+        assert response.status_code == 404
+
+    def test_update_notebook_by_viewer_returns_403(
+        self,
+        client: TestClient,
+        test_user: User,
+        other_user: User,
+        other_auth_headers: dict[str, str],
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "Old Name", test_user)
+        db_session.add(
+            Entitlement(
+                principal_id=other_user.uid,
+                notebook_id=nb.id,
+                role_name=RoleName.NOTEBOOK_VIEWER.value,
+            ),
+        )
+        db_session.flush()
+
+        response = client.patch(
+            f"/notebook/{nb.id}",
+            json={"name": "Sneaky"},
+            headers=other_auth_headers,
+        )
+        assert response.status_code == 403
 
 
 class TestDeleteNotebook:
@@ -168,7 +220,7 @@ class TestDeleteNotebook:
         test_user: User,
         db_session: Session,
     ) -> None:
-        nb = create_notebook(db_session, "To Delete", test_user.uid)
+        nb = create_notebook(db_session, "To Delete", test_user)
         response = client.delete(f"/notebook/{nb.id}", headers=auth_headers)
         assert response.status_code == 204
 

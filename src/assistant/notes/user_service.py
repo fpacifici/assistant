@@ -37,6 +37,16 @@ def get_user(
     return user
 
 
+def get_user_by_email(
+    session: Session,
+    email: str,
+) -> User:
+    user = session.scalar(select(User).where(User.email == email))
+    if user is None:
+        raise UserNotFoundError(email)
+    return user
+
+
 def list_users(
     session: Session,
     *,

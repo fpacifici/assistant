@@ -5,13 +5,17 @@ import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
 import { fetchNodes } from '../api/nodes';
+import { fetchNote } from '../api/notes';
 import { ServerRegistry } from '../markdown/serverRegistry';
 import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
 import MarkdownToolbar from './MarkdownToolbar';
 import AttachmentList from './AttachmentList';
 import DebugBlockView from './DebugBlockView';
+import ShareDialog from './ShareDialog';
 import type { NoteNode } from '../types';
+
+const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
@@ -21,6 +25,7 @@ export default function NoteEditor() {
   const [isDirty, setIsDirty] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
+  const [sharing, setSharing] = useState(false);
 
   const registry = useRef(new ServerRegistry());
   const snapshotRef = useRef<Map<string, string>>(new Map());
@@ -28,11 +33,24 @@ export default function NoteEditor() {
 
   const editor = useCreateBlockNote();
 
+  const { data: note } = useQuery({
+    queryKey: ['note', notebookId, noteId],
+    queryFn: () => fetchNote(notebookId!, noteId!),
+    enabled: !!notebookId && !!noteId,
+  });
+
   const { data: nodes, isLoading } = useQuery({
     queryKey: ['nodes', notebookId, noteId],
     queryFn: () => fetchNodes(notebookId!, noteId!),
     enabled: !!notebookId && !!noteId,
   });
+
+  const canUpdate = note?.permissions.includes('update') ?? false;
+  const canShare = note?.permissions.includes('share_note') ?? false;
+
+  useEffect(() => {
+    editor.isEditable = canUpdate;
+  }, [editor, canUpdate]);
 
   // Load server nodes into the BlockNote editor; keep attachments separate
   useEffect(() => {
@@ -128,7 +146,7 @@ export default function NoteEditor() {
       </div>
       <AttachmentList nodes={attachmentNodes} />
       <div className="editor-toolbar">
-        <button onClick={handleSave} disabled={!isDirty || saving}>
+        <button onClick={handleSave} disabled={!isDirty || saving || !canUpdate}>
           {saving ? 'Saving...' : 'Save'}
         </button>
         <button
@@ -137,6 +155,11 @@ export default function NoteEditor() {
         >
           {debugOpen ? 'Hide Debug' : 'Debug'}
         </button>
+        {canShare && (
+          <button className="share-btn" onClick={() => setSharing(true)}>
+            Share
+          </button>
+        )}
         {status && (
           <span
             className={`status ${
@@ -147,6 +170,15 @@ export default function NoteEditor() {
           </span>
         )}
       </div>
+      {sharing && notebookId && noteId && (
+        <ShareDialog
+          subjectType="note"
+          notebookId={notebookId}
+          noteId={noteId}
+          roleOptions={NOTE_ROLE_OPTIONS}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </div>
   );
 }

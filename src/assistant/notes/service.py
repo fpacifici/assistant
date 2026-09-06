@@ -60,6 +60,19 @@ Example — merging the second node into the first::
     "V"   "A paragraph"     "V"   "A paragraphSecond" (version 2)
     "VV"  "Second"          (deleted)
     "d"   "Third"           "d"   "Third"
+
+Authorization
+~~~~~~~~~~~~~
+Every function that reads or mutates an *existing* Notebook/Note/Node takes
+the acting ``User`` (never a raw id — the actor can only ever be a User) and
+enforces permissions itself via ``notes/permissions.py`` (see
+``docs/specs/0003_role_based_access_control.md``). Functions that only ever
+act on behalf of their own creator (``create_notebook``, ``create_note``,
+and the node-creation functions, which already took an ``author``) reuse
+that existing parameter as the caller — no redundant second identity
+parameter. Creating a Notebook or Note auto-grants its creator the matching
+owner role, in the same transaction as the subject's own insert (see
+``_grant_owner_entitlement``).
 """
 
 from __future__ import annotations
@@ -67,10 +80,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from assistant.models.schema import (
+    Entitlement,
     File,
     FileState,
     MarkdownBlockType,
@@ -78,6 +92,9 @@ from assistant.models.schema import (
     NodeType,
     Note,
     Notebook,
+    PermissionName,
+    RoleName,
+    User,
 )
 from assistant.notes.exceptions import (
     DuplicateNotebookNameError,
@@ -87,6 +104,13 @@ from assistant.notes.exceptions import (
     NodeVersionConflictError,
     NotebookNotFoundError,
     NoteNotFoundError,
+)
+from assistant.notes.permissions import (
+    can_view_notebook,
+    notebook_permissions,
+    require_note_access,
+    require_note_delete_access,
+    require_notebook_access,
 )
 from assistant.notes.positions import generate_position_between
 
@@ -100,56 +124,102 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _grant_owner_entitlement(
+    session: Session,
+    principal: User,
+    role_name: RoleName,
+    *,
+    note_id: uuid.UUID | None = None,
+    notebook_id: uuid.UUID | None = None,
+) -> None:
+    session.add(
+        Entitlement(
+            principal_id=principal.uid,
+            role_name=role_name.value,
+            note_id=note_id,
+            notebook_id=notebook_id,
+        ),
+    )
+    session.flush()
+
+
 def create_notebook(
     session: Session,
     name: str,
-    owner_id: uuid.UUID,
+    owner: User,
 ) -> Notebook:
-    notebook = Notebook(name=name, owner_id=owner_id)
+    notebook = Notebook(name=name, owner_id=owner.uid)
     session.add(notebook)
     try:
         session.flush()
     except IntegrityError:
         session.rollback()
         raise DuplicateNotebookNameError(name) from None
+    _grant_owner_entitlement(
+        session,
+        owner,
+        RoleName.NOTEBOOK_OWNER,
+        notebook_id=notebook.id,
+    )
     return notebook
 
 
 def find_or_create_notebook(
     session: Session,
     name: str,
-    owner_id: uuid.UUID,
+    owner: User,
 ) -> Notebook:
-    """Return the existing Notebook named `name`, or create one owned by owner_id.
+    """Return the existing Notebook named `name`, or create one owned by owner.
 
     Notebook.name is globally unique, so an existing match may belong to a
-    different owner than owner_id — it is returned as-is, ownership is never
+    different owner than `owner` — it is returned as-is, ownership is never
     reassigned.
     """
     existing = session.scalar(select(Notebook).where(Notebook.name == name))
     if existing is not None:
         return existing
-    return create_notebook(session, name, owner_id)
+    return create_notebook(session, name, owner)
 
 
 def get_notebook(
     session: Session,
     notebook_id: uuid.UUID,
+    caller: User,
 ) -> Notebook:
-    notebook = session.get(Notebook, notebook_id)
-    if notebook is None:
-        raise NotebookNotFoundError(str(notebook_id))
-    return notebook
+    return require_notebook_access(
+        session,
+        notebook_id,
+        caller,
+        PermissionName.VIEW_NOTEBOOK,
+    )
 
 
 def list_notebooks(
     session: Session,
-    owner_id: uuid.UUID,
+    caller: User,
     *,
     offset: int = 0,
     limit: int | None = None,
 ) -> list[Notebook]:
-    stmt = select(Notebook).where(Notebook.owner_id == owner_id).offset(offset)
+    """Notebooks visible to the caller.
+
+    Either directly (any entitlement on the notebook itself) or because the
+    notebook contains at least one note the caller holds any entitlement on.
+    """
+    stmt = select(Notebook).where(
+        or_(
+            exists().where(
+                Entitlement.principal_id == caller.uid,
+                Entitlement.notebook_id == Notebook.id,
+            ),
+            exists().where(
+                Entitlement.principal_id == caller.uid,
+                Entitlement.note_id == Note.id,
+                Note.notebook_id == Notebook.id,
+            ),
+        ),
+    )
+    stmt = stmt.offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
@@ -158,10 +228,16 @@ def list_notebooks(
 def update_notebook(
     session: Session,
     notebook_id: uuid.UUID,
+    caller: User,
     *,
     name: str | None = None,
 ) -> Notebook:
-    notebook = get_notebook(session, notebook_id)
+    notebook = require_notebook_access(
+        session,
+        notebook_id,
+        caller,
+        PermissionName.UPDATE_NOTEBOOK,
+    )
     if name is not None:
         notebook.name = name
     session.flush()
@@ -171,8 +247,14 @@ def update_notebook(
 def delete_notebook(
     session: Session,
     notebook_id: uuid.UUID,
+    caller: User,
 ) -> None:
-    notebook = get_notebook(session, notebook_id)
+    notebook = require_notebook_access(
+        session,
+        notebook_id,
+        caller,
+        PermissionName.DELETE_NOTEBOOK,
+    )
     session.delete(notebook)
     session.flush()
 
@@ -185,41 +267,71 @@ def delete_notebook(
 def create_note(
     session: Session,
     notebook_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    owner: User,
     title: str,
     *,
     external_id: str | None = None,
 ) -> Note:
+    require_notebook_access(session, notebook_id, owner, PermissionName.CREATE_NOTES)
     note = Note(
         notebook_id=notebook_id,
-        owner_id=owner_id,
+        owner_id=owner.uid,
         title=title,
         external_id=external_id,
         update_timestamp=datetime.now(UTC),
     )
     session.add(note)
     session.flush()
+    _grant_owner_entitlement(session, owner, RoleName.NOTE_OWNER, note_id=note.id)
     return note
 
 
 def get_note(
     session: Session,
     note_id: uuid.UUID,
+    caller: User,
 ) -> Note:
-    note = session.get(Note, note_id)
-    if note is None:
-        raise NoteNotFoundError(str(note_id))
-    return note
+    return require_note_access(session, note_id, caller, PermissionName.VIEW_NOTE)
 
 
 def list_notes(
     session: Session,
     notebook_id: uuid.UUID,
+    caller: User,
     *,
     offset: int = 0,
     limit: int | None = None,
 ) -> list[Note]:
-    stmt = select(Note).where(Note.notebook_id == notebook_id).offset(offset)
+    """Notes visible to the caller in this notebook.
+
+    All notes, if the caller holds LIST_NOTES/VIEW_NOTES/OWN_NOTES on the
+    notebook; otherwise only the notes the caller holds a direct
+    entitlement on.
+
+    Visibility here is `can_view_notebook` (which also covers "I can see
+    this notebook only because I hold an entitlement on one note inside
+    it"), not a `VIEW_NOTEBOOK` permission check — sharing a single note
+    must not require also granting a notebook-level permission.
+    """
+    if not can_view_notebook(session, caller, notebook_id):
+        raise NotebookNotFoundError(str(notebook_id))
+    perms = notebook_permissions(session, caller, notebook_id)
+    listable = {
+        PermissionName.LIST_NOTES,
+        PermissionName.VIEW_NOTES,
+        PermissionName.OWN_NOTES,
+    }
+    if perms & listable:
+        stmt = select(Note).where(Note.notebook_id == notebook_id)
+    else:
+        stmt = select(Note).where(
+            Note.notebook_id == notebook_id,
+            exists().where(
+                Entitlement.principal_id == caller.uid,
+                Entitlement.note_id == Note.id,
+            ),
+        )
+    stmt = stmt.offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
@@ -228,10 +340,11 @@ def list_notes(
 def update_note(
     session: Session,
     note_id: uuid.UUID,
+    caller: User,
     *,
     title: str | None = None,
 ) -> Note:
-    note = get_note(session, note_id)
+    note = require_note_access(session, note_id, caller, PermissionName.UPDATE)
     if title is not None:
         note.title = title
     _touch_note(session, note_id)
@@ -242,8 +355,9 @@ def update_note(
 def delete_note(
     session: Session,
     note_id: uuid.UUID,
+    caller: User,
 ) -> None:
-    note = get_note(session, note_id)
+    note = require_note_delete_access(session, note_id, caller)
     session.delete(note)
     session.flush()
 
@@ -277,13 +391,72 @@ def _last_position(
     return session.scalar(stmt)
 
 
+def _require_node_and_note_update_access(
+    session: Session,
+    node_id: uuid.UUID,
+    caller: User,
+) -> Node:
+    """Fetch a node by id (404 if absent) and require note UPDATE on its parent."""
+    node = session.get(Node, node_id)
+    if node is None:
+        raise NodeNotFoundError(str(node_id))
+    require_note_access(session, node.note_id, caller, PermissionName.UPDATE)
+    return node
+
+
 def get_ordered_nodes(
     session: Session,
     note_id: uuid.UUID,
+    caller: User,
 ) -> list[Node]:
     """Return all nodes for a note, sorted by position."""
+    require_note_access(session, note_id, caller, PermissionName.VIEW_NOTE)
     stmt = select(Node).where(Node.note_id == note_id).order_by(Node.position)
     return list(session.scalars(stmt))
+
+
+def validate_note_in_notebook(
+    session: Session,
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID,
+) -> None:
+    """Confirm a note exists and belongs to the given notebook.
+
+    No permission check — this only guards against a note_id that doesn't
+    belong under this notebook_id, a URL-scoping concern for nested routes.
+    Callers must separately invoke a permission-checked function (e.g.
+    `get_ordered_nodes`, `add_text_node`) to authorize the actual request.
+    """
+    note = session.get(Note, note_id)
+    if note is None or note.notebook_id != notebook_id:
+        raise NoteNotFoundError(str(note_id))
+
+
+def get_node_in_note(
+    session: Session,
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID,
+    node_id: uuid.UUID,
+) -> Node:
+    """Resolve a node scoped to (notebook_id, note_id). No permission check —
+    see `validate_note_in_notebook`.
+    """
+    validate_note_in_notebook(session, notebook_id, note_id)
+    node = session.get(Node, node_id)
+    if node is None or node.note_id != note_id:
+        raise NodeNotFoundError(str(node_id))
+    return node
+
+
+def validate_node_in_note(
+    session: Session,
+    note_id: uuid.UUID,
+    node_id: uuid.UUID,
+) -> None:
+    """Confirm a node exists and belongs to the given note. No permission check."""
+    node = session.get(Node, node_id)
+    if node is None or node.note_id != note_id:
+        raise NodeNotFoundError(str(node_id))
 
 
 def get_note_by_external_id(
@@ -308,16 +481,17 @@ def get_note_by_external_id(
 def add_text_node(
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     payload: str,
 ) -> Node:
     """Append a text node at the end of a note's content list."""
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     last = _last_position(session, note_id, lock=True)
     position = generate_position_between(last, None)
     node = Node(
         note_id=note_id,
         position=position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.TEXT,
         payload=payload,
     )
@@ -330,7 +504,7 @@ def add_text_node(
 def add_attachment_node(
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     file_id: uuid.UUID,
 ) -> Node:
     """Append an attachment node at the end of a note's content list.
@@ -343,6 +517,7 @@ def add_attachment_node(
         ValueError: If the file is not found, not complete, or belongs to a
             different note.
     """
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     file = session.get(File, file_id)
     if file is None:
         msg = f"File not found: {file_id}"
@@ -360,7 +535,7 @@ def add_attachment_node(
     node = Node(
         note_id=note_id,
         position=position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.ATTACHMENT,
         attachment_id=file_id,
         payload=payload,
@@ -374,7 +549,7 @@ def add_attachment_node(
 def insert_text_node(  # noqa: PLR0913
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     payload: str,
     after_node_id: uuid.UUID | None = None,
     before_node_id: uuid.UUID | None = None,
@@ -385,6 +560,7 @@ def insert_text_node(  # noqa: PLR0913
     surrounding nodes are unaffected. At least one of *after_node_id*
     or *before_node_id* must be provided.
     """
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     before_pos: str | None = None
     after_pos: str | None = None
 
@@ -408,7 +584,7 @@ def insert_text_node(  # noqa: PLR0913
     node = Node(
         note_id=note_id,
         position=position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.TEXT,
         payload=payload,
     )
@@ -441,18 +617,19 @@ def _ensure_markdown_node(node: Node) -> None:
 def add_markdown_node(
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     payload: str,
     block_type: str,
 ) -> Node:
     """Append a markdown node at the end of a note's content list."""
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     validated_bt = _validate_block_type(block_type)
     last = _last_position(session, note_id, lock=True)
     position = generate_position_between(last, None)
     node = Node(
         note_id=note_id,
         position=position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.MARKDOWN,
         payload=payload,
         block_type=validated_bt.value,
@@ -466,7 +643,7 @@ def add_markdown_node(
 def insert_markdown_node(  # noqa: PLR0913
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     payload: str,
     block_type: str,
     after_node_id: uuid.UUID | None = None,
@@ -476,6 +653,7 @@ def insert_markdown_node(  # noqa: PLR0913
 
     At least one of *after_node_id* or *before_node_id* must be provided.
     """
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     validated_bt = _validate_block_type(block_type)
     before_pos: str | None = None
     after_pos: str | None = None
@@ -500,7 +678,7 @@ def insert_markdown_node(  # noqa: PLR0913
     node = Node(
         note_id=note_id,
         position=position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.MARKDOWN,
         payload=payload,
         block_type=validated_bt.value,
@@ -511,9 +689,10 @@ def insert_markdown_node(  # noqa: PLR0913
     return node
 
 
-def update_markdown_node(
+def update_markdown_node(  # noqa: PLR0913
     session: Session,
     node_id: uuid.UUID,
+    caller: User,
     payload: str,
     block_type: str,
     expected_version: int,
@@ -522,10 +701,8 @@ def update_markdown_node(
 
     Uses the same optimistic locking as ``update_text_node``.
     """
+    node = _require_node_and_note_update_access(session, node_id, caller)
     validated_bt = _validate_block_type(block_type)
-    node = session.get(Node, node_id)
-    if node is None:
-        raise NodeNotFoundError(str(node_id))
     _ensure_markdown_node(node)
     stmt = (
         update(Node)
@@ -546,16 +723,17 @@ def update_markdown_node(
             node.version,
         )
     session.expire_all()
-    node = session.get(Node, node_id)
-    assert node is not None
-    _touch_note(session, node.note_id)
+    refreshed = session.get(Node, node_id)
+    assert refreshed is not None
+    _touch_note(session, refreshed.note_id)
     session.flush()
-    return node
+    return refreshed
 
 
 def update_text_node(
     session: Session,
     node_id: uuid.UUID,
+    caller: User,
     payload: str,
     expected_version: int,
 ) -> Node:
@@ -566,6 +744,7 @@ def update_text_node(
     is incremented. On mismatch a ``NodeVersionConflictError`` is
     raised containing the current version so the caller can retry.
     """
+    _require_node_and_note_update_access(session, node_id, caller)
     stmt = (
         update(Node)
         .where(Node.id == node_id, Node.version == expected_version)
@@ -596,7 +775,7 @@ def update_text_node(
 def split_text_node(
     session: Session,
     node_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     split_offset: int,
     expected_version: int,
 ) -> tuple[Node, Node]:
@@ -609,9 +788,7 @@ def split_text_node(
 
     Returns the (original, new) node pair.
     """
-    node = session.get(Node, node_id)
-    if node is None:
-        raise NodeNotFoundError(str(node_id))
+    node = _require_node_and_note_update_access(session, node_id, author)
     _ensure_text_node(node)
     if node.version != expected_version:
         raise NodeVersionConflictError(
@@ -641,7 +818,7 @@ def split_text_node(
     new_node = Node(
         note_id=node.note_id,
         position=new_position,
-        author_id=author_id,
+        author_id=author.uid,
         node_type=NodeType.TEXT,
         payload=right_payload,
     )
@@ -651,9 +828,10 @@ def split_text_node(
     return node, new_node
 
 
-def merge_text_nodes(
+def merge_text_nodes(  # noqa: PLR0913
     session: Session,
     node_id: uuid.UUID,
+    caller: User,
     merge_into_id: uuid.UUID,
     expected_version_node: int,
     expected_version_target: int,
@@ -665,9 +843,7 @@ def merge_text_nodes(
     and the target's version is bumped. The target keeps its original
     position.
     """
-    source = session.get(Node, node_id)
-    if source is None:
-        raise NodeNotFoundError(str(node_id))
+    source = _require_node_and_note_update_access(session, node_id, caller)
     _ensure_text_node(source)
     if source.version != expected_version_node:
         raise NodeVersionConflictError(
@@ -699,7 +875,7 @@ def merge_text_nodes(
 def replace_markdown_nodes(
     session: Session,
     note_id: uuid.UUID,
-    author_id: uuid.UUID,
+    author: User,
     blocks: list[tuple[str, str]],
 ) -> list[Node]:
     """Delete all of a note's existing nodes and recreate them from `blocks`.
@@ -709,13 +885,14 @@ def replace_markdown_nodes(
     `blocks` is empty, no nodes are created so the note is touched directly
     here instead.
     """
+    require_note_access(session, note_id, author, PermissionName.UPDATE)
     session.execute(delete(Node).where(Node.note_id == note_id))
     if not blocks:
         _touch_note(session, note_id)
         session.flush()
         return []
     return [
-        add_markdown_node(session, note_id, author_id, payload, block_type)
+        add_markdown_node(session, note_id, author, payload, block_type)
         for block_type, payload in blocks
     ]
 
@@ -723,12 +900,21 @@ def replace_markdown_nodes(
 def delete_node(
     session: Session,
     node_id: uuid.UUID,
-) -> None:
-    """Remove a node from its note. Idempotent — deleting an absent node is a no-op."""
+    caller: User,
+) -> uuid.UUID | None:
+    """Remove a node from its note. Idempotent — deleting an absent node is a no-op.
+
+    Returns the id of the node's attachment file, for an attachment node —
+    None otherwise (including when the node didn't exist), so callers can
+    clean up the associated file record without a separate lookup.
+    """
     node = session.get(Node, node_id)
     if node is None:
-        return
+        return None
+    require_note_access(session, node.note_id, caller, PermissionName.UPDATE)
+    attachment_id = node.attachment_id if node.node_type == NodeType.ATTACHMENT else None
     note_id = node.note_id
     session.delete(node)
     _touch_note(session, note_id)
     session.flush()
+    return attachment_id
