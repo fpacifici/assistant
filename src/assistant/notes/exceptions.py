@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import uuid
 
+    from assistant.models.schema import PermissionName, SubjectType
+
 
 class NotesServiceError(Exception):
     """Base exception for the notes service."""
@@ -42,6 +44,24 @@ class InvalidNodeTypeError(NotesServiceError):
 
 class InvalidBlockTypeError(NotesServiceError):
     """Raised when an invalid markdown block type is provided."""
+
+
+class PermissionDeniedError(NotesServiceError):
+    """Raised when a caller has view access but lacks a specific permission."""
+
+    def __init__(
+        self,
+        permission: PermissionName,
+        subject_type: SubjectType,
+        subject_id: uuid.UUID,
+    ) -> None:
+        self.permission = permission
+        self.subject_type = subject_type
+        self.subject_id = subject_id
+        super().__init__(
+            f"Missing '{permission.value}' permission on "
+            f"{subject_type.value} {subject_id}",
+        )
 
 
 class NodeVersionConflictError(NotesServiceError):

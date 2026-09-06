@@ -75,26 +75,19 @@ erDiagram
         STRING path
     }
 
-    Permission {
-        STRING name
-    }
-
     Entitlement {
-        UUID principal FK
-        STRING permission FK
-        UUID subject FK
-    }
-
-    Role {
-        STRING name PK
+        UUID id PK
+        UUID principal_id FK
+        UUID note_id FK
+        UUID notebook_id FK
+        STRING permission_name
+        STRING role_name
+        DATETIME created_at
     }
 
     User ||--o{ Entitlement : "has"
-    Role ||--o{ Entitlement : "has"
-    Entitlement ||--|| Permission : "grants"
-    Entitlement ||--|| Note : "directs"
-    Entitlement ||--|| Notebook : "directs"
-    User ||--o{ Role : "belongs"
+    Entitlement ||--o| Note : "directs"
+    Entitlement ||--o| Notebook : "directs"
 ```
 
 - User represents a user in the system
@@ -106,12 +99,8 @@ erDiagram
   uses fractional indexing (a VARCHAR that sorts lexicographically), which
   allows unlimited insertions between any two positions.
 - Notes, Nodes and Notebooks have an owner.
-- There is an RBAC system to manage access to Notes and Notebooks. We have
-  a list of permissions (they define a specific action).
-- An Entitlement associates a principal (User or Role) to a subject (Note,
-  Notebook) via a permission. So it grants a permission on a subject to
-  the principal.
-- A Role associates a group of users to an Entitlement
+- There is an RBAC system to manage access to Notes and Notebooks — see
+  Access Control below.
 
 ## Structure of a Note.
 
@@ -215,6 +204,47 @@ a single node.
 **Upgrade path:** If real-time co-editing becomes a priority, adopt CRDTs
 (e.g., Yjs) at the node payload level. The node structure and position
 system remain unchanged — only the intra-node text representation changes.
+
+## Access Control
+
+Notes and Notebooks have an `owner_id` (kept as a denormalized/display
+field) plus a full RBAC system for sharing with other users, implemented in
+`src/assistant/notes/permissions.py` (read side: effective-permission
+computation and `require_*_access` guards) and
+`src/assistant/notes/entitlements.py` (write side: grant/revoke/list). See
+`docs/specs/0003_role_based_access_control.md` for the full permission
+catalog, role definitions, and evaluation rules.
+
+### How It Works
+
+Permissions and roles are Python enums (`PermissionName`, `RoleName` in
+`src/assistant/models/schema.py`) with no backing database table — the
+`ROLE_PERMISSIONS` mapping in `permissions.py` is the single source of
+truth for role → permission expansion. An `Entitlement` row grants one
+principal (always an individual `User`) either a single permission or a
+whole role on exactly one subject (a Note or a Notebook), enforced by
+`CheckConstraint`s mirroring the `Node.node_type` discriminator pattern.
+Entitlements are additive only — revoking access deletes the row.
+
+Creating a Notebook or Note auto-grants its creator an owner entitlement
+(`notebook_owner`/`note_owner`) in the same transaction as the subject's own
+insert, so a row is never left without an owner.
+
+Every function in `notes/service.py` that touches an existing Notebook/Note
+takes a `caller_id` and enforces permissions itself via `permissions.py` —
+authorization is not just an API-layer concern. A caller who cannot even
+view a subject gets a 404-shaped not-found error; a caller who can view it
+but lacks the specific permission for the action gets a `PermissionDeniedError`
+(403). Sharing (`grant_entitlement`/`revoke_entitlement`) is itself gated by
+`share_note`/`share_notebook` and bounded by the granter's own current
+permission level — nobody can grant more access than they themselves have.
+
+### Notebook Visibility
+
+A notebook is visible to a user either via a direct notebook-level
+entitlement, or because the user holds any entitlement on at least one note
+inside it (`can_view_notebook`) — sharing a single note surfaces its parent
+notebook without granting any notebook-level permission.
 
 ## Notes Service
 

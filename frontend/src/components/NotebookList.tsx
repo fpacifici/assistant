@@ -4,12 +4,16 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
+import ShareDialog from './ShareDialog';
+
+const NOTEBOOK_ROLE_OPTIONS = ['notebook_viewer', 'notebook_editor', 'notebook_owner'];
 
 export default function NotebookList() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { notebookId } = useParams();
   const [newName, setNewName] = useState('');
+  const [sharingNotebookId, setSharingNotebookId] = useState<string | null>(null);
 
   const { data: notebooks = [], isLoading } = useQuery({
     queryKey: ['notebooks'],
@@ -63,20 +67,44 @@ export default function NotebookList() {
             >
               {nb.name}
             </span>
-            <button
-              className="delete-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteMutation.mutate(nb.id);
-              }}
-              title="Delete notebook"
-            >
-              x
-            </button>
+            <span className="item-actions">
+              {nb.permissions.includes('share_notebook') && (
+                <button
+                  className="share-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSharingNotebookId(nb.id);
+                  }}
+                  title="Share notebook"
+                >
+                  share
+                </button>
+              )}
+              {nb.permissions.includes('delete_notebook') && (
+                <button
+                  className="delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMutation.mutate(nb.id);
+                  }}
+                  title="Delete notebook"
+                >
+                  x
+                </button>
+              )}
+            </span>
           </li>
         ))}
       </ul>
       {notebooks.length === 0 && <p className="empty">No notebooks yet</p>}
+      {sharingNotebookId && (
+        <ShareDialog
+          subjectType="notebook"
+          notebookId={sharingNotebookId}
+          roleOptions={NOTEBOOK_ROLE_OPTIONS}
+          onClose={() => setSharingNotebookId(null)}
+        />
+      )}
     </div>
   );
 }

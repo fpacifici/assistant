@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from assistant.attachments.storage import FileStorage
 from assistant.auth.service import AuthError, decode_access_token
-from assistant.models.schema import Notebook
-from assistant.notes.service import get_notebook
+from assistant.models.schema import User
+from assistant.notes.user_service import get_user
 
 
 def get_session(
@@ -63,18 +63,6 @@ def get_current_user_id(request: Request) -> uuid.UUID:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
-def require_notebook_owner(
-    session: Session,
-    notebook_id: uuid.UUID,
-    user_id: uuid.UUID,
-) -> Notebook:
-    """Return the notebook if user owns it, else raise 404."""
-    notebook = get_notebook(session, notebook_id)
-    if notebook.owner_id != user_id:
-        raise HTTPException(status_code=404, detail="Notebook not found")
-    return notebook
-
-
 def get_storage(request: Request) -> FileStorage:
     return request.app.state.file_storage  # type: ignore[no-any-return]
 
@@ -82,3 +70,16 @@ def get_storage(request: Request) -> FileStorage:
 SessionDep = Annotated[Session, Depends(get_session)]
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
 StorageDep = Annotated[FileStorage, Depends(get_storage)]
+
+
+def get_current_user(session: SessionDep, user_id: CurrentUserId) -> User:
+    """Load the authenticated User row for the request.
+
+    The actor in every notes-service call is a `User`, never a raw id — this
+    is the one place per request that resolves the JWT-decoded id into that
+    entity (also naturally 404s a token issued for a since-deleted user).
+    """
+    return get_user(session, user_id)
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]

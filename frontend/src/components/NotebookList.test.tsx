@@ -29,8 +29,8 @@ describe('NotebookList', () => {
 
   it('renders notebook list', async () => {
     mockFetch.mockResolvedValue([
-      { id: 'nb-1', name: 'My Notebook', owner_id: 'test-user' },
-      { id: 'nb-2', name: 'Work Notes', owner_id: 'test-user' },
+      { id: 'nb-1', name: 'My Notebook', owner_id: 'test-user', permissions: ['view_notebook'] },
+      { id: 'nb-2', name: 'Work Notes', owner_id: 'test-user', permissions: ['view_notebook'] },
     ]);
     renderWithProviders(<NotebookList />);
 
@@ -52,7 +52,12 @@ describe('NotebookList', () => {
   it('creates a notebook on form submit', async () => {
     const user = userEvent.setup();
     mockFetch.mockResolvedValue([]);
-    mockCreate.mockResolvedValue({ id: 'nb-new', name: 'New NB', owner_id: 'test-user' });
+    mockCreate.mockResolvedValue({
+      id: 'nb-new',
+      name: 'New NB',
+      owner_id: 'test-user',
+      permissions: ['view_notebook'],
+    });
 
     renderWithProviders(<NotebookList />);
     await waitFor(() => {
@@ -80,7 +85,7 @@ describe('NotebookList', () => {
   it('calls delete when delete button is clicked', async () => {
     const user = userEvent.setup();
     mockFetch.mockResolvedValue([
-      { id: 'nb-1', name: 'To Delete', owner_id: 'test-user' },
+      { id: 'nb-1', name: 'To Delete', owner_id: 'test-user', permissions: ['delete_notebook'] },
     ]);
     mockDelete.mockResolvedValue(undefined);
 
@@ -98,7 +103,7 @@ describe('NotebookList', () => {
 
   it('highlights active notebook', async () => {
     mockFetch.mockResolvedValue([
-      { id: 'nb-1', name: 'Active NB', owner_id: 'test-user' },
+      { id: 'nb-1', name: 'Active NB', owner_id: 'test-user', permissions: ['view_notebook'] },
     ]);
     renderWithProviders(<NotebookList />, {
       initialEntries: ['/notebooks/nb-1/notes'],
@@ -107,5 +112,37 @@ describe('NotebookList', () => {
     await waitFor(() => {
       expect(screen.getByText('Active NB')).toBeInTheDocument();
     });
+  });
+
+});
+
+describe('NotebookList permission gating', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hides share and delete buttons when permissions lack them', async () => {
+    mockFetch.mockResolvedValue([
+      { id: 'nb-1', name: 'Read Only', owner_id: 'other-user', permissions: ['view_notebook'] },
+    ]);
+    renderWithProviders(<NotebookList />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Read Only')).toBeInTheDocument();
+    });
+    expect(screen.queryByTitle('Share notebook')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Delete notebook')).not.toBeInTheDocument();
+  });
+
+  it('shows share button when share_notebook permission is present', async () => {
+    mockFetch.mockResolvedValue([
+      { id: 'nb-1', name: 'Shared', owner_id: 'other-user', permissions: ['view_notebook', 'share_notebook'] },
+    ]);
+    renderWithProviders(<NotebookList />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle('Share notebook')).toBeInTheDocument();
+    });
+    expect(screen.queryByTitle('Delete notebook')).not.toBeInTheDocument();
   });
 });

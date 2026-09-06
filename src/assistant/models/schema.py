@@ -58,6 +58,42 @@ class MarkdownBlockType(str, Enum):
     CODE_BLOCK = "code_block"
 
 
+class SubjectType(str, Enum):
+    """The kind of subject an Entitlement grants access to."""
+
+    NOTE = "note"
+    NOTEBOOK = "notebook"
+
+
+class PermissionName(str, Enum):
+    """A single grantable action on a Note or Notebook."""
+
+    VIEW_NOTE = "view_note"
+    UPDATE = "update"
+    DELETE_NOTE = "delete_note"
+    SHARE_NOTE = "share_note"
+    VIEW_NOTEBOOK = "view_notebook"
+    UPDATE_NOTEBOOK = "update_notebook"
+    DELETE_NOTEBOOK = "delete_notebook"
+    CREATE_NOTES = "create_notes"
+    LIST_NOTES = "list_notes"
+    OWN_NOTES = "own_notes"
+    DELETE_NOTES = "delete_notes"
+    VIEW_NOTES = "view_notes"
+    SHARE_NOTEBOOK = "share_notebook"
+
+
+class RoleName(str, Enum):
+    """A fixed, named bundle of permissions grantable on a subject."""
+
+    NOTEBOOK_OWNER = "notebook_owner"
+    NOTEBOOK_VIEWER = "notebook_viewer"
+    NOTEBOOK_EDITOR = "notebook_editor"
+    NOTE_OWNER = "note_owner"
+    NOTE_VIEWER = "note_viewer"
+    NOTE_EDITOR = "note_editor"
+
+
 class User(Base):
     """User model."""
 
@@ -95,6 +131,11 @@ class User(Base):
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         "RefreshToken",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    entitlements: Mapped[list[Entitlement]] = relationship(
+        "Entitlement",
+        back_populates="principal",
         cascade="all, delete-orphan",
     )
 
@@ -194,6 +235,11 @@ class Notebook(Base):
         back_populates="notebook",
         cascade="all, delete-orphan",
     )
+    entitlements: Mapped[list[Entitlement]] = relationship(
+        "Entitlement",
+        back_populates="notebook",
+        cascade="all, delete-orphan",
+    )
 
 
 class Note(Base):
@@ -252,6 +298,11 @@ class Note(Base):
     )
     files: Mapped[list[File]] = relationship(
         "File",
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
+    entitlements: Mapped[list[Entitlement]] = relationship(
+        "Entitlement",
         back_populates="note",
         cascade="all, delete-orphan",
     )
@@ -380,6 +431,75 @@ class Node(Base):
     )
     author: Mapped[User] = relationship("User")
     attachment: Mapped[File | None] = relationship("File")
+
+
+class Entitlement(Base):
+    """A grant of a permission or role to a principal on a Note or Notebook.
+
+    Exactly one of (note_id, notebook_id) and exactly one of
+    (permission_name, role_name) must be set. `permission_name`/`role_name`
+    are unconstrained plain strings at the DB level — validated against the
+    `PermissionName`/`RoleName` enums in the service layer, the same pattern
+    used for `Node.node_type`/`Node.block_type`.
+    """
+
+    __tablename__ = "entitlements"
+    __table_args__ = (
+        CheckConstraint(
+            "(note_id IS NOT NULL AND notebook_id IS NULL)"
+            " OR (note_id IS NULL AND notebook_id IS NOT NULL)",
+            name="ck_entitlement_one_subject",
+        ),
+        CheckConstraint(
+            "(permission_name IS NOT NULL AND role_name IS NULL)"
+            " OR (permission_name IS NULL AND role_name IS NOT NULL)",
+            name="ck_entitlement_one_grant",
+        ),
+        UniqueConstraint(
+            "principal_id",
+            "note_id",
+            "notebook_id",
+            "permission_name",
+            "role_name",
+            name="uq_entitlement_no_duplicate_grant",
+        ),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    principal_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    note_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id"),
+        nullable=True,
+    )
+    notebook_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notebooks.id"),
+        nullable=True,
+    )
+    permission_name: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    role_name: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    principal: Mapped[User] = relationship("User", back_populates="entitlements")
+    note: Mapped[Note | None] = relationship("Note", back_populates="entitlements")
+    notebook: Mapped[Notebook | None] = relationship(
+        "Notebook",
+        back_populates="entitlements",
+    )
 
 
 class Document(Base):

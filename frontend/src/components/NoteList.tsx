@@ -4,12 +4,16 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
+import ShareDialog from './ShareDialog';
+
+const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 
 export default function NoteList() {
   const { notebookId, noteId } = useParams();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [newTitle, setNewTitle] = useState('');
+  const [sharingNoteId, setSharingNoteId] = useState<string | null>(null);
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes', notebookId],
@@ -65,20 +69,45 @@ export default function NoteList() {
             >
               {note.title}
             </span>
-            <button
-              className="delete-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteMutation.mutate(note.id);
-              }}
-              title="Delete note"
-            >
-              x
-            </button>
+            <span className="item-actions">
+              {note.permissions.includes('share_note') && (
+                <button
+                  className="share-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSharingNoteId(note.id);
+                  }}
+                  title="Share note"
+                >
+                  share
+                </button>
+              )}
+              {note.permissions.includes('delete_note') && (
+                <button
+                  className="delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMutation.mutate(note.id);
+                  }}
+                  title="Delete note"
+                >
+                  x
+                </button>
+              )}
+            </span>
           </li>
         ))}
       </ul>
       {notes.length === 0 && <p className="empty">No notes yet</p>}
+      {sharingNoteId && (
+        <ShareDialog
+          subjectType="note"
+          notebookId={notebookId}
+          noteId={sharingNoteId}
+          roleOptions={NOTE_ROLE_OPTIONS}
+          onClose={() => setSharingNoteId(null)}
+        />
+      )}
     </div>
   );
 }

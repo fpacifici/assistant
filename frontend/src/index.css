@@ -161,6 +161,12 @@ ul {
   white-space: nowrap;
 }
 
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .delete-btn {
   background: none;
   border: none;
@@ -176,10 +182,112 @@ ul {
   background: #fee;
 }
 
+.share-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+.share-btn:hover {
+  color: #338;
+  background: #eef;
+}
+
 .empty {
   color: #999;
   font-size: 14px;
   padding: 8px 10px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 6px;
+  padding: 20px;
+  width: 380px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #999;
+  line-height: 1;
+}
+
+.share-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.share-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.share-error {
+  color: #c00;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.entitlement-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.entitlement-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.entitlement-email {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entitlement-role {
+  color: #666;
+  font-size: 12px;
 }
 
 .notebook-list {

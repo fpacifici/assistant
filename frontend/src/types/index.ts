@@ -9,6 +9,7 @@ export interface Notebook {
   id: string;
   name: string;
   owner_id: string;
+  permissions: string[];
 }
 
 export interface Note {
@@ -18,6 +19,15 @@ export interface Note {
   title: string;
   creation_timestamp: string;
   update_timestamp: string;
+  permissions: string[];
+}
+
+export interface Entitlement {
+  id: string;
+  principal_id: string;
+  principal_email: string;
+  role: string;
+  created_at: string;
 }
 
 export interface NoteNode {

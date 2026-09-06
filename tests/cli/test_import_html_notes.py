@@ -181,7 +181,7 @@ def test_override_flag_defaults_false(tmp_path: Path) -> None:
     assert kwargs["override"] is False
 
 
-def test_authenticated_user_uid_forwarded_to_run_import(tmp_path: Path) -> None:
+def test_authenticated_user_forwarded_to_run_import(tmp_path: Path) -> None:
     _mock_session, mock_factory = _mock_session_factory()
     user = _mock_user()
 
@@ -197,8 +197,8 @@ def test_authenticated_user_uid_forwarded_to_run_import(tmp_path: Path) -> None:
         main()
 
     args, _kwargs = mock_run_import.call_args
-    owner_id = args[2]
-    assert owner_id == user.uid
+    owner = args[2]
+    assert owner is user
 
 
 def test_html_file_import_source_constructed_from_root_dir(tmp_path: Path) -> None:

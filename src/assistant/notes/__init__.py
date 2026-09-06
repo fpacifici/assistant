@@ -7,6 +7,7 @@ from assistant.notes.exceptions import (
     NotebookNotFoundError,
     NoteNotFoundError,
     NotesServiceError,
+    PermissionDeniedError,
 )
 from assistant.notes.service import (
     add_attachment_node,
@@ -34,6 +35,7 @@ __all__ = [
     "NoteNotFoundError",
     "NotebookNotFoundError",
     "NotesServiceError",
+    "PermissionDeniedError",
     "add_attachment_node",
     "add_text_node",
     "create_note",

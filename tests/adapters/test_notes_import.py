@@ -75,7 +75,7 @@ def test_run_import_creates_notebooks_and_notes_from_fixtures(
     user = _make_user(db_session)
     source = HTMLFileImportSource(FIXTURES_DIR)
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_created == 3
     assert stats.notes_skipped_web_clip == 1
@@ -95,7 +95,7 @@ def test_run_import_creates_notebooks_and_notes_from_fixtures(
 def test_run_import_preserves_block_order_and_types(db_session: Session) -> None:
     user = _make_user(db_session)
     source = HTMLFileImportSource(FIXTURES_DIR)
-    run_import(db_session, source, user.uid)
+    run_import(db_session, source, user)
 
     work = db_session.scalar(select(Notebook).where(Notebook.name == "Work"))
     assert work is not None
@@ -103,7 +103,7 @@ def test_run_import_preserves_block_order_and_types(db_session: Session) -> None
     note = get_note_by_external_id(db_session, work.id, external_id)
     assert note is not None
 
-    nodes = get_ordered_nodes(db_session, note.id)
+    nodes = get_ordered_nodes(db_session, note.id, user)
     assert [(n.block_type, n.payload) for n in nodes] == [
         ("paragraph", "This is the first paragraph."),
         ("heading", "## A subsection"),
@@ -115,7 +115,7 @@ def test_run_import_preserves_block_order_and_types(db_session: Session) -> None
 def test_run_import_ignores_files_nested_too_deep(db_session: Session) -> None:
     user = _make_user(db_session)
     source = HTMLFileImportSource(FIXTURES_DIR)
-    run_import(db_session, source, user.uid)
+    run_import(db_session, source, user)
 
     titles = {n.title for n in db_session.scalars(select(Note))}
     assert "Too deep" not in titles
@@ -123,11 +123,11 @@ def test_run_import_ignores_files_nested_too_deep(db_session: Session) -> None:
 
 def test_run_import_reuses_existing_notebook_by_name(db_session: Session) -> None:
     other_owner = _make_user(db_session, "other@test.com")
-    pre_existing = create_notebook(db_session, "Work", other_owner.uid)
+    pre_existing = create_notebook(db_session, "Work", other_owner)
 
     user = _make_user(db_session)
     source = HTMLFileImportSource(FIXTURES_DIR)
-    run_import(db_session, source, user.uid)
+    run_import(db_session, source, user)
 
     work_notebooks = list(
         db_session.scalars(select(Notebook).where(Notebook.name == "Work")),
@@ -140,12 +140,12 @@ def test_run_import_reuses_existing_notebook_by_name(db_session: Session) -> Non
 def test_second_run_without_override_creates_no_duplicates(db_session: Session) -> None:
     user = _make_user(db_session)
     source = HTMLFileImportSource(FIXTURES_DIR)
-    run_import(db_session, source, user.uid)
+    run_import(db_session, source, user)
 
     notes_after_first = list(db_session.scalars(select(Note)))
     nodes_after_first = list(db_session.scalars(select(Node)))
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_created == 0
     assert stats.notes_skipped_existing == 3
@@ -172,7 +172,7 @@ def test_override_replaces_node_content_keeps_same_note_and_notebook_id(
             ),
         },
     )
-    run_import(db_session, v1, user.uid)
+    run_import(db_session, v1, user)
 
     notebook = db_session.scalar(select(Notebook).where(Notebook.name == "NB"))
     assert notebook is not None
@@ -190,7 +190,7 @@ def test_override_replaces_node_content_keeps_same_note_and_notebook_id(
             ),
         },
     )
-    stats = run_import(db_session, v2, user.uid, override=True)
+    stats = run_import(db_session, v2, user, override=True)
 
     assert stats.notes_overridden == 1
     assert stats.notes_created == 0
@@ -199,7 +199,7 @@ def test_override_replaces_node_content_keeps_same_note_and_notebook_id(
     assert reloaded is not None
     assert reloaded.id == original_note_id
     assert reloaded.notebook_id == original_notebook_id
-    nodes = get_ordered_nodes(db_session, original_note_id)
+    nodes = get_ordered_nodes(db_session, original_note_id, user)
     assert [n.payload for n in nodes] == ["v2"]
 
 
@@ -213,7 +213,7 @@ def test_without_override_existing_note_is_left_untouched(db_session: Session) -
             ),
         },
     )
-    run_import(db_session, v1, user.uid)
+    run_import(db_session, v1, user)
 
     v2 = _FakeImportSource(
         {
@@ -223,14 +223,14 @@ def test_without_override_existing_note_is_left_untouched(db_session: Session) -
             ),
         },
     )
-    stats = run_import(db_session, v2, user.uid, override=False)
+    stats = run_import(db_session, v2, user, override=False)
 
     assert stats.notes_skipped_existing == 1
     notebook = db_session.scalar(select(Notebook).where(Notebook.name == "NB"))
     assert notebook is not None
     note = get_note_by_external_id(db_session, notebook.id, compute_external_id("T"))
     assert note is not None
-    nodes = get_ordered_nodes(db_session, note.id)
+    nodes = get_ordered_nodes(db_session, note.id, user)
     assert [n.payload for n in nodes] == ["v1"]
 
 
@@ -254,7 +254,7 @@ def test_two_notebooks_with_same_titled_note_dont_collide(db_session: Session) -
         },
     )
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_created == 2
     notes = list(db_session.scalars(select(Note).where(Note.title == "Same Title")))
@@ -278,7 +278,7 @@ def test_web_clip_note_is_skipped_with_no_db_writes(db_session: Session) -> None
         },
     )
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_skipped_web_clip == 1
     assert stats.notes_created == 0
@@ -302,12 +302,12 @@ def test_removing_source_file_does_not_delete_previously_imported_note(
     note_path.write_text("<h1>Persisted Note</h1><p>content</p>")
 
     source = HTMLFileImportSource(tmp_path)
-    run_import(db_session, source, user.uid)
+    run_import(db_session, source, user)
     assert len(list(db_session.scalars(select(Note)))) == 1
 
     note_path.unlink()
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_created == 0
     notes = list(db_session.scalars(select(Note)))
@@ -336,7 +336,7 @@ def test_one_broken_document_does_not_abort_the_whole_run(db_session: Session) -
         broken_id="bad",
     )
 
-    stats = run_import(db_session, source, user.uid)
+    stats = run_import(db_session, source, user)
 
     assert stats.notes_created == 1
     titles = {n.title for n in db_session.scalars(select(Note))}
