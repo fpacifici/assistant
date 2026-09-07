@@ -24,3 +24,12 @@ external_sources:
     # Add any fake-specific configuration here
   evernote:
     # Nothing to be configured here
+
+# The assistant's own domain (also used as the Mailgun sending domain)
+domain: mg.example.com
+
+# Mailgun configuration (apikey is always supplied via MAILGUN_APIKEY env var)
+mailgun:
+  apiurl: https://api.mailgun.net/v3
+  sender: noreply@example.com
+  # timeout: 10  # optional, defaults to 10 seconds

@@ -46,6 +46,15 @@ class ExternalSourceProviderConfig(TypedDict, total=False):
 ExternalSourcesConfig = dict[str, ExternalSourceProviderConfig]
 
 
+class MailgunConfig(TypedDict):
+    """Mailgun API configuration."""
+
+    apiurl: str
+    apikey: str
+    sender: str
+    timeout: int
+
+
 class AssistantConfig(TypedDict, total=False):
     """Top-level configuration structure loaded from YAML."""
 
@@ -53,6 +62,8 @@ class AssistantConfig(TypedDict, total=False):
     document_storage_path: str
     file_storage_path: str
     external_sources: ExternalSourcesConfig
+    domain: str
+    mailgun: MailgunConfig
 
 
 T = TypeVar("T")
@@ -375,4 +386,73 @@ class Config:
             "user": user,
             "password": password,
             "name": name,
+        }
+
+    def get_domain(self) -> str:
+        """Get the assistant's configured domain.
+
+        Env var override: `domain` -> `DOMAIN`.
+
+        Returns:
+            The configured domain.
+
+        Raises:
+            ValueError: If `domain` is missing from both YAML and env.
+        """
+        domain = self._get_typed_value(key="domain", expected_type=str)
+        if not domain:
+            msg = (
+                "Domain configuration not found "
+                "(set `domain` in config or DOMAIN env var)"
+            )
+            raise ValueError(msg)
+        return domain
+
+    def get_mailgun_config(self) -> MailgunConfig:
+        """Get the effective Mailgun configuration with env-var overrides applied.
+
+        Env var overrides follow the module convention:
+            - `mailgun.apiurl` -> `MAILGUN_APIURL`
+            - `mailgun.apikey` -> `MAILGUN_APIKEY`
+            - `mailgun.sender`  -> `MAILGUN_SENDER`
+            - `mailgun.timeout` -> `MAILGUN_TIMEOUT`
+
+        Note: the sending domain is not part of this config — see `get_domain()`.
+
+        Returns:
+            A `MailgunConfig` mapping.
+
+        Raises:
+            ValueError: If `apiurl`, `apikey`, or `sender` is missing from
+                both YAML and env. `timeout` defaults to 10 if unset.
+        """
+        apiurl = self._get_typed_value(key="mailgun.apiurl", expected_type=str)
+        apikey = self._get_typed_value(key="mailgun.apikey", expected_type=str)
+        sender = self._get_typed_value(key="mailgun.sender", expected_type=str)
+
+        missing_keys: list[str] = []
+        if not apiurl:
+            missing_keys.append("apiurl")
+        if not apikey:
+            missing_keys.append("apikey")
+        if not sender:
+            missing_keys.append("sender")
+        if missing_keys:
+            msg = (
+                f"Mailgun configuration missing required keys: {', '.join(missing_keys)}"
+            )
+            raise ValueError(msg)
+
+        timeout = self.get("mailgun.timeout", 10)
+
+        # Help mypy understand non-None after validation.
+        assert apiurl is not None
+        assert apikey is not None
+        assert sender is not None
+
+        return {
+            "apiurl": apiurl,
+            "apikey": apikey,
+            "sender": sender,
+            "timeout": timeout,
         }

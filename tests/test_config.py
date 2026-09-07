@@ -18,6 +18,11 @@ _CONFIG_ENV_KEYS: tuple[str, ...] = (
     "DATABASE_NAME",
     "EXTERNAL_SOURCES_FAKE_ENABLED",
     "EXTERNAL_SOURCES_FAKE_TIMEOUT",
+    "DOMAIN",
+    "MAILGUN_APIURL",
+    "MAILGUN_APIKEY",
+    "MAILGUN_SENDER",
+    "MAILGUN_TIMEOUT",
 )
 
 
@@ -282,3 +287,143 @@ def test_config_env_override_invalid_int_raises(tmp_path: Path) -> None:
         pytest.raises(ValueError, match="Invalid int"),
     ):
         _ = config.get("database.port", 5432)
+
+
+def test_config_get_domain(tmp_path: Path) -> None:
+    """Test getting the assistant's configured domain."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mg.example.com\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_domain() == "mg.example.com"
+
+
+def test_config_get_domain_env_override(tmp_path: Path) -> None:
+    """Test that DOMAIN env var overrides YAML domain."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mg.example.com\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"DOMAIN": "mg.env.com"}):
+        assert config.get_domain() == "mg.env.com"
+
+
+def test_config_get_domain_missing_raises(tmp_path: Path) -> None:
+    """Test that missing domain (YAML and env) raises ValueError."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+
+    with pytest.raises(ValueError, match="Domain configuration not found"):
+        config.get_domain()
+
+
+def test_config_get_mailgun_config_from_yaml(tmp_path: Path) -> None:
+    """Test getting Mailgun config with all fields present in YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "mailgun:\n"
+        "  apiurl: https://api.mailgun.net/v3\n"
+        "  apikey: key-123\n"
+        "  sender: noreply@example.com\n"
+        "  timeout: 20\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_mailgun_config() == {
+        "apiurl": "https://api.mailgun.net/v3",
+        "apikey": "key-123",
+        "sender": "noreply@example.com",
+        "timeout": 20,
+    }
+
+
+def test_config_get_mailgun_config_timeout_defaults(tmp_path: Path) -> None:
+    """Test that timeout defaults to 10 when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "mailgun:\n"
+        "  apiurl: https://api.mailgun.net/v3\n"
+        "  apikey: key-123\n"
+        "  sender: noreply@example.com\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_mailgun_config()["timeout"] == 10
+
+
+@pytest.mark.parametrize("missing_field", ["apiurl", "apikey", "sender"])
+def test_config_get_mailgun_config_missing_required_field_raises(
+    tmp_path: Path, missing_field: str
+) -> None:
+    """Test that each individually missing required Mailgun field raises ValueError."""
+    fields = {
+        "apiurl": "https://api.mailgun.net/v3",
+        "apikey": "key-123",
+        "sender": "noreply@example.com",
+    }
+    del fields[missing_field]
+
+    config_file = tmp_path / "test_config.yaml"
+    body = "\n".join(f"  {key}: {value}" for key, value in fields.items())
+    config_file.write_text(f"mailgun:\n{body}\n")
+
+    config = Config(config_path=config_file)
+
+    with pytest.raises(ValueError, match=missing_field):
+        config.get_mailgun_config()
+
+
+def test_config_get_mailgun_config_env_overrides(tmp_path: Path) -> None:
+    """Test that MAILGUN_* env vars override YAML Mailgun config."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "mailgun:\n"
+        "  apiurl: https://api.mailgun.net/v3\n"
+        "  apikey: key-123\n"
+        "  sender: noreply@example.com\n"
+        "  timeout: 20\n",
+    )
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(
+        os.environ,
+        {
+            "MAILGUN_APIURL": "https://api.eu.mailgun.net/v3",
+            "MAILGUN_APIKEY": "env-key",
+            "MAILGUN_SENDER": "env@example.com",
+            "MAILGUN_TIMEOUT": "5",
+        },
+    ):
+        assert config.get_mailgun_config() == {
+            "apiurl": "https://api.eu.mailgun.net/v3",
+            "apikey": "env-key",
+            "sender": "env@example.com",
+            "timeout": 5,
+        }
+
+
+def test_config_get_mailgun_config_env_only_without_yaml(tmp_path: Path) -> None:
+    """Test that env-only Mailgun configuration works without a YAML section."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(
+        os.environ,
+        {
+            "MAILGUN_APIURL": "https://api.mailgun.net/v3",
+            "MAILGUN_APIKEY": "env-key",
+            "MAILGUN_SENDER": "env@example.com",
+        },
+    ):
+        assert config.get_mailgun_config() == {
+            "apiurl": "https://api.mailgun.net/v3",
+            "apikey": "env-key",
+            "sender": "env@example.com",
+            "timeout": 10,
+        }
