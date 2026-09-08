@@ -5,6 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+import pytest
+
+from assistant.invites.service import create_invite
+from assistant.models.schema import InviteState
 from assistant.models.schema import User as UserModel
 
 if TYPE_CHECKING:
@@ -82,6 +86,62 @@ class TestCreateUser:
             },
         )
         assert response.status_code == 409
+
+    def test_create_user_registration_disabled_without_invite_rejected(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
+        response = client.post(
+            "/user",
+            json={
+                "email": "new@example.com",
+                "firstname": "New",
+                "lastname": "User",
+            },
+        )
+        assert response.status_code == 403
+
+    def test_create_user_registration_disabled_with_valid_invite_succeeds(
+        self,
+        client: TestClient,
+        db_session: Session,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        inviter = UserModel(
+            email="inviter@example.com",
+            firstname="I",
+            lastname="N",
+            invite_quota_remaining=5,
+        )
+        db_session.add(inviter)
+        db_session.flush()
+        invite = create_invite(
+            db_session,
+            inviter,
+            "invitee@example.com",
+            {
+                "registration_enabled": True,
+                "invites_enabled": True,
+                "default_quota": 5,
+                "expiry_days": 1,
+            },
+        )
+        db_session.commit()
+
+        monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
+        response = client.post(
+            "/user",
+            json={
+                "email": "invitee@example.com",
+                "firstname": "New",
+                "lastname": "User",
+                "invite_id": str(invite.id),
+            },
+        )
+        assert response.status_code == 201
+
+        db_session.refresh(invite)
+        assert invite.state == InviteState.CONVERTED.value
 
 
 class TestGetUser:

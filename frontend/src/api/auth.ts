@@ -6,6 +6,7 @@ export interface RegisterPayload {
   password: string;
   firstname: string;
   lastname: string;
+  invite_id?: string;
 }
 
 export interface LoginPayload {

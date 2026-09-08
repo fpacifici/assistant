@@ -6,8 +6,21 @@ import { Route, Routes } from 'react-router';
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
-    user: { uid: 'u1', email: 'a@b.com', firstname: 'Test', lastname: 'User' },
+    user: {
+      uid: 'u1',
+      email: 'a@b.com',
+      firstname: 'Test',
+      lastname: 'User',
+      invite_quota_remaining: 3,
+    },
     logout: vi.fn(),
+  }),
+}));
+
+vi.mock('../api/invites', () => ({
+  fetchInvitesConfig: vi.fn().mockResolvedValue({
+    registration_enabled: true,
+    invites_enabled: true,
   }),
 }));
 
@@ -38,6 +51,15 @@ describe('Layout', () => {
   it('renders NotebookList always', () => {
     renderLayout('/notebooks');
     expect(screen.getByTestId('notebook-list')).toBeInTheDocument();
+  });
+
+  it('shows the invites nav link and quota badge when invites are enabled', async () => {
+    renderLayout('/notebooks');
+    expect(await screen.findByRole('link', { name: 'Invites' })).toHaveAttribute(
+      'href',
+      '/invites',
+    );
+    expect(screen.getByText('3 invites left')).toBeInTheDocument();
   });
 
   it('shows placeholder when no notebook is selected', () => {

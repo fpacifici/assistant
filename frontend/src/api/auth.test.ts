@@ -22,7 +22,13 @@ function errResponse(status: number, detail: string) {
   } as Response);
 }
 
-const USER = { uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B' };
+const USER = {
+  uid: 'u1',
+  email: 'a@b.com',
+  firstname: 'A',
+  lastname: 'B',
+  invite_quota_remaining: 5,
+};
 
 describe('auth API', () => {
   beforeEach(() => vi.clearAllMocks());

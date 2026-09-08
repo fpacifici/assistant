@@ -23,6 +23,11 @@ _CONFIG_ENV_KEYS: tuple[str, ...] = (
     "MAILGUN_APIKEY",
     "MAILGUN_SENDER",
     "MAILGUN_TIMEOUT",
+    "PORT",
+    "REGISTRATION_REGISTRATION_ENABLED",
+    "REGISTRATION_INVITES_ENABLED",
+    "REGISTRATION_DEFAULT_QUOTA",
+    "REGISTRATION_EXPIRY_DAYS",
 )
 
 
@@ -427,3 +432,88 @@ def test_config_get_mailgun_config_env_only_without_yaml(tmp_path: Path) -> None
             "sender": "env@example.com",
             "timeout": 10,
         }
+
+
+def test_config_get_port_defaults(tmp_path: Path) -> None:
+    """Test that get_port defaults to 8000 when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_port() == 8000
+
+
+def test_config_get_port_from_yaml(tmp_path: Path) -> None:
+    """Test getting the configured port from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("port: 9000\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_port() == 9000
+
+
+def test_config_get_port_env_override(tmp_path: Path) -> None:
+    """Test that PORT env var overrides YAML port."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("port: 9000\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"PORT": "9001"}):
+        assert config.get_port() == 9001
+
+
+def test_config_get_registration_config_defaults(tmp_path: Path) -> None:
+    """Test that get_registration_config returns documented defaults when absent."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_registration_config() == {
+        "registration_enabled": True,
+        "invites_enabled": True,
+        "default_quota": 5,
+        "expiry_days": 1,
+    }
+
+
+def test_config_get_registration_config_from_yaml(tmp_path: Path) -> None:
+    """Test getting registration config from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "registration:\n"
+        "  registration_enabled: false\n"
+        "  invites_enabled: false\n"
+        "  default_quota: 3\n"
+        "  expiry_days: 2\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_registration_config() == {
+        "registration_enabled": False,
+        "invites_enabled": False,
+        "default_quota": 3,
+        "expiry_days": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("env_key", "env_value", "field", "expected"),
+    [
+        ("REGISTRATION_REGISTRATION_ENABLED", "false", "registration_enabled", False),
+        ("REGISTRATION_INVITES_ENABLED", "false", "invites_enabled", False),
+        ("REGISTRATION_DEFAULT_QUOTA", "7", "default_quota", 7),
+        ("REGISTRATION_EXPIRY_DAYS", "3", "expiry_days", 3),
+    ],
+)
+def test_config_get_registration_config_env_overrides(
+    tmp_path: Path, env_key: str, env_value: str, field: str, expected: object
+) -> None:
+    """Test that each registration config key is individually env-overridable."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {env_key: env_value}):
+        assert config.get_registration_config()[field] == expected  # type: ignore[literal-required]

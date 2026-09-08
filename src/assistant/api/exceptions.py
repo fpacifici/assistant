@@ -8,6 +8,14 @@ from typing import TYPE_CHECKING
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from assistant.invites.exceptions import (
+    InviteEmailMismatchError,
+    InviteNotUsableError,
+    InvitePermissionError,
+    InvitesDisabledError,
+    QuotaExhaustedError,
+    RegistrationDisabledError,
+)
 from assistant.notes.exceptions import (
     InvalidBlockTypeError,
     NodeVersionConflictError,
@@ -67,3 +75,54 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: NotesServiceError,
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(InviteNotUsableError)
+    async def invite_not_usable_handler(
+        request: Request,  # noqa: ARG001
+        exc: InviteNotUsableError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "Invite not found"})
+
+    @app.exception_handler(InviteEmailMismatchError)
+    async def invite_email_mismatch_handler(
+        request: Request,  # noqa: ARG001
+        exc: InviteEmailMismatchError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Email does not match the invite"},
+        )
+
+    @app.exception_handler(InvitesDisabledError)
+    async def invites_disabled_handler(
+        request: Request,  # noqa: ARG001
+        exc: InvitesDisabledError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(status_code=403, content={"detail": "Invites are disabled"})
+
+    @app.exception_handler(RegistrationDisabledError)
+    async def registration_disabled_handler(
+        request: Request,  # noqa: ARG001
+        exc: RegistrationDisabledError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403, content={"detail": "Registration is disabled"}
+        )
+
+    @app.exception_handler(QuotaExhaustedError)
+    async def quota_exhausted_handler(
+        request: Request,  # noqa: ARG001
+        exc: QuotaExhaustedError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403, content={"detail": "No invite quota remaining"}
+        )
+
+    @app.exception_handler(InvitePermissionError)
+    async def invite_permission_denied_handler(
+        request: Request,  # noqa: ARG001
+        exc: InvitePermissionError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403, content={"detail": "Not the sender of this invite"}
+        )

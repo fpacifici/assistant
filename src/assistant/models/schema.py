@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from enum import Enum
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -94,6 +95,14 @@ class RoleName(str, Enum):
     NOTE_EDITOR = "note_editor"
 
 
+class InviteState(str, Enum):
+    """Lifecycle state of an account Invite. Only PENDING transitions."""
+
+    PENDING = "pending"
+    VOID = "void"
+    CONVERTED = "converted"
+
+
 class User(Base):
     """User model."""
 
@@ -112,6 +121,9 @@ class User(Base):
     )
     firstname: Mapped[str] = mapped_column(String(255), nullable=False)
     lastname: Mapped[str] = mapped_column(String(255), nullable=False)
+    invite_quota_remaining: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
 
     notebooks: Mapped[list[Notebook]] = relationship(
         "Notebook",
@@ -136,6 +148,11 @@ class User(Base):
     entitlements: Mapped[list[Entitlement]] = relationship(
         "Entitlement",
         back_populates="principal",
+        cascade="all, delete-orphan",
+    )
+    invites_sent: Mapped[list[Invite]] = relationship(
+        "Invite",
+        back_populates="inviter",
         cascade="all, delete-orphan",
     )
 
@@ -203,6 +220,43 @@ class RefreshToken(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="refresh_tokens")
+
+
+class Invite(Base):
+    """A pending account invite for an email with no matching User yet.
+
+    `state` is unconstrained at the DB level, validated only in the service
+    layer — same precedent as `Node.node_type`/`Entitlement.role_name`.
+    No `invitee_email` uniqueness — multiple pending invites (from the same
+    or different senders) to the same address are allowed.
+    """
+
+    __tablename__ = "invites"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    invitee_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    inviter_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+    )
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=InviteState.PENDING.value
+    )
+    quota_consumed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    inviter: Mapped[User] = relationship("User", back_populates="invites_sent")
 
 
 class Notebook(Base):

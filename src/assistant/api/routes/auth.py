@@ -56,6 +56,8 @@ def _clear_auth_cookies(response: Response) -> None:
 def register(
     body: RegisterRequest,
     session: SessionDep,
+    request: Request,
+    response: Response,
 ) -> UserResponse:
     try:
         user = register_user(
@@ -64,9 +66,13 @@ def register(
             password=body.password,
             firstname=body.firstname,
             lastname=body.lastname,
+            invite_id=body.invite_id,
         )
     except IntegrityError as exc:
         raise HTTPException(status_code=409, detail="Email already registered") from exc
+
+    access, refresh = issue_tokens(session, user.uid)
+    _set_auth_cookies(request, response, access, refresh)
     return UserResponse.model_validate(user)
 
 

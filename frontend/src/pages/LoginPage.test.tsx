@@ -36,7 +36,7 @@ describe('LoginPage', () => {
 
   it('calls login with entered credentials on submit', async () => {
     const user = userEvent.setup();
-    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B' });
+    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5 });
 
     renderLogin();
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
@@ -50,7 +50,7 @@ describe('LoginPage', () => {
 
   it('navigates to /notebooks on successful login', async () => {
     const user = userEvent.setup();
-    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B' });
+    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5 });
 
     renderLogin();
     await user.type(screen.getByLabelText('Email'), 'a@b.com');

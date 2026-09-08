@@ -3,6 +3,21 @@ export interface User {
   email: string;
   firstname: string;
   lastname: string;
+  invite_quota_remaining: number;
+}
+
+export interface Invite {
+  id: string;
+  invitee_email: string;
+  state: 'pending' | 'void' | 'converted';
+  created_at: string;
+  expires_at: string;
+  url: string;
+}
+
+export interface InvitesConfigFlags {
+  registration_enabled: boolean;
+  invites_enabled: boolean;
 }
 
 export interface Notebook {

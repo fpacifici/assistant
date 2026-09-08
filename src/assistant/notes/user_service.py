@@ -6,6 +6,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from assistant.config import Config
+from assistant.invites.service import (
+    default_quota_for_new_user,
+    on_user_created,
+    resolve_registration_gate,
+)
 from assistant.models.schema import User
 from assistant.notes.exceptions import UserNotFoundError
 
@@ -15,14 +21,47 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 
-def create_user(
+def create_user(  # noqa: PLR0913
     session: Session,
     email: str,
     firstname: str,
     lastname: str,
+    *,
+    invite_quota: int | None = None,
+    invite_id: uuid.UUID | None = None,
 ) -> User:
-    user = User(email=email, firstname=firstname, lastname=lastname)
+    """Create a user directly (the generic POST /user path).
+
+    Gated exactly like self-registration: raises RegistrationDisabledError
+    if registration_enabled is false and no (valid) invite_id was given.
+    This endpoint mints accounts from caller-supplied identity same as
+    /auth/register does, so it cannot bypass the invite-only gate.
+    """
+    config = Config().get_registration_config()
+    invite = resolve_registration_gate(session, config, email, invite_id)
+    user = User(
+        email=email,
+        firstname=firstname,
+        lastname=lastname,
+        invite_quota_remaining=default_quota_for_new_user(config, invite_quota),
+    )
     session.add(user)
+    session.flush()
+    on_user_created(session, user, used_invite_id=invite.id if invite else None)
+    return user
+
+
+def delete_user(session: Session, uid: uuid.UUID) -> User:
+    """Permanently delete a user and everything that cascades from them.
+
+    Relies entirely on the cascade="all, delete-orphan" relationships
+    already declared on User — notebooks/notes owned, entitlements held
+    (including on others' subjects), credentials, refresh_tokens, and
+    invites_sent. Does NOT touch Invite rows where this user's email is
+    only the invitee (a plain string field, not an FK).
+    """
+    user = get_user(session, uid)
+    session.delete(user)
     session.flush()
     return user
 
