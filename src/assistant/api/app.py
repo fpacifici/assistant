@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from assistant.api.exceptions import register_exception_handlers
 from assistant.api.routes.auth import router as auth_router
 from assistant.api.routes.files import router as files_router
+from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
@@ -63,6 +64,7 @@ def create_app(
 
     app.include_router(auth_router, prefix="/auth", tags=["auth"])
     app.include_router(users_router, prefix="/user", tags=["users"])
+    app.include_router(invites_router, prefix="/invites", tags=["invites"])
     app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
     app.include_router(notes_router, prefix="/notebook", tags=["notes"])
     app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])

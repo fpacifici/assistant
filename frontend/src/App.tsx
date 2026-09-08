@@ -2,6 +2,8 @@ import { Routes, Route, Navigate } from 'react-router';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
+import InvitesPage from './pages/InvitesPage';
 import { AuthProvider } from './contexts/AuthContext';
 
 function ProtectedRoutes() {
@@ -12,6 +14,7 @@ function ProtectedRoutes() {
         <Route path="/notebooks" element={<Layout />} />
         <Route path="/notebooks/:notebookId/notes" element={<Layout />} />
         <Route path="/notebooks/:notebookId/notes/:noteId" element={<Layout />} />
+        <Route path="/invites" element={<InvitesPage />} />
       </Routes>
     </AuthProvider>
   );
@@ -22,6 +25,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/invite/:inviteId" element={<AcceptInvitePage />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

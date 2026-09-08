@@ -24,14 +24,16 @@ def _print_response(response: httpx.Response) -> None:
 
 
 def cmd_create_user(args: argparse.Namespace) -> None:
-    response = httpx.post(
-        f"{args.base_url}/user",
-        json={
-            "email": args.email,
-            "firstname": args.firstname,
-            "lastname": args.lastname,
-        },
-    )
+    body: dict[str, str | int] = {
+        "email": args.email,
+        "firstname": args.firstname,
+        "lastname": args.lastname,
+    }
+    if args.invite_quota is not None:
+        body["invite_quota"] = args.invite_quota
+    if args.invite_id is not None:
+        body["invite_id"] = args.invite_id
+    response = httpx.post(f"{args.base_url}/user", json=body)
     _print_response(response)
 
 
@@ -183,6 +185,8 @@ def _register_user_commands(
     p.add_argument("--email", required=True)
     p.add_argument("--firstname", required=True)
     p.add_argument("--lastname", required=True)
+    p.add_argument("--invite-quota", type=int, default=None)
+    p.add_argument("--invite-id", default=None)
     p.set_defaults(func=cmd_create_user)
 
     p = subparsers.add_parser("get-user")

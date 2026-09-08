@@ -14,6 +14,12 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy import delete, select
 
+from assistant.config import Config
+from assistant.invites.service import (
+    default_quota_for_new_user,
+    on_user_created,
+    resolve_registration_gate,
+)
 from assistant.models.schema import Credential, RefreshToken, User
 
 if TYPE_CHECKING:
@@ -84,16 +90,31 @@ def _create_refresh_token(
 # --- User registration ---
 
 
-def register_user(
+def register_user(  # noqa: PLR0913
     session: Session,
     *,
     email: str,
     password: str,
     firstname: str,
     lastname: str,
+    invite_id: uuid_module.UUID | None = None,
 ) -> User:
-    """Create a user and a password credential. Raises AuthError on duplicate email."""
-    user = User(email=email, firstname=firstname, lastname=lastname)
+    """Create a user and a password credential.
+
+    Raises AuthError on duplicate email. Raises RegistrationDisabledError if
+    registration_enabled is false and no invite_id was given. Raises
+    InvitesDisabledError / InviteNotUsableError / InviteEmailMismatchError
+    per get_valid_pending_invite and the email-match check, when an
+    invite_id is given.
+    """
+    config = Config().get_registration_config()
+    invite = resolve_registration_gate(session, config, email, invite_id)
+    user = User(
+        email=email,
+        firstname=firstname,
+        lastname=lastname,
+        invite_quota_remaining=default_quota_for_new_user(config, None),
+    )
     session.add(user)
     session.flush()
 
@@ -104,6 +125,8 @@ def register_user(
     )
     session.add(credential)
     session.flush()
+
+    on_user_created(session, user, used_invite_id=invite.id if invite else None)
     return user
 
 

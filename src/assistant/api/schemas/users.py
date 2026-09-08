@@ -11,6 +11,8 @@ class UserCreate(BaseModel):
     email: str
     firstname: str
     lastname: str
+    invite_quota: int | None = None
+    invite_id: uuid.UUID | None = None
 
 
 class UserUpdate(BaseModel):
@@ -26,3 +28,4 @@ class UserResponse(BaseModel):
     email: str
     firstname: str
     lastname: str
+    invite_quota_remaining: int

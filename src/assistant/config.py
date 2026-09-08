@@ -55,6 +55,21 @@ class MailgunConfig(TypedDict):
     timeout: int
 
 
+class RegistrationConfig(TypedDict):
+    """Effective registration/invite subsystem configuration.
+
+    Represents the fully-resolved result of `get_registration_config()`,
+    which always populates every key (falling back to defaults) — same
+    convention as `MailgunConfig`. The raw YAML `registration:` section may
+    omit any of these; that partial shape isn't separately typed.
+    """
+
+    registration_enabled: bool
+    invites_enabled: bool
+    default_quota: int
+    expiry_days: int
+
+
 class AssistantConfig(TypedDict, total=False):
     """Top-level configuration structure loaded from YAML."""
 
@@ -63,7 +78,9 @@ class AssistantConfig(TypedDict, total=False):
     file_storage_path: str
     external_sources: ExternalSourcesConfig
     domain: str
+    port: int
     mailgun: MailgunConfig
+    registration: RegistrationConfig
 
 
 T = TypeVar("T")
@@ -455,4 +472,37 @@ class Config:
             "apikey": apikey,
             "sender": sender,
             "timeout": timeout,
+        }
+
+    def get_port(self) -> int:
+        """Get the assistant's configured port.
+
+        Env var override: `port` -> `PORT`.
+
+        Returns:
+            The configured port, defaulting to 8000.
+        """
+        return int(self.get("port", 8000))
+
+    def get_registration_config(self) -> RegistrationConfig:
+        """Get the effective registration/invites configuration.
+
+        Each key is individually env-overridable per the module convention:
+            - `registration.registration_enabled` -> `REGISTRATION_REGISTRATION_ENABLED`
+            - `registration.invites_enabled` -> `REGISTRATION_INVITES_ENABLED`
+            - `registration.default_quota` -> `REGISTRATION_DEFAULT_QUOTA`
+            - `registration.expiry_days` -> `REGISTRATION_EXPIRY_DAYS`
+
+        Returns:
+            A `RegistrationConfig` mapping. Defaults keep registration fully
+            open (`True`/`True`/`5`/`1`) when no `registration:` section is
+            configured.
+        """
+        return {
+            "registration_enabled": bool(
+                self.get("registration.registration_enabled", True)
+            ),
+            "invites_enabled": bool(self.get("registration.invites_enabled", True)),
+            "default_quota": int(self.get("registration.default_quota", 5)),
+            "expiry_days": int(self.get("registration.expiry_days", 1)),
         }

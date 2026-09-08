@@ -2,26 +2,35 @@
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+import pytest
+
 from assistant.auth.service import create_access_token, issue_tokens
-from assistant.models.schema import User
+from assistant.invites.service import create_invite
+from assistant.models.schema import Invite, InviteState, User
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session
 
 
-def _register(client: TestClient, email: str = "user@example.com") -> dict:
-    return client.post(
-        "/auth/register",
-        json={
-            "email": email,
-            "password": "secret123",
-            "firstname": "Jane",
-            "lastname": "Doe",
-        },
-    )
+def _register(
+    client: TestClient,
+    email: str = "user@example.com",
+    invite_id: str | None = None,
+) -> dict:
+    body = {
+        "email": email,
+        "password": "secret123",
+        "firstname": "Jane",
+        "lastname": "Doe",
+    }
+    if invite_id is not None:
+        body["invite_id"] = invite_id
+    return client.post("/auth/register", json=body)
 
 
 # --- Registration ---
@@ -54,6 +63,185 @@ def test_register_invalid_email(client: TestClient) -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_register_auto_logs_in(client: TestClient) -> None:
+    response = _register(client)
+    assert response.status_code == 201
+    assert "access_token" in client.cookies
+
+
+# --- Registration mode matrix ---
+
+
+def test_register_open_registration_succeeds(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "true")
+    monkeypatch.setenv("REGISTRATION_INVITES_ENABLED", "true")
+    response = _register(client)
+    assert response.status_code == 201
+    assert "access_token" in client.cookies
+
+
+def test_register_disabled_without_invite_rejected(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
+    response = _register(client)
+    assert response.status_code == 403
+
+
+def test_register_disabled_with_valid_invite_succeeds(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inviter = User(
+        email="inviter@example.com",
+        firstname="I",
+        lastname="N",
+        invite_quota_remaining=5,
+    )
+    db_session.add(inviter)
+    db_session.flush()
+    invite = create_invite(
+        db_session,
+        inviter,
+        "invitee@example.com",
+        {
+            "registration_enabled": True,
+            "invites_enabled": True,
+            "default_quota": 5,
+            "expiry_days": 1,
+        },
+    )
+    db_session.commit()
+
+    monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
+    response = _register(client, email="invitee@example.com", invite_id=str(invite.id))
+    assert response.status_code == 201
+    assert "access_token" in client.cookies
+
+    db_session.refresh(invite)
+    assert invite.state == InviteState.CONVERTED.value
+
+
+def test_register_invites_disabled_blocks_redemption(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inviter = User(
+        email="inviter2@example.com",
+        firstname="I",
+        lastname="N",
+        invite_quota_remaining=5,
+    )
+    db_session.add(inviter)
+    db_session.flush()
+    invite = create_invite(
+        db_session,
+        inviter,
+        "invitee2@example.com",
+        {
+            "registration_enabled": True,
+            "invites_enabled": True,
+            "default_quota": 5,
+            "expiry_days": 1,
+        },
+    )
+    db_session.commit()
+
+    monkeypatch.setenv("REGISTRATION_INVITES_ENABLED", "false")
+    response = _register(client, email="invitee2@example.com", invite_id=str(invite.id))
+    assert response.status_code == 403
+
+
+def test_register_invite_email_mismatch(client: TestClient, db_session: Session) -> None:
+    inviter = User(
+        email="inviter3@example.com",
+        firstname="I",
+        lastname="N",
+        invite_quota_remaining=5,
+    )
+    db_session.add(inviter)
+    db_session.flush()
+    invite = create_invite(
+        db_session,
+        inviter,
+        "invitee3@example.com",
+        {
+            "registration_enabled": True,
+            "invites_enabled": True,
+            "default_quota": 5,
+            "expiry_days": 1,
+        },
+    )
+    db_session.commit()
+
+    response = _register(
+        client, email="someone-else@example.com", invite_id=str(invite.id)
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("state", [InviteState.VOID, InviteState.CONVERTED])
+def test_register_non_pending_invite_returns_404(
+    client: TestClient, db_session: Session, state: InviteState
+) -> None:
+    inviter = User(email="inviter4@example.com", firstname="I", lastname="N")
+    db_session.add(inviter)
+    db_session.flush()
+    invite = Invite(
+        invitee_email="invitee4@example.com",
+        inviter_id=inviter.uid,
+        state=state.value,
+        quota_consumed=True,
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+    )
+    db_session.add(invite)
+    db_session.commit()
+
+    response = _register(client, email="invitee4@example.com", invite_id=str(invite.id))
+    assert response.status_code == 404
+
+
+def test_register_unknown_invite_returns_404(client: TestClient) -> None:
+    response = _register(client, invite_id=str(uuid.uuid4()))
+    assert response.status_code == 404
+
+
+def test_register_with_invite_voids_sibling_invites(
+    client: TestClient, db_session: Session
+) -> None:
+    inviter = User(
+        email="inviter5@example.com",
+        firstname="I",
+        lastname="N",
+        invite_quota_remaining=5,
+    )
+    other_inviter = User(
+        email="inviter6@example.com",
+        firstname="I",
+        lastname="N",
+        invite_quota_remaining=5,
+    )
+    db_session.add_all([inviter, other_inviter])
+    db_session.flush()
+    config = {
+        "registration_enabled": True,
+        "invites_enabled": True,
+        "default_quota": 5,
+        "expiry_days": 1,
+    }
+    used = create_invite(db_session, inviter, "invitee5@example.com", config)
+    sibling = create_invite(db_session, other_inviter, "invitee5@example.com", config)
+    db_session.commit()
+
+    response = _register(client, email="invitee5@example.com", invite_id=str(used.id))
+    assert response.status_code == 201
+
+    db_session.refresh(used)
+    db_session.refresh(sibling)
+    assert used.state == InviteState.CONVERTED.value
+    assert sibling.state == InviteState.VOID.value
 
 
 # --- Login ---

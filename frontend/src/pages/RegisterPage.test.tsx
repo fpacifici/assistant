@@ -10,9 +10,15 @@ vi.mock('../api/auth', () => ({
   login: vi.fn(),
 }));
 
+vi.mock('../api/invites', () => ({
+  fetchInvitesConfig: vi.fn(),
+}));
+
 import { register, login } from '../api/auth';
+import { fetchInvitesConfig } from '../api/invites';
 const mockRegister = vi.mocked(register);
 const mockLogin = vi.mocked(login);
+const mockFetchInvitesConfig = vi.mocked(fetchInvitesConfig);
 
 const mockNavigate = vi.fn();
 vi.mock('react-router', async (importOriginal) => {
@@ -20,7 +26,13 @@ vi.mock('react-router', async (importOriginal) => {
   return { ...mod, useNavigate: () => mockNavigate };
 });
 
-const USER = { uid: 'u1', email: 'a@b.com', firstname: 'Alice', lastname: 'Smith' };
+const USER = {
+  uid: 'u1',
+  email: 'a@b.com',
+  firstname: 'Alice',
+  lastname: 'Smith',
+  invite_quota_remaining: 5,
+};
 
 function renderRegister() {
   return renderWithProviders(<RegisterPage />);
@@ -38,6 +50,10 @@ async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>, overrides
 describe('RegisterPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchInvitesConfig.mockResolvedValue({
+      registration_enabled: true,
+      invites_enabled: true,
+    });
   });
 
   it('renders all form fields and a submit button', () => {
@@ -117,5 +133,17 @@ describe('RegisterPage', () => {
   it('has a link to the login page', () => {
     renderRegister();
     expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/login');
+  });
+
+  it('renders an invite-only message instead of the form when registration is disabled', async () => {
+    mockFetchInvitesConfig.mockResolvedValue({
+      registration_enabled: false,
+      invites_enabled: true,
+    });
+
+    renderRegister();
+
+    expect(await screen.findByText(/invite-only/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 });

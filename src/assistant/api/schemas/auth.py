@@ -14,6 +14,7 @@ class RegisterRequest(BaseModel):
     password: str
     firstname: str
     lastname: str
+    invite_id: uuid.UUID | None = None
 
 
 class LoginRequest(BaseModel):
@@ -30,5 +31,6 @@ class UserResponse(BaseModel):
     email: str
     firstname: str
     lastname: str
+    invite_quota_remaining: int
 
     model_config = {"from_attributes": True}

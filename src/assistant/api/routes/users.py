@@ -24,6 +24,8 @@ def create_user_endpoint(
         email=body.email,
         firstname=body.firstname,
         lastname=body.lastname,
+        invite_quota=body.invite_quota,
+        invite_id=body.invite_id,
     )
     return UserResponse.model_validate(user)
 
