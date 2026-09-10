@@ -463,6 +463,35 @@ def test_config_get_port_env_override(tmp_path: Path) -> None:
         assert config.get_port() == 9001
 
 
+def test_config_get_use_https_defaults(tmp_path: Path) -> None:
+    """Test that get_use_https defaults to True when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_https() is True
+
+
+def test_config_get_use_https_from_yaml(tmp_path: Path) -> None:
+    """Test getting the configured use_https flag from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_https: false\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_https() is False
+
+
+def test_config_get_use_https_env_override(tmp_path: Path) -> None:
+    """Test that USE_HTTPS env var overrides YAML use_https."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_https: true\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"USE_HTTPS": "false"}):
+        assert config.get_use_https() is False
+
+
 def test_config_get_registration_config_defaults(tmp_path: Path) -> None:
     """Test that get_registration_config returns documented defaults when absent."""
     config_file = tmp_path / "test_config.yaml"

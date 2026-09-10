@@ -8,6 +8,12 @@ from typing import TYPE_CHECKING
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from assistant.auth.exceptions import (
+    ConfirmationCooldownError,
+    ConfirmationLimitExceededError,
+    ConfirmationNotFoundError,
+    ConfirmationTokenInvalidError,
+)
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
     InviteNotUsableError,
@@ -125,4 +131,42 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(
             status_code=403, content={"detail": "Not the sender of this invite"}
+        )
+
+    @app.exception_handler(ConfirmationTokenInvalidError)
+    async def confirmation_token_invalid_handler(
+        request: Request,  # noqa: ARG001
+        exc: ConfirmationTokenInvalidError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404, content={"detail": "Confirmation link is invalid or expired"}
+        )
+
+    @app.exception_handler(ConfirmationNotFoundError)
+    async def confirmation_not_found_handler(
+        request: Request,  # noqa: ARG001
+        exc: ConfirmationNotFoundError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404, content={"detail": "No pending registration for this email"}
+        )
+
+    @app.exception_handler(ConfirmationCooldownError)
+    async def confirmation_cooldown_handler(
+        request: Request,  # noqa: ARG001
+        exc: ConfirmationCooldownError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "A confirmation email was sent recently — please wait"},
+        )
+
+    @app.exception_handler(ConfirmationLimitExceededError)
+    async def confirmation_limit_exceeded_handler(
+        request: Request,  # noqa: ARG001
+        exc: ConfirmationLimitExceededError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Too many confirmation attempts — please register again"},
         )

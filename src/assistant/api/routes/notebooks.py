@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, BackgroundTasks, Response
 
 from assistant.api.dependencies import CurrentUser, SessionDep
 from assistant.api.routes._sharing import validate_role_for_subject_type
@@ -21,6 +21,7 @@ from assistant.notes.entitlements import (
     grant_entitlement,
     list_entitlements,
     revoke_entitlement,
+    send_share_notification_email,
 )
 from assistant.notes.permissions import notebook_permissions
 from assistant.notes.service import (
@@ -110,15 +111,26 @@ def share_notebook_endpoint(
     body: EntitlementCreate,
     session: SessionDep,
     user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> EntitlementResponse:
     validate_role_for_subject_type(body.role, SubjectType.NOTEBOOK)
-    entitlement = grant_entitlement(
+    entitlement, created = grant_entitlement(
         session,
         user,
         notebook_id=notebook_id,
         grantee_email=body.email,
         role_name=body.role,
     )
+    if created:
+        background_tasks.add_task(
+            send_share_notification_email,
+            granter_name=f"{user.firstname} {user.lastname}",
+            grantee_email=body.email,
+            role=body.role,
+            subject_type=SubjectType.NOTEBOOK,
+            notebook_id=notebook_id,
+            note_id=None,
+        )
     return EntitlementResponse.from_entitlement(entitlement)
 
 

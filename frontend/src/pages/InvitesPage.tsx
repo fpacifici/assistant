@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { createInvite, listInvites, voidInvite } from '../api/invites';
+import { createInvite, listInvites, resendInvite, voidInvite } from '../api/invites';
 import { ApiError } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import type { Invite } from '../types';
@@ -41,6 +41,13 @@ export default function InvitesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: (id: string) => resendInvite(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invites'] });
     },
   });
 
@@ -94,7 +101,19 @@ export default function InvitesPage() {
               {pending.map((invite) => (
                 <tr key={invite.id}>
                   <td>{invite.invitee_email}</td>
-                  <td>{invite.url}</td>
+                  <td>
+                    {invite.email_sent === false && (
+                      <span className="auth-error">Email failed to send</span>
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => resendMutation.mutate(invite.id)}
+                      disabled={resendMutation.isPending}
+                    >
+                      Resend
+                    </button>
+                  </td>
                   <td>
                     <button onClick={() => voidMutation.mutate(invite.id)}>
                       Void

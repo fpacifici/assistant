@@ -7,17 +7,16 @@ import { ApiError } from '../api/client';
 
 vi.mock('../api/auth', () => ({
   register: vi.fn(),
-  login: vi.fn(),
+  resendConfirmation: vi.fn(),
 }));
 
 vi.mock('../api/invites', () => ({
   fetchInvitesConfig: vi.fn(),
 }));
 
-import { register, login } from '../api/auth';
+import { register } from '../api/auth';
 import { fetchInvitesConfig } from '../api/invites';
 const mockRegister = vi.mocked(register);
-const mockLogin = vi.mocked(login);
 const mockFetchInvitesConfig = vi.mocked(fetchInvitesConfig);
 
 const mockNavigate = vi.fn();
@@ -26,13 +25,7 @@ vi.mock('react-router', async (importOriginal) => {
   return { ...mod, useNavigate: () => mockNavigate };
 });
 
-const USER = {
-  uid: 'u1',
-  email: 'a@b.com',
-  firstname: 'Alice',
-  lastname: 'Smith',
-  invite_quota_remaining: 5,
-};
+const REGISTER_RESULT = { email: 'a@b.com', confirmation_email_sent: true };
 
 function renderRegister() {
   return renderWithProviders(<RegisterPage />);
@@ -65,10 +58,9 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
   });
 
-  it('calls register then login with the entered values', async () => {
+  it('calls register with the entered values, without logging in', async () => {
     const user = userEvent.setup();
-    mockRegister.mockResolvedValueOnce(USER);
-    mockLogin.mockResolvedValueOnce(USER);
+    mockRegister.mockResolvedValueOnce(REGISTER_RESULT);
 
     renderRegister();
     await fillAndSubmit(user);
@@ -78,18 +70,29 @@ describe('RegisterPage', () => {
         firstname: 'Alice', lastname: 'Smith', email: 'a@b.com', password: 'password1',
       });
     });
-    expect(mockLogin).toHaveBeenCalledWith({ email: 'a@b.com', password: 'password1' });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('navigates to /notebooks after successful registration', async () => {
+  it('shows a pending-confirmation panel after successful registration', async () => {
     const user = userEvent.setup();
-    mockRegister.mockResolvedValueOnce(USER);
-    mockLogin.mockResolvedValueOnce(USER);
+    mockRegister.mockResolvedValueOnce(REGISTER_RESULT);
 
     renderRegister();
     await fillAndSubmit(user);
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/notebooks'));
+    expect(await screen.findByText(/we sent a confirmation link to a@b.com/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+  });
+
+  it('shows a resend affordance when the confirmation email failed to send', async () => {
+    const user = userEvent.setup();
+    mockRegister.mockResolvedValueOnce({ email: 'a@b.com', confirmation_email_sent: false });
+
+    renderRegister();
+    await fillAndSubmit(user);
+
+    expect(await screen.findByText(/failed to send/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /resend confirmation email/i })).toBeInTheDocument();
   });
 
   it('shows duplicate email error on 409', async () => {
@@ -102,7 +105,6 @@ describe('RegisterPage', () => {
     await waitFor(() => {
       expect(screen.getByText('An account with this email already exists.')).toBeInTheDocument();
     });
-    expect(mockLogin).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 

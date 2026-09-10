@@ -20,11 +20,12 @@ export default function AcceptInvitePage() {
           <p>Loading...</p>
         ) : data?.valid ? (
           <>
-            <p className="auth-banner">
-              You've been invited to join. Enter the email address the invite
-              was sent to.
-            </p>
-            <RegistrationForm inviteId={inviteId} />
+            <p className="auth-banner">You've been invited to join.</p>
+            <RegistrationForm
+              inviteId={inviteId}
+              initialEmail={data.invitee_email ?? undefined}
+              emailLocked
+            />
           </>
         ) : (
           <>

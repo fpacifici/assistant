@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import Session
 
 from assistant.config import RegistrationConfig
+from assistant.email.exceptions import EmailSendError
 from assistant.invites.exceptions import (
     InviteNotUsableError,
     InvitePermissionError,
@@ -24,9 +27,17 @@ from assistant.invites.service import (
     get_valid_pending_invite,
     on_user_created,
     replenish_quota,
+    resend_invite,
     void_invite,
 )
 from assistant.models.schema import Invite, InviteState, User
+
+
+@pytest.fixture(autouse=True)
+def mock_send_invite_email() -> Iterator[MagicMock]:
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
+
 
 _ENABLED_CONFIG: RegistrationConfig = {
     "registration_enabled": True,
@@ -81,12 +92,35 @@ def test_create_invite_decrements_quota_and_sets_quota_consumed(
     db_session: Session,
 ) -> None:
     inviter = _make_user(db_session, "inviter@example.com", quota=5)
-    invite = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
+    invite, _ = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
 
     assert inviter.invite_quota_remaining == 4
     assert invite.quota_consumed is True
     assert invite.state == InviteState.PENDING.value
     assert invite.invitee_email == "invitee@example.com"
+
+
+def test_create_invite_returns_email_sent_true_on_success(db_session: Session) -> None:
+    inviter = _make_user(db_session, "inviter@example.com", quota=5)
+    invite, email_sent = create_invite(
+        db_session, inviter, "invitee@example.com", _ENABLED_CONFIG
+    )
+
+    assert email_sent is True
+    assert db_session.get(Invite, invite.id) is not None
+
+
+def test_create_invite_returns_email_sent_false_on_send_failure(
+    db_session: Session, mock_send_invite_email: MagicMock
+) -> None:
+    mock_send_invite_email.side_effect = EmailSendError("boom")
+    inviter = _make_user(db_session, "inviter@example.com", quota=5)
+    invite, email_sent = create_invite(
+        db_session, inviter, "invitee@example.com", _ENABLED_CONFIG
+    )
+
+    assert email_sent is False
+    assert db_session.get(Invite, invite.id) is not None
 
 
 def test_create_invite_raises_when_quota_exhausted(db_session: Session) -> None:
@@ -105,8 +139,8 @@ def test_create_invite_raises_when_invites_disabled(db_session: Session) -> None
 
 def test_create_invite_never_idempotent(db_session: Session) -> None:
     inviter = _make_user(db_session, "inviter@example.com", quota=5)
-    first = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
-    second = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
+    first, _ = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
+    second, _ = create_invite(db_session, inviter, "invitee@example.com", _ENABLED_CONFIG)
 
     assert first.id != second.id
     assert inviter.invite_quota_remaining == 3
@@ -117,7 +151,7 @@ def test_create_invite_never_idempotent(db_session: Session) -> None:
 
 def test_admin_create_invite_never_touches_quota(db_session: Session) -> None:
     inviter = _make_user(db_session, "inviter@example.com", quota=5)
-    invite = admin_create_invite(
+    invite, _ = admin_create_invite(
         db_session, inviter, "invitee@example.com", _DISABLED_INVITES_CONFIG
     )
 
@@ -248,6 +282,56 @@ def test_admin_void_invite_ignores_sender_identity(db_session: Session) -> None:
 
     assert invite.state == InviteState.VOID.value
     assert inviter.invite_quota_remaining == 5
+
+
+# --- resend_invite ---
+
+
+def test_resend_invite_raises_for_non_sender(db_session: Session) -> None:
+    inviter = _make_user(db_session, "inviter@example.com")
+    other = _make_user(db_session, "other@example.com")
+    invite = _make_invite(db_session, inviter=inviter)
+
+    with pytest.raises(InvitePermissionError):
+        resend_invite(db_session, other, invite.id, _ENABLED_CONFIG)
+
+
+@pytest.mark.parametrize("state", [InviteState.VOID, InviteState.CONVERTED])
+def test_resend_invite_raises_for_non_pending(
+    db_session: Session, state: InviteState
+) -> None:
+    inviter = _make_user(db_session, "inviter@example.com")
+    invite = _make_invite(db_session, inviter=inviter, state=state)
+
+    with pytest.raises(InviteNotUsableError):
+        resend_invite(db_session, inviter, invite.id, _ENABLED_CONFIG)
+
+
+def test_resend_invite_raises_for_expired(db_session: Session) -> None:
+    inviter = _make_user(db_session, "inviter@example.com")
+    invite = _make_invite(
+        db_session,
+        inviter=inviter,
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+
+    with pytest.raises(InviteNotUsableError):
+        resend_invite(db_session, inviter, invite.id, _ENABLED_CONFIG)
+
+
+def test_resend_invite_succeeds_repeatedly_with_no_rate_limit(
+    db_session: Session, mock_send_invite_email: MagicMock
+) -> None:
+    inviter = _make_user(db_session, "inviter@example.com")
+    invite = _make_invite(db_session, inviter=inviter)
+
+    for _ in range(3):
+        result, email_sent = resend_invite(
+            db_session, inviter, invite.id, _ENABLED_CONFIG
+        )
+        assert result.id == invite.id
+        assert email_sent is True
+    assert mock_send_invite_email.call_count == 3
 
 
 # --- replenish_quota ---
