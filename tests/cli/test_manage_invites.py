@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy.orm import Session
 
 from assistant.cli.manage_invites import main
+from assistant.email.exceptions import EmailSendError
 from assistant.models.schema import Invite, InviteState, User
+
+
+@pytest.fixture(autouse=True)
+def mock_send_invite_email() -> Iterator[MagicMock]:
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
 
 
 def _make_user(session: Session, email: str, *, quota: int = 5) -> User:
@@ -63,6 +72,35 @@ def test_create_attributes_invite_and_bypasses_quota(db_session: Session) -> Non
     refreshed_sender = db_session.get(User, sender_uid)
     assert refreshed_sender is not None
     assert refreshed_sender.invite_quota_remaining == 5
+
+
+def test_create_reports_email_sent_status(
+    db_session: Session,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _make_user(db_session, "sender@example.com", quota=5)
+    db_session.commit()
+
+    _run(db_session, ["create", "--as", "sender@example.com", "--to", "new@example.com"])
+
+    assert "email sent" in capsys.readouterr().out
+
+
+def test_create_reports_email_send_failure(
+    db_session: Session,
+    capsys: pytest.CaptureFixture[str],
+    mock_send_invite_email: MagicMock,
+) -> None:
+    mock_send_invite_email.side_effect = EmailSendError("boom")
+    _make_user(db_session, "sender2@example.com", quota=5)
+    db_session.commit()
+
+    _run(
+        db_session,
+        ["create", "--as", "sender2@example.com", "--to", "new2@example.com"],
+    )
+
+    assert "EMAIL SEND FAILED" in capsys.readouterr().out
 
 
 # --- void ---

@@ -10,6 +10,7 @@ vi.mock('../api/invites', () => ({
   listInvites: vi.fn(),
   createInvite: vi.fn(),
   voidInvite: vi.fn(),
+  resendInvite: vi.fn(),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -25,10 +26,11 @@ vi.mock('../contexts/AuthContext', () => ({
   }),
 }));
 
-import { listInvites, createInvite, voidInvite } from '../api/invites';
+import { listInvites, createInvite, voidInvite, resendInvite } from '../api/invites';
 const mockListInvites = vi.mocked(listInvites);
 const mockCreateInvite = vi.mocked(createInvite);
 const mockVoidInvite = vi.mocked(voidInvite);
+const mockResendInvite = vi.mocked(resendInvite);
 
 let mockQuota = 5;
 
@@ -38,7 +40,7 @@ const PENDING_INVITE: Invite = {
   state: 'pending',
   created_at: '2026-01-01T00:00:00Z',
   expires_at: '2026-01-02T00:00:00Z',
-  url: 'https://example.com:8000/invite/inv-1',
+  email_sent: true,
 };
 
 const HISTORY_INVITE: Invite = {
@@ -47,7 +49,7 @@ const HISTORY_INVITE: Invite = {
   state: 'converted',
   created_at: '2026-01-01T00:00:00Z',
   expires_at: '2026-01-02T00:00:00Z',
-  url: 'https://example.com:8000/invite/inv-2',
+  email_sent: true,
 };
 
 function renderPage() {
@@ -97,6 +99,29 @@ describe('InvitesPage', () => {
     await user.click(screen.getByRole('button', { name: /send invite/i }));
 
     expect(await screen.findByText('No invites remaining.')).toBeInTheDocument();
+  });
+
+  it('clicking Resend calls resendInvite', async () => {
+    mockListInvites.mockResolvedValue([PENDING_INVITE]);
+    mockResendInvite.mockResolvedValue(PENDING_INVITE);
+    const user = userEvent.setup();
+
+    renderPage();
+    await screen.findByText('pending@example.com');
+
+    await user.click(screen.getByRole('button', { name: /resend/i }));
+
+    await waitFor(() => {
+      expect(mockResendInvite).toHaveBeenCalledWith('inv-1');
+    });
+  });
+
+  it('shows a warning when a pending invite failed to send', async () => {
+    mockListInvites.mockResolvedValue([{ ...PENDING_INVITE, email_sent: false }]);
+
+    renderPage();
+
+    expect(await screen.findByText(/email failed to send/i)).toBeInTheDocument();
   });
 
   it('clicking Void calls voidInvite', async () => {

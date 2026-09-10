@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import InvitesPage from './pages/InvitesPage';
 import { AuthProvider } from './contexts/AuthContext';
 
@@ -26,6 +27,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/invite/:inviteId" element={<AcceptInvitePage />} />
+      <Route path="/confirm-email/:token" element={<ConfirmEmailPage />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

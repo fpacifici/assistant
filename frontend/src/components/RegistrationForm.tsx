@@ -1,26 +1,32 @@
 /** Registration form fields + submit flow, shared by RegisterPage and AcceptInvitePage. */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
-import { register, login } from '../api/auth';
+import { Link } from 'react-router';
+import { register } from '../api/auth';
+import type { RegisterResult } from '../api/auth';
 import { ApiError } from '../api/client';
+import ResendConfirmation from './ResendConfirmation';
 
 interface RegistrationFormProps {
   inviteId?: string;
+  initialEmail?: string;
+  emailLocked?: boolean;
 }
 
-export default function RegistrationForm({ inviteId }: RegistrationFormProps) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+export default function RegistrationForm({
+  inviteId,
+  initialEmail = '',
+  emailLocked = false,
+}: RegistrationFormProps) {
   const [form, setForm] = useState({
-    email: '',
+    email: initialEmail,
     password: '',
     firstname: '',
     lastname: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<RegisterResult | null>(null);
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
@@ -30,10 +36,8 @@ export default function RegistrationForm({ inviteId }: RegistrationFormProps) {
     setError('');
     setLoading(true);
     try {
-      await register({ ...form, invite_id: inviteId });
-      await login({ email: form.email, password: form.password });
-      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
-      navigate('/notebooks');
+      const registered = await register({ ...form, invite_id: inviteId });
+      setResult(registered);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setError('An account with this email already exists.');
@@ -44,6 +48,23 @@ export default function RegistrationForm({ inviteId }: RegistrationFormProps) {
       setLoading(false);
     }
   };
+
+  if (result) {
+    return (
+      <div className="auth-pending">
+        <p>We sent a confirmation link to {result.email}.</p>
+        {!result.confirmation_email_sent && (
+          <p className="auth-error">
+            The email failed to send — try resending below.
+          </p>
+        )}
+        <ResendConfirmation email={result.email} />
+        <p className="auth-footer">
+          <Link to="/login">Back to sign in</Link>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit}>
@@ -77,6 +98,7 @@ export default function RegistrationForm({ inviteId }: RegistrationFormProps) {
           type="email"
           value={form.email}
           onChange={set('email')}
+          readOnly={emailLocked}
           required
         />
       </div>

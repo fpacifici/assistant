@@ -2,19 +2,34 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from assistant.auth.service import create_access_token, issue_tokens
+from assistant.auth.service import (
+    create_access_token,
+    create_email_confirmation,
+    issue_tokens,
+)
+from assistant.email.exceptions import EmailSendError
 from assistant.invites.service import create_invite
-from assistant.models.schema import Invite, InviteState, User
+from assistant.models.schema import EmailConfirmation, Invite, InviteState, User
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session
+
+
+@pytest.fixture(autouse=True)
+def mock_send_email() -> Iterator[MagicMock]:
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
 
 
 def _register(
@@ -41,9 +56,7 @@ def test_register_creates_user(client: TestClient) -> None:
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == "user@example.com"
-    assert data["firstname"] == "Jane"
-    assert "uid" in data
-    assert "password" not in data
+    assert data["confirmation_email_sent"] is True
 
 
 def test_register_duplicate_email(client: TestClient) -> None:
@@ -65,10 +78,19 @@ def test_register_invalid_email(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_register_auto_logs_in(client: TestClient) -> None:
+def test_register_does_not_log_in(client: TestClient) -> None:
     response = _register(client)
     assert response.status_code == 201
-    assert "access_token" in client.cookies
+    assert "access_token" not in client.cookies
+
+
+def test_register_send_failure_reported_but_still_succeeds(
+    client: TestClient, mock_send_email: MagicMock
+) -> None:
+    mock_send_email.side_effect = EmailSendError("boom")
+    response = _register(client)
+    assert response.status_code == 201
+    assert response.json()["confirmation_email_sent"] is False
 
 
 # --- Registration mode matrix ---
@@ -81,7 +103,7 @@ def test_register_open_registration_succeeds(
     monkeypatch.setenv("REGISTRATION_INVITES_ENABLED", "true")
     response = _register(client)
     assert response.status_code == 201
-    assert "access_token" in client.cookies
+    assert response.json()["confirmation_email_sent"] is True
 
 
 def test_register_disabled_without_invite_rejected(
@@ -103,7 +125,7 @@ def test_register_disabled_with_valid_invite_succeeds(
     )
     db_session.add(inviter)
     db_session.flush()
-    invite = create_invite(
+    invite, _ = create_invite(
         db_session,
         inviter,
         "invitee@example.com",
@@ -119,7 +141,6 @@ def test_register_disabled_with_valid_invite_succeeds(
     monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
     response = _register(client, email="invitee@example.com", invite_id=str(invite.id))
     assert response.status_code == 201
-    assert "access_token" in client.cookies
 
     db_session.refresh(invite)
     assert invite.state == InviteState.CONVERTED.value
@@ -136,7 +157,7 @@ def test_register_invites_disabled_blocks_redemption(
     )
     db_session.add(inviter)
     db_session.flush()
-    invite = create_invite(
+    invite, _ = create_invite(
         db_session,
         inviter,
         "invitee2@example.com",
@@ -163,7 +184,7 @@ def test_register_invite_email_mismatch(client: TestClient, db_session: Session)
     )
     db_session.add(inviter)
     db_session.flush()
-    invite = create_invite(
+    invite, _ = create_invite(
         db_session,
         inviter,
         "invitee3@example.com",
@@ -231,8 +252,8 @@ def test_register_with_invite_voids_sibling_invites(
         "default_quota": 5,
         "expiry_days": 1,
     }
-    used = create_invite(db_session, inviter, "invitee5@example.com", config)
-    sibling = create_invite(db_session, other_inviter, "invitee5@example.com", config)
+    used, _ = create_invite(db_session, inviter, "invitee5@example.com", config)
+    sibling, _ = create_invite(db_session, other_inviter, "invitee5@example.com", config)
     db_session.commit()
 
     response = _register(client, email="invitee5@example.com", invite_id=str(used.id))
@@ -247,8 +268,28 @@ def test_register_with_invite_voids_sibling_invites(
 # --- Login ---
 
 
-def test_login_sets_cookies(client: TestClient) -> None:
+def _confirmation_token_for(db_session: Session, email: str) -> str:
+    """Force-issue a known raw token for a pending user's confirmation row.
+
+    Uses create_email_confirmation directly (not the resend endpoint/service
+    function) since that one is cooldown-gated and register_user already
+    used up the initial send.
+    """
+    user = db_session.query(User).filter_by(email=email).one()
+    with patch(
+        "assistant.auth.service.secrets.token_urlsafe", return_value="fixed-token"
+    ):
+        create_email_confirmation(db_session, user.uid)
+    db_session.commit()
+    return "fixed-token"
+
+
+def test_login_sets_cookies(client: TestClient, db_session: Session) -> None:
     _register(client)
+    token = _confirmation_token_for(db_session, "user@example.com")
+    confirm_response = client.post(f"/auth/confirm-email/{token}")
+    assert confirm_response.status_code == 204
+
     response = client.post(
         "/auth/login",
         json={"email": "user@example.com", "password": "secret123"},
@@ -258,8 +299,11 @@ def test_login_sets_cookies(client: TestClient) -> None:
     assert response.json()["email"] == "user@example.com"
 
 
-def test_login_wrong_password(client: TestClient) -> None:
+def test_login_wrong_password(client: TestClient, db_session: Session) -> None:
     _register(client)
+    token = _confirmation_token_for(db_session, "user@example.com")
+    client.post(f"/auth/confirm-email/{token}")
+
     response = client.post(
         "/auth/login",
         json={"email": "user@example.com", "password": "wrong"},
@@ -273,6 +317,98 @@ def test_login_unknown_email(client: TestClient) -> None:
         json={"email": "nobody@example.com", "password": "x"},
     )
     assert response.status_code == 401
+
+
+def test_login_not_confirmed_returns_403(client: TestClient) -> None:
+    _register(client)
+
+    response = client.post(
+        "/auth/login",
+        json={"email": "user@example.com", "password": "secret123"},
+    )
+    assert response.status_code == 403
+
+
+# --- Email confirmation ---
+
+
+def test_confirm_email_activates_account(client: TestClient, db_session: Session) -> None:
+    _register(client)
+    token = _confirmation_token_for(db_session, "user@example.com")
+
+    response = client.post(f"/auth/confirm-email/{token}")
+    assert response.status_code == 204
+
+    login_response = client.post(
+        "/auth/login",
+        json={"email": "user@example.com", "password": "secret123"},
+    )
+    assert login_response.status_code == 200
+
+
+def test_confirm_email_unknown_token_returns_404(client: TestClient) -> None:
+    response = client.post("/auth/confirm-email/bogus-token")
+    assert response.status_code == 404
+
+
+def test_confirm_email_expired_token_returns_404(
+    client: TestClient, db_session: Session
+) -> None:
+    _register(client)
+    user = db_session.query(User).filter_by(email="user@example.com").one()
+    confirmation = db_session.get(EmailConfirmation, user.uid)
+    assert confirmation is not None
+    confirmation.token_hash = hashlib.sha256(b"expired-token").hexdigest()
+    confirmation.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.commit()
+
+    response = client.post("/auth/confirm-email/expired-token")
+    assert response.status_code == 404
+
+
+def test_confirm_email_is_idempotent(client: TestClient, db_session: Session) -> None:
+    _register(client)
+    token = _confirmation_token_for(db_session, "user@example.com")
+
+    first = client.post(f"/auth/confirm-email/{token}")
+    second = client.post(f"/auth/confirm-email/{token}")
+    assert first.status_code == 204
+    assert second.status_code == 204
+
+
+# --- Resend confirmation ---
+
+
+def test_resend_confirmation_unknown_email_returns_404(client: TestClient) -> None:
+    response = client.post(
+        "/auth/resend-confirmation", json={"email": "nobody@example.com"}
+    )
+    assert response.status_code == 404
+
+
+def test_resend_confirmation_within_cooldown_returns_429(client: TestClient) -> None:
+    _register(client)
+    response = client.post(
+        "/auth/resend-confirmation", json={"email": "user@example.com"}
+    )
+    assert response.status_code == 429
+
+
+def test_resend_confirmation_exhausted_returns_403(
+    client: TestClient, db_session: Session
+) -> None:
+    _register(client)
+    user = db_session.query(User).filter_by(email="user@example.com").one()
+    confirmation = db_session.get(EmailConfirmation, user.uid)
+    assert confirmation is not None
+    confirmation.last_sent_at = datetime.now(UTC) - timedelta(minutes=10)
+    confirmation.resend_count = 3
+    db_session.commit()
+
+    response = client.post(
+        "/auth/resend-confirmation", json={"email": "user@example.com"}
+    )
+    assert response.status_code == 403
 
 
 # --- /auth/me ---
@@ -308,8 +444,10 @@ def test_me_invalid_token(client: TestClient) -> None:
 # --- Logout ---
 
 
-def test_logout_clears_cookies(client: TestClient) -> None:
+def test_logout_clears_cookies(client: TestClient, db_session: Session) -> None:
     _register(client)
+    token = _confirmation_token_for(db_session, "user@example.com")
+    client.post(f"/auth/confirm-email/{token}")
     client.post(
         "/auth/login",
         json={"email": "user@example.com", "password": "secret123"},

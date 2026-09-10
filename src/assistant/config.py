@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import TypedDict, TypeVar, cast, overload
 
 import yaml
+from dotenv import load_dotenv
 
 _MISSING: object = object()
+load_dotenv()
 
 
 class DatabaseUrlConfig(TypedDict):
@@ -79,6 +81,7 @@ class AssistantConfig(TypedDict, total=False):
     external_sources: ExternalSourcesConfig
     domain: str
     port: int
+    use_https: bool
     mailgun: MailgunConfig
     registration: RegistrationConfig
 
@@ -424,6 +427,17 @@ class Config:
             )
             raise ValueError(msg)
         return domain
+
+    def get_use_https(self) -> bool:
+        """Get whether app-page links should be generated with an https:// scheme.
+
+        Env var override: `use_https` -> `USE_HTTPS`.
+
+        Returns:
+            Whether to use https, defaulting to True. Set to false for local/test
+            environments serving plain http.
+        """
+        return bool(self.get("use_https", True))
 
     def get_mailgun_config(self) -> MailgunConfig:
         """Get the effective Mailgun configuration with env-var overrides applied.

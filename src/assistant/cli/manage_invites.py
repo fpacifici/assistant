@@ -28,11 +28,14 @@ def cmd_create(args: argparse.Namespace) -> None:
     session_factory = get_session_factory()
     with session_factory() as session:
         sender = get_user_by_email(session, args.sender_email)
-        invite = admin_create_invite(session, sender, args.invitee_email, config)
+        invite, email_sent = admin_create_invite(
+            session, sender, args.invitee_email, config
+        )
         session.commit()
+        sent_note = "email sent" if email_sent else "EMAIL SEND FAILED"
         print(  # noqa: T201
             f"Created invite {invite.id} for {args.invitee_email} "
-            f"(as {args.sender_email}, quota not consumed)"
+            f"(as {args.sender_email}, quota not consumed, {sent_note})"
         )
 
 

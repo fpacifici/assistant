@@ -42,7 +42,7 @@ def test_owner_can_grant_up_to_full_ownership(db_session: Session) -> None:
     grantee = _make_user(db_session, "grantee@test.com")
     nb = _make_notebook(db_session, owner)
 
-    entitlement = grant_entitlement(
+    entitlement, _ = grant_entitlement(
         db_session,
         owner,
         notebook_id=nb.id,
@@ -66,7 +66,7 @@ def test_granter_within_own_permission_level_succeeds(db_session: Session) -> No
         role_name=RoleName.NOTEBOOK_EDITOR,
     )
 
-    entitlement = grant_entitlement(
+    entitlement, _ = grant_entitlement(
         db_session,
         editor,
         notebook_id=nb.id,
@@ -153,19 +153,60 @@ def test_granting_without_view_access_raises_not_found(db_session: Session) -> N
         )
 
 
-def test_granting_same_role_twice_is_idempotent(db_session: Session) -> None:
+def test_grant_entitlement_reports_created_true_on_fresh_grant(
+    db_session: Session,
+) -> None:
     owner = _make_user(db_session, "owner@test.com")
     grantee = _make_user(db_session, "grantee@test.com")
     nb = _make_notebook(db_session, owner)
 
-    first = grant_entitlement(
+    _, created = grant_entitlement(
         db_session,
         owner,
         notebook_id=nb.id,
         grantee_email=grantee.email,
         role_name=RoleName.NOTEBOOK_VIEWER,
     )
-    second = grant_entitlement(
+    assert created is True
+
+
+def test_grant_entitlement_reports_created_false_on_repeat_grant(
+    db_session: Session,
+) -> None:
+    owner = _make_user(db_session, "owner@test.com")
+    grantee = _make_user(db_session, "grantee@test.com")
+    nb = _make_notebook(db_session, owner)
+
+    grant_entitlement(
+        db_session,
+        owner,
+        notebook_id=nb.id,
+        grantee_email=grantee.email,
+        role_name=RoleName.NOTEBOOK_VIEWER,
+    )
+    _, created = grant_entitlement(
+        db_session,
+        owner,
+        notebook_id=nb.id,
+        grantee_email=grantee.email,
+        role_name=RoleName.NOTEBOOK_VIEWER,
+    )
+    assert created is False
+
+
+def test_granting_same_role_twice_is_idempotent(db_session: Session) -> None:
+    owner = _make_user(db_session, "owner@test.com")
+    grantee = _make_user(db_session, "grantee@test.com")
+    nb = _make_notebook(db_session, owner)
+
+    first, _ = grant_entitlement(
+        db_session,
+        owner,
+        notebook_id=nb.id,
+        grantee_email=grantee.email,
+        role_name=RoleName.NOTEBOOK_VIEWER,
+    )
+    second, _ = grant_entitlement(
         db_session,
         owner,
         notebook_id=nb.id,
@@ -194,7 +235,7 @@ def test_revoke_by_sufficiently_privileged_user_succeeds(db_session: Session) ->
     owner = _make_user(db_session, "owner@test.com")
     grantee = _make_user(db_session, "grantee@test.com")
     nb = _make_notebook(db_session, owner)
-    entitlement = grant_entitlement(
+    entitlement, _ = grant_entitlement(
         db_session,
         owner,
         notebook_id=nb.id,
@@ -219,7 +260,7 @@ def test_revoke_by_insufficiently_privileged_user_fails(db_session: Session) -> 
         grantee_email=viewer.email,
         role_name=RoleName.NOTEBOOK_VIEWER,
     )
-    other_entitlement = grant_entitlement(
+    other_entitlement, _ = grant_entitlement(
         db_session,
         owner,
         notebook_id=nb.id,

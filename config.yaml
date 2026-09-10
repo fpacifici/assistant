@@ -26,10 +26,11 @@ external_sources:
     # Nothing to be configured here
 
 # The assistant's own domain (also used as the Mailgun sending domain)
-domain: mg.example.com
+domain: mynotes.my
+# use_https: true  # optional, defaults to true. Set to false for local/test http.
 
 # Mailgun configuration (apikey is always supplied via MAILGUN_APIKEY env var)
 mailgun:
   apiurl: https://api.mailgun.net/v3
-  sender: noreply@example.com
+  sender: noreply@mynotes.my
   # timeout: 10  # optional, defaults to 10 seconds

@@ -12,7 +12,7 @@ export interface Invite {
   state: 'pending' | 'void' | 'converted';
   created_at: string;
   expires_at: string;
-  url: string;
+  email_sent?: boolean;
 }
 
 export interface InvitesConfigFlags {

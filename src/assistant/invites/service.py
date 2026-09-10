@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from assistant.config import Config
+from assistant.email.service import Email, send_best_effort_email
+from assistant.email.templates import INVITE_EMAIL
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
     InviteNotUsableError,
@@ -16,22 +19,28 @@ from assistant.invites.exceptions import (
     RegistrationDisabledError,
 )
 from assistant.models.schema import Invite, InviteState, User
+from assistant.urls import invite_url
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.orm import Session
 
-    from assistant.config import Config, RegistrationConfig
+    from assistant.config import RegistrationConfig
 
 
-def build_invite_url(invite_id: uuid.UUID, config: Config) -> str:
-    """Return the invite's share URL, recomputed fresh on every call.
-
-    Never stored. Depends on config.get_domain() (raises if unset, same as
-    the email service) and config.get_port() (defaults to 8000).
-    """
-    return f"https://{config.get_domain()}:{config.get_port()}/invite/{invite_id}"
+def _send_invite_email_best_effort(invite: Invite) -> bool:
+    """Send the invite email synchronously; log-and-continue on failure."""
+    email = Email(
+        recipient=invite.invitee_email,
+        subject="You've been invited to Assistant",
+        template=INVITE_EMAIL,
+        values={
+            "inviter_name": f"{invite.inviter.firstname} {invite.inviter.lastname}",
+            "url": invite_url(invite.id, Config()),
+        },
+    )
+    return send_best_effort_email(email, context="invite email")
 
 
 def list_invites_for_user(session: Session, user: User) -> list[Invite]:
@@ -53,9 +62,11 @@ def create_invite(
     inviter: User,
     invitee_email: str,
     config: RegistrationConfig,
-) -> Invite:
+) -> tuple[Invite, bool]:
     """Create a new pending invite, consuming one unit of the inviter's quota.
 
+    Emails the invite link synchronously and returns (invite, email_sent) —
+    a send failure never fails creation.
     Raises InvitesDisabledError if invites_enabled is false.
     Raises QuotaExhaustedError if inviter.invite_quota_remaining <= 0.
     Always creates a new row — re-inviting an already-pending email is
@@ -69,9 +80,10 @@ def create_invite(
     if inviter.invite_quota_remaining <= 0:
         raise QuotaExhaustedError
     inviter.invite_quota_remaining -= 1
-    return _create_invite_row(
+    invite = _create_invite_row(
         session, inviter, invitee_email, config, quota_consumed=True
     )
+    return invite, _send_invite_email_best_effort(invite)
 
 
 def admin_create_invite(
@@ -79,15 +91,16 @@ def admin_create_invite(
     inviter: User,
     invitee_email: str,
     config: RegistrationConfig,
-) -> Invite:
+) -> tuple[Invite, bool]:
     """Same as create_invite but bypasses invites_enabled AND quota entirely.
 
     Sets quota_consumed=False — CLI-issued invites cannot be disabled, per
-    spec.
+    spec. Also emails the invite link, same as create_invite.
     """
-    return _create_invite_row(
+    invite = _create_invite_row(
         session, inviter, invitee_email, config, quota_consumed=False
     )
+    return invite, _send_invite_email_best_effort(invite)
 
 
 def _create_invite_row(
@@ -231,6 +244,22 @@ def delete_invite(session: Session, invite_id: uuid.UUID) -> None:
         _refund_if_consumed(session, invite)
     session.delete(invite)
     session.flush()
+
+
+def resend_invite(
+    session: Session, actor: User, invite_id: uuid.UUID, config: RegistrationConfig
+) -> tuple[Invite, bool]:
+    """Re-send the invite email for a still-usable invite the actor sent.
+
+    Raises InvitePermissionError if actor isn't the sender.
+    Raises InvitesDisabledError / InviteNotUsableError per
+    get_valid_pending_invite — an expired or already-voided/converted
+    invite has nothing to resend. No rate limit (see grilling recap).
+    """
+    invite = get_valid_pending_invite(session, invite_id, config)
+    if invite.inviter_id != actor.uid:
+        raise InvitePermissionError
+    return invite, _send_invite_email_best_effort(invite)
 
 
 def replenish_quota(session: Session, user: User, amount: int) -> None:

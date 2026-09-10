@@ -17,7 +17,7 @@ class InviteCreate(BaseModel):
 
 
 class InviteResponse(BaseModel):
-    """An invite, including its freshly-recomputed share URL."""
+    """An invite. No link — invites are distributed by email only now."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,21 +26,23 @@ class InviteResponse(BaseModel):
     state: InviteState
     created_at: datetime
     expires_at: datetime
-    url: str
+    email_sent: bool | None = None
+    """Set only by create/resend responses — whether that attempt's send
+    succeeded. None on GET /invites (list), where there's no 'just
+    attempted' outcome to report."""
 
 
 class InvitePublicResponse(BaseModel):
     """Public (anonymous) validity check for an invite.
 
-    Deliberately does not include the invitee's email — there is no email
-    verification in this system yet, so leaking it here would let anyone
-    holding the link register as that address without proving ownership of
-    the inbox it was sent to. The registrant must type their own email on
-    the accept-invite page; the backend still validates it matches the
-    invite's invitee_email (see auth.service.register_user).
+    Now includes the invitee's email, reversing the earlier deliberate
+    omission — the reason it was omitted ('no email verification yet') no
+    longer applies once the invite is delivered by emailing that address.
+    Used by the accept-invite page to pre-fill (and lock) the email field.
     """
 
     valid: bool
+    invitee_email: str | None = None
 
 
 class InvitesConfigResponse(BaseModel):

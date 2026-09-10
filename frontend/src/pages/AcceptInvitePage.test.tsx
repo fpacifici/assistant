@@ -11,14 +11,13 @@ vi.mock('../api/invites', () => ({
 
 vi.mock('../api/auth', () => ({
   register: vi.fn(),
-  login: vi.fn(),
+  resendConfirmation: vi.fn(),
 }));
 
 import { fetchInvitePublic } from '../api/invites';
-import { register, login } from '../api/auth';
+import { register } from '../api/auth';
 const mockFetchInvitePublic = vi.mocked(fetchInvitePublic);
 const mockRegister = vi.mocked(register);
-const mockLogin = vi.mocked(login);
 
 const mockNavigate = vi.fn();
 vi.mock('react-router', async (importOriginal) => {
@@ -26,13 +25,7 @@ vi.mock('react-router', async (importOriginal) => {
   return { ...mod, useNavigate: () => mockNavigate };
 });
 
-const USER = {
-  uid: 'u1',
-  email: 'invitee@example.com',
-  firstname: 'Alice',
-  lastname: 'Smith',
-  invite_quota_remaining: 5,
-};
+const REGISTER_RESULT = { email: 'invitee@example.com', confirmation_email_sent: true };
 
 function renderPage(inviteId = 'invite-123') {
   return renderWithProviders(
@@ -48,18 +41,18 @@ describe('AcceptInvitePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders an editable, empty email field for a valid invite (never prefilled)', async () => {
-    mockFetchInvitePublic.mockResolvedValue({ valid: true });
+  it('renders the email field pre-filled and locked for a valid invite', async () => {
+    mockFetchInvitePublic.mockResolvedValue({ valid: true, invitee_email: 'invitee@example.com' });
 
     renderPage();
 
     const emailInput = await screen.findByLabelText('Email');
-    expect(emailInput).toHaveValue('');
-    expect(emailInput).not.toHaveAttribute('readonly');
+    expect(emailInput).toHaveValue('invitee@example.com');
+    expect(emailInput).toHaveAttribute('readonly');
   });
 
   it('renders the generic invalid message for an invalid invite', async () => {
-    mockFetchInvitePublic.mockResolvedValue({ valid: false });
+    mockFetchInvitePublic.mockResolvedValue({ valid: false, invitee_email: null });
 
     renderPage();
 
@@ -67,10 +60,9 @@ describe('AcceptInvitePage', () => {
     expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
   });
 
-  it('submits through register with the typed email and invite id, and navigates on success', async () => {
-    mockFetchInvitePublic.mockResolvedValue({ valid: true });
-    mockRegister.mockResolvedValueOnce(USER);
-    mockLogin.mockResolvedValueOnce(USER);
+  it('submits through register with the invite id and pre-filled email', async () => {
+    mockFetchInvitePublic.mockResolvedValue({ valid: true, invitee_email: 'invitee@example.com' });
+    mockRegister.mockResolvedValueOnce(REGISTER_RESULT);
 
     const user = userEvent.setup();
     renderPage('invite-123');
@@ -78,7 +70,6 @@ describe('AcceptInvitePage', () => {
     await screen.findByLabelText('Email');
     await user.type(screen.getByLabelText('First name'), 'Alice');
     await user.type(screen.getByLabelText('Last name'), 'Smith');
-    await user.type(screen.getByLabelText('Email'), 'invitee@example.com');
     await user.type(screen.getByLabelText('Password'), 'password1');
     await user.click(screen.getByRole('button', { name: /create account/i }));
 
@@ -87,6 +78,6 @@ describe('AcceptInvitePage', () => {
         expect.objectContaining({ invite_id: 'invite-123', email: 'invitee@example.com' }),
       );
     });
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/notebooks'));
+    expect(await screen.findByText(/we sent a confirmation link/i)).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -26,6 +27,12 @@ _REGISTRATION_CONFIG = {
     "default_quota": 5,
     "expiry_days": 1,
 }
+
+
+@pytest.fixture(autouse=True)
+def _mock_send_invite_email():  # noqa: ANN202
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
 
 
 def _make_user(session: Session, email: str) -> User:
@@ -83,7 +90,7 @@ def test_create_user_registration_disabled_with_valid_invite_succeeds(
     inviter = create_user(
         db_session, email="inviter@test.com", firstname="I", lastname="V"
     )
-    invite = create_invite(db_session, inviter, "new@test.com", _REGISTRATION_CONFIG)
+    invite, _ = create_invite(db_session, inviter, "new@test.com", _REGISTRATION_CONFIG)
 
     monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
     user = create_user(
@@ -102,7 +109,7 @@ def test_create_user_voids_pending_invites_for_email(db_session: Session) -> Non
     inviter = create_user(
         db_session, email="inviter@test.com", firstname="I", lastname="V"
     )
-    invite = create_invite(db_session, inviter, "new@test.com", _REGISTRATION_CONFIG)
+    invite, _ = create_invite(db_session, inviter, "new@test.com", _REGISTRATION_CONFIG)
     assert inviter.invite_quota_remaining == 4
 
     create_user(db_session, email="new@test.com", firstname="N", lastname="U")
@@ -149,7 +156,9 @@ def test_delete_user_cascades_notebooks_notes_and_entitlements(
 def test_delete_user_leaves_invitee_only_invite_untouched(db_session: Session) -> None:
     inviter = _make_user(db_session, "inviter@test.com")
     invitee = _make_user(db_session, "invitee@test.com")
-    invite = create_invite(db_session, inviter, "invitee@test.com", _REGISTRATION_CONFIG)
+    invite, _ = create_invite(
+        db_session, inviter, "invitee@test.com", _REGISTRATION_CONFIG
+    )
     invite_id = invite.id
 
     delete_user(db_session, invitee.uid)
