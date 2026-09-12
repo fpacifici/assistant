@@ -2,21 +2,46 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from langgraph.checkpoint.postgres import PostgresSaver
-from sqlalchemy import create_engine, text
+from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from assistant.config import Config, DatabaseComponentsConfig
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
     from sqlalchemy.orm.session import Session
+    from sqlalchemy.sql.schema import SchemaItem
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]  # src/assistant/models/ -> repo root
+_ALEMBIC_INI = _REPO_ROOT / "alembic.ini"
+
+# Deterministic names for constraints that don't already have an explicit
+# `name=` (most notably every plain `ForeignKey(...)` column shortcut in
+# schema.py). Without this, Alembic's autogenerate can't reliably match
+# unnamed constraints against what's already in the database and proposes
+# dropping/recreating all of them on every single `revision --autogenerate`
+# run, even with zero real schema changes. Explicitly-named constraints
+# already in schema.py (e.g. `uq_notebook_name`) are unaffected — this only
+# fills in names for ones that don't have one.
+_NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
+
+    metadata = MetaData(naming_convention=_NAMING_CONVENTION)
 
 
 def get_database_url() -> str:
@@ -64,19 +89,37 @@ def get_session_factory() -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-def create_schema(engine: Engine | None = None) -> None:
-    """Create the assistant schema in the database.
+def upgrade_database(revision: str = "head") -> None:
+    """Apply Alembic migrations up to `revision` (default: head)."""
+    command.upgrade(AlembicConfig(str(_ALEMBIC_INI)), revision)
 
-    Args:
-        engine: Optional SQLAlchemy engine. If not provided, a new one is created.
+
+def downgrade_database(revision: str = "-1") -> None:
+    """Revert Alembic migrations to `revision` (default: -1, one step back)."""
+    command.downgrade(AlembicConfig(str(_ALEMBIC_INI)), revision)
+
+
+def include_object_for_migrations(
+    obj: SchemaItem,
+    _name: str | None,
+    type_: str,
+    _reflected: bool,
+    _compare_to: object | None,
+) -> bool:
+    """Alembic autogenerate filter: only ever consider the `assistant` schema.
+
+    Without this, autogenerate (which needs `include_schemas=True` to see
+    `assistant` at all) would also reflect `public` and could propose
+    dropping tables this app doesn't own — e.g. langgraph's `PostgresSaver`
+    checkpoint tables, which live outside `Base.metadata` entirely.
+
+    Args mirror Alembic's `include_object` hook signature exactly (called
+    positionally) — only `obj`/`type_` are actually used here.
     """
-    if engine is None:
-        engine = get_engine()
-
-    with engine.connect() as conn:
-        # Create schema if it doesn't exist
-        conn.execute(text("CREATE SCHEMA IF NOT EXISTS assistant"))
-        conn.commit()
+    if type_ == "table":
+        return getattr(obj, "schema", None) == "assistant"
+    table = getattr(obj, "table", None)
+    return table is None or table.schema == "assistant"
 
 
 def drop_database(engine: Engine | None = None) -> None:
@@ -107,7 +150,13 @@ def drop_database(engine: Engine | None = None) -> None:
 
 
 def init_database(engine: Engine | None = None) -> None:
-    """Initialize database schema and create all tables.
+    """Initialize database schema.
+
+    PostgreSQL: applies all Alembic migrations (creates the `assistant`
+    schema, the pgvector extension, and every table — see the baseline
+    migration). SQLite (tests only): creates tables directly via
+    `create_all`, since Alembic here targets a non-default Postgres schema
+    SQLite can't represent.
 
     Args:
         engine: Optional SQLAlchemy engine. If not provided, a new one is created.
@@ -115,136 +164,13 @@ def init_database(engine: Engine | None = None) -> None:
     if engine is None:
         engine = get_engine()
 
-    # Enable pgvector extension (PostgreSQL only)
     if engine.dialect.name == "postgresql":
-        with engine.connect() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-            conn.commit()
+        upgrade_database()
+    else:
+        # Import models to ensure they're registered with Base
+        from assistant.models import schema  # noqa: F401
 
-    # Create schema first
-    create_schema(engine)
-
-    # Import models to ensure they're registered with Base
-    from assistant.models import schema  # noqa: F401
-
-    # Create all tables
-    # The schema is specified in the table definitions (__table_args__)
-    # SQLAlchemy 2.0 doesn't accept schema parameter in create_all
-    Base.metadata.create_all(engine)
-
-    # Migrate existing databases: update node constraints for file-based attachments
-    if engine.dialect.name == "postgresql":
-        _migrate_node_attachment_constraints(engine)
-        _migrate_note_notebook_constraints(engine)
+        Base.metadata.create_all(engine)
 
     with PostgresSaver.from_conn_string(get_database_url()) as checkpointer:
         checkpointer.setup()
-
-
-def _migrate_node_attachment_constraints(engine: Engine) -> None:
-    """Update node constraints from old attachment_metadata FK to the new files FK.
-
-    Safe to run on a fresh database (no-ops when the old constraint doesn't exist).
-    """
-    _fk_query = text("""
-        SELECT 1
-        FROM pg_constraint c
-        JOIN pg_class t ON c.conrelid = t.oid
-        JOIN pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'assistant'
-          AND t.relname = 'nodes'
-          AND c.conname = 'nodes_attachment_id_fkey'
-          AND pg_get_constraintdef(c.oid) LIKE '%attachment_metadata%'
-    """)
-    _ck_query = text("""
-        SELECT 1
-        FROM pg_constraint c
-        JOIN pg_class t ON c.conrelid = t.oid
-        JOIN pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'assistant'
-          AND t.relname = 'nodes'
-          AND c.conname = 'ck_node_type_fields'
-          AND pg_get_constraintdef(c.oid) LIKE '%payload IS NULL%'
-    """)
-    _new_ck = (
-        "ALTER TABLE assistant.nodes"
-        " ADD CONSTRAINT ck_node_type_fields CHECK ("
-        " (node_type = 'text'"
-        "  AND payload IS NOT NULL AND attachment_id IS NULL AND block_type IS NULL)"
-        " OR"
-        " (node_type = 'attachment'"
-        "  AND payload IS NOT NULL AND attachment_id IS NOT NULL AND block_type IS NULL)"
-        " OR"
-        " (node_type = 'markdown'"
-        "  AND payload IS NOT NULL AND attachment_id IS NULL AND block_type IS NOT NULL)"
-        " )"
-    )
-
-    with engine.connect() as conn:
-        if conn.execute(_fk_query).fetchone():
-            conn.execute(
-                text(
-                    "ALTER TABLE assistant.nodes"
-                    " DROP CONSTRAINT nodes_attachment_id_fkey"
-                )
-            )
-            conn.execute(
-                text(
-                    "ALTER TABLE assistant.nodes"
-                    " ADD CONSTRAINT nodes_attachment_id_fkey"
-                    " FOREIGN KEY (attachment_id) REFERENCES assistant.files(id)"
-                )
-            )
-
-        if conn.execute(_ck_query).fetchone():
-            conn.execute(
-                text("ALTER TABLE assistant.nodes DROP CONSTRAINT ck_node_type_fields")
-            )
-            conn.execute(text(_new_ck))
-
-        conn.commit()
-
-
-def _migrate_note_notebook_constraints(engine: Engine) -> None:
-    """Add the Note/Notebook uniqueness constraints needed for notes-import dedup.
-
-    Safe to run on a fresh database (no-ops when create_all already created them).
-    """
-    _notebook_name_query = text("""
-        SELECT 1
-        FROM pg_constraint c
-        JOIN pg_class t ON c.conrelid = t.oid
-        JOIN pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'assistant'
-          AND t.relname = 'notebooks'
-          AND c.conname = 'uq_notebook_name'
-    """)
-    _note_external_id_query = text("""
-        SELECT 1
-        FROM pg_constraint c
-        JOIN pg_class t ON c.conrelid = t.oid
-        JOIN pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'assistant'
-          AND t.relname = 'notes'
-          AND c.conname = 'uq_note_notebook_external_id'
-    """)
-
-    with engine.connect() as conn:
-        if not conn.execute(_notebook_name_query).fetchone():
-            conn.execute(
-                text(
-                    "ALTER TABLE assistant.notebooks"
-                    " ADD CONSTRAINT uq_notebook_name UNIQUE (name)"
-                )
-            )
-
-        if not conn.execute(_note_external_id_query).fetchone():
-            conn.execute(
-                text(
-                    "ALTER TABLE assistant.notes"
-                    " ADD CONSTRAINT uq_note_notebook_external_id"
-                    " UNIQUE (notebook_id, external_id)"
-                )
-            )
-
-        conn.commit()
