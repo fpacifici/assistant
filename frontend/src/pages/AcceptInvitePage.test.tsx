@@ -80,4 +80,22 @@ describe('AcceptInvitePage', () => {
     });
     expect(await screen.findByText(/we sent a confirmation link/i)).toBeInTheDocument();
   });
+
+  it('renders the mapped message for a google_error query param alongside the form', async () => {
+    mockFetchInvitePublic.mockResolvedValue({ valid: true, invitee_email: 'invitee@example.com' });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/invite/:inviteId" element={<AcceptInvitePage />} />
+      </Routes>,
+      { initialEntries: ['/invite/invite-123?google_error=invite_email_mismatch'] },
+    );
+
+    expect(
+      await screen.findByText(
+        'You signed in with a different Google account than the one this invite was sent to.',
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Email')).toBeInTheDocument();
+  });
 });

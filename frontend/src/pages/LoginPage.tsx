@@ -1,13 +1,17 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { login } from '../api/auth';
 import { ApiError } from '../api/client';
+import GoogleAuthButton from '../components/GoogleAuthButton';
 import ResendConfirmation from '../components/ResendConfirmation';
+import { googleAuthErrorMessage } from '../lib/googleAuthErrors';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const googleError = googleAuthErrorMessage(searchParams.get('google_error'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -40,6 +44,7 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1>Sign in</h1>
+        {googleError && <p className="auth-error">{googleError}</p>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email</label>
@@ -75,6 +80,8 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        <div className="auth-divider">or</div>
+        <GoogleAuthButton />
         <p className="auth-footer">
           Don't have an account? <Link to="/register">Register</Link>
         </p>

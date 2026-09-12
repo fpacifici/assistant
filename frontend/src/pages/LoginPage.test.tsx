@@ -124,4 +124,16 @@ describe('LoginPage', () => {
     renderLogin();
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register');
   });
+
+  it('renders a Google sign-in button', () => {
+    renderLogin();
+    expect(screen.getByRole('link', { name: /continue with google/i })).toBeInTheDocument();
+  });
+
+  it('renders the mapped message for a google_error query param', () => {
+    renderWithProviders(<LoginPage />, { initialEntries: ['/login?google_error=collision'] });
+    expect(
+      screen.getByText('This email already has a password account. Log in with your password instead.'),
+    ).toBeInTheDocument();
+  });
 });

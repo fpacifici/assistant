@@ -1,9 +1,9 @@
 """App-page link builders — the links this app embeds in outgoing email.
 
 Not to be confused with the Mailgun API URL (email/service.py builds
-that separately). Every link here shares the same {domain}:{port} base
-from Config, so each new email-linked page gets one function here instead
-of another inline f-string at its call site.
+that separately). Every link here shares the same Config.public_origin()
+base, so each new email-linked page gets one function here instead of
+another inline f-string at its call site.
 """
 
 from __future__ import annotations
@@ -17,8 +17,7 @@ if TYPE_CHECKING:
 
 
 def _base_url(config: Config) -> str:
-    scheme = "https" if config.get_use_https() else "http"
-    return f"{scheme}://{config.get_domain()}:{config.get_port()}"
+    return config.public_origin()
 
 
 def invite_url(invite_id: uuid.UUID, config: Config) -> str:

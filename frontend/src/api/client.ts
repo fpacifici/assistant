@@ -3,6 +3,10 @@
 // to the localhost default.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
+export function apiUrl(path: string): string {
+  return `${BASE_URL}${path}`;
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);

@@ -27,6 +27,13 @@ external_sources:
 
 # The assistant's own domain (also used as the Mailgun sending domain)
 domain: mynotes.my
+
+# Set to true to omit `:{port}` from externally-facing URLs (invite links,
+# the Google OAuth redirect URI, post-login redirects, confirmation-email
+# links) — e.g. when the app sits behind a reverse proxy on the standard
+# port (443).
+# omit_port: false  # optional, this is the default
+
 # use_https: true  # optional, defaults to true. Set to false for local/test http.
 
 # Mailgun configuration (apikey is always supplied via MAILGUN_APIKEY env var)
@@ -34,3 +41,10 @@ mailgun:
   apiurl: https://api.mailgun.net/v3
   sender: noreply@mynotes.my
   # timeout: 10  # optional, defaults to 10 seconds
+
+# Google OAuth2 (client_secret is always supplied via GOOGLE_CLIENT_SECRET env var).
+# redirect_path is appended to the app's public origin (see `domain`/`port`/
+# `omit_port`/`use_https` above) to form the redirect URI you register in
+# the Google Cloud Console.
+google:
+  redirect_path: /auth/google/callback  # optional, this is the default
