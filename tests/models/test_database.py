@@ -1,21 +1,21 @@
 """Tests for database connection and session management."""
 
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from assistant.models.database import (
     Base,
-    create_schema,
+    downgrade_database,
     drop_database,
     get_database_url,
     get_engine,
     get_session_factory,
+    include_object_for_migrations,
     init_database,
+    upgrade_database,
 )
 from assistant.models.schema import (
     Document,
@@ -114,28 +114,13 @@ def test_get_session_factory() -> None:
             assert isinstance(session, Session)
 
 
-def test_create_schema_with_in_memory_db() -> None:
-    """Test creating schema with in-memory SQLite database."""
-    # SQLite doesn't support schemas, so CREATE SCHEMA will fail
-    # This test verifies the function attempts to create the schema
-    engine = create_engine("sqlite:///:memory:", echo=False)
-
-    # SQLite will raise OperationalError for CREATE SCHEMA
-    # This is expected behavior - the function is designed for PostgreSQL
-    with pytest.raises(OperationalError, match='near "SCHEMA"'):
-        create_schema(engine)
-
-
 def test_init_database_with_in_memory_db() -> None:
     """Test initializing database with in-memory SQLite database."""
     engine = create_engine("sqlite:///:memory:", echo=False)
     original = _strip_schemas_for_sqlite()
 
     try:
-        with (
-            patch("assistant.models.database.create_schema"),
-            patch("assistant.models.database.PostgresSaver"),
-        ):
+        with patch("assistant.models.database.PostgresSaver"):
             init_database(engine)
 
             inspector = inspect(engine)
@@ -148,6 +133,22 @@ def test_init_database_with_in_memory_db() -> None:
             assert inspector.has_table("nodes")
     finally:
         _restore_schemas(original)
+
+
+def test_init_database_postgresql_dialect_calls_upgrade_database() -> None:
+    """Test that init_database runs Alembic migrations for PostgreSQL, not create_all."""
+    mock_engine = MagicMock()
+    mock_engine.dialect.name = "postgresql"
+
+    with (
+        patch("assistant.models.database.upgrade_database") as mock_upgrade,
+        patch("assistant.models.database.Base") as mock_base,
+        patch("assistant.models.database.PostgresSaver"),
+    ):
+        init_database(mock_engine)
+
+        mock_upgrade.assert_called_once_with()
+        mock_base.metadata.create_all.assert_not_called()
 
 
 def test_init_database_creates_tables(db_session: Session) -> None:
@@ -184,10 +185,7 @@ def test_drop_database_with_sqlite() -> None:
     original = _strip_schemas_for_sqlite()
 
     try:
-        with (
-            patch("assistant.models.database.create_schema"),
-            patch("assistant.models.database.PostgresSaver"),
-        ):
+        with patch("assistant.models.database.PostgresSaver"):
             init_database(engine)
         assert inspect(engine).has_table("documents")
         assert inspect(engine).has_table("external_sources")
@@ -207,3 +205,81 @@ def test_base_declarative_base() -> None:
     assert Base is not None
     assert hasattr(Base, "metadata")
     assert hasattr(Base, "registry")
+
+
+def test_upgrade_database_default_revision() -> None:
+    """Test that upgrade_database defaults to 'head' and uses the repo's alembic.ini."""
+    with patch("assistant.models.database.command") as mock_command:
+        upgrade_database()
+
+        args, _ = mock_command.upgrade.call_args
+        config, revision = args
+        assert revision == "head"
+        assert config.config_file_name.endswith("alembic.ini")
+
+
+def test_upgrade_database_explicit_revision() -> None:
+    """Test that upgrade_database passes through an explicit revision."""
+    with patch("assistant.models.database.command") as mock_command:
+        upgrade_database("abc123")
+
+        args, _ = mock_command.upgrade.call_args
+        _, revision = args
+        assert revision == "abc123"
+
+
+def test_downgrade_database_default_revision() -> None:
+    """Test that downgrade_database defaults to '-1' (one step back)."""
+    with patch("assistant.models.database.command") as mock_command:
+        downgrade_database()
+
+        args, _ = mock_command.downgrade.call_args
+        config, revision = args
+        assert revision == "-1"
+        assert config.config_file_name.endswith("alembic.ini")
+
+
+def test_downgrade_database_explicit_revision() -> None:
+    """Test that downgrade_database passes through an explicit revision."""
+    with patch("assistant.models.database.command") as mock_command:
+        downgrade_database("base")
+
+        args, _ = mock_command.downgrade.call_args
+        _, revision = args
+        assert revision == "base"
+
+
+def test_include_object_for_migrations_table_in_assistant_schema() -> None:
+    """Test that tables in the `assistant` schema are included."""
+    table = MagicMock(schema="assistant")
+    assert include_object_for_migrations(table, "t", "table", False, None) is True
+
+
+def test_include_object_for_migrations_table_in_other_schema() -> None:
+    """Test that tables outside the `assistant` schema are excluded."""
+    table = MagicMock(schema="public")
+    assert include_object_for_migrations(table, "t", "table", False, None) is False
+
+    unscoped_table = MagicMock(schema=None)
+    assert (
+        include_object_for_migrations(unscoped_table, "t", "table", False, None) is False
+    )
+
+
+def test_include_object_for_migrations_non_table_follows_parent_table_schema() -> None:
+    """Test that columns/indexes/constraints follow their parent table's schema."""
+    column = MagicMock()
+    column.table.schema = "assistant"
+    assert include_object_for_migrations(column, "c", "column", False, None) is True
+
+    other_column = MagicMock()
+    other_column.table.schema = "public"
+    assert (
+        include_object_for_migrations(other_column, "c", "column", False, None) is False
+    )
+
+
+def test_include_object_for_migrations_object_without_table_is_included() -> None:
+    """Test that an object with no `.table` attribute isn't excluded by mistake."""
+    obj = object()
+    assert include_object_for_migrations(obj, "x", "column", False, None) is True

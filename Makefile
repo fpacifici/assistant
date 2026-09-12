@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback
 
 # Default target
 help:
@@ -16,6 +16,8 @@ help:
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
 	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
 	@echo "  make services-down      - Stop and remove Docker Compose services (Postgres)"
+	@echo "  make db-migrate          - Apply all pending database migrations"
+	@echo "  make db-rollback         - Revert the most recent database migration"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -105,6 +107,18 @@ services-up:
 # Stop and remove Docker Compose services (Postgres)
 services-down:
 	@docker compose down
+
+# Apply all pending database migrations
+db-migrate:
+	@echo "Applying database migrations..."
+	@.venv/bin/python -m assistant.cli.migrate upgrade
+	@echo "✅ Migrations applied"
+
+# Revert the most recent database migration
+db-rollback:
+	@echo "Reverting last database migration..."
+	@.venv/bin/python -m assistant.cli.migrate downgrade
+	@echo "✅ Migration reverted"
 
 # Clean generated files and cache
 clean:
