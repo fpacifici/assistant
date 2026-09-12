@@ -1,5 +1,6 @@
 """Shared pytest fixtures and configuration."""
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -10,6 +11,22 @@ from sqlalchemy.orm import Session, sessionmaker
 from assistant.config import Config
 from assistant.models import schema as _schema  # noqa: F401
 from assistant.models.database import Base
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _set_test_domain() -> Iterator[None]:
+    """Make Config().get_domain()/get_port() resolve for the whole run.
+
+    Every app-page link builder in assistant.urls (and, transitively,
+    auth/invites/sharing) needs these to not raise — without this fixture
+    nearly every test touched by the confirmation-email feature would need
+    its own env/patch setup just to get past link-building.
+    """
+    os.environ["DOMAIN"] = "test.example.com"
+    os.environ["PORT"] = "8000"
+    yield
+    os.environ.pop("DOMAIN", None)
+    os.environ.pop("PORT", None)
 
 
 @pytest.fixture

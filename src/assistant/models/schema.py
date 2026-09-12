@@ -103,6 +103,13 @@ class InviteState(str, Enum):
     CONVERTED = "converted"
 
 
+class UserStatus(str, Enum):
+    """Account activation state."""
+
+    PENDING = "pending"
+    ACTIVE = "active"
+
+
 class User(Base):
     """User model."""
 
@@ -123,6 +130,9 @@ class User(Base):
     lastname: Mapped[str] = mapped_column(String(255), nullable=False)
     invite_quota_remaining: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=UserStatus.ACTIVE.value
     )
 
     notebooks: Mapped[list[Notebook]] = relationship(
@@ -154,6 +164,12 @@ class User(Base):
         "Invite",
         back_populates="inviter",
         cascade="all, delete-orphan",
+    )
+    email_confirmation: Mapped[EmailConfirmation | None] = relationship(
+        "EmailConfirmation",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -257,6 +273,36 @@ class Invite(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     inviter: Mapped[User] = relationship("User", back_populates="invites_sent")
+
+
+class EmailConfirmation(Base):
+    """The single pending email-confirmation token for a not-yet-active User.
+
+    One row per user — user_id IS the primary key. A resend overwrites this
+    same row's token/expiry/count rather than creating a new one: exactly
+    one confirmation cycle is meaningful per pending registration. Deleted
+    via cascade when the User is deleted, including the lazy reap of an
+    expired, still-unconfirmed registration (see
+    auth.service._reap_expired_pending_registration) — no separate cleanup
+    path needed.
+    """
+
+    __tablename__ = "email_confirmations"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        primary_key=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    resend_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    user: Mapped[User] = relationship("User", back_populates="email_confirmation")
 
 
 class Notebook(Base):

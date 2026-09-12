@@ -135,7 +135,9 @@ def test_valid_invite_matching_email_succeeds_and_converts(
     )
     db_session.add(inviter)
     db_session.flush()
-    invite = create_invite(db_session, inviter, "user@example.com", _REGISTRATION_CONFIG)
+    invite, _email_sent = create_invite(
+        db_session, inviter, "user@example.com", _REGISTRATION_CONFIG
+    )
 
     user = handle_google_callback(db_session, claims=_claims(), invite_id=invite.id)
 
@@ -153,7 +155,7 @@ def test_invite_email_mismatch_raises(db_session: Session) -> None:
     )
     db_session.add(inviter)
     db_session.flush()
-    invite = create_invite(
+    invite, _email_sent = create_invite(
         db_session, inviter, "someone-else@example.com", _REGISTRATION_CONFIG
     )
 

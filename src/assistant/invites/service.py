@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from assistant.config import Config
+from assistant.email.service import Email, send_best_effort_email
+from assistant.email.templates import INVITE_EMAIL
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
     InviteNotUsableError,
@@ -16,7 +18,8 @@ from assistant.invites.exceptions import (
     QuotaExhaustedError,
     RegistrationDisabledError,
 )
-from assistant.models.schema import Invite, InviteState, User
+from assistant.models.schema import Invite, InviteState, User, UserStatus
+from assistant.urls import invite_url
 
 if TYPE_CHECKING:
     import uuid
@@ -26,13 +29,18 @@ if TYPE_CHECKING:
     from assistant.config import RegistrationConfig
 
 
-def build_invite_url(invite_id: uuid.UUID, config: Config) -> str:
-    """Return the invite's share URL, recomputed fresh on every call.
-
-    Never stored. Depends on config.public_origin() (raises if domain is
-    unset, same as the email service).
-    """
-    return f"{config.public_origin()}/invite/{invite_id}"
+def _send_invite_email_best_effort(invite: Invite) -> bool:
+    """Send the invite email synchronously; log-and-continue on failure."""
+    email = Email(
+        recipient=invite.invitee_email,
+        subject="You've been invited to Assistant",
+        template=INVITE_EMAIL,
+        values={
+            "inviter_name": f"{invite.inviter.firstname} {invite.inviter.lastname}",
+            "url": invite_url(invite.id, Config()),
+        },
+    )
+    return send_best_effort_email(email, context="invite email")
 
 
 def list_invites_for_user(session: Session, user: User) -> list[Invite]:
@@ -54,9 +62,11 @@ def create_invite(
     inviter: User,
     invitee_email: str,
     config: RegistrationConfig,
-) -> Invite:
+) -> tuple[Invite, bool]:
     """Create a new pending invite, consuming one unit of the inviter's quota.
 
+    Emails the invite link synchronously and returns (invite, email_sent) —
+    a send failure never fails creation.
     Raises InvitesDisabledError if invites_enabled is false.
     Raises QuotaExhaustedError if inviter.invite_quota_remaining <= 0.
     Always creates a new row — re-inviting an already-pending email is
@@ -70,9 +80,10 @@ def create_invite(
     if inviter.invite_quota_remaining <= 0:
         raise QuotaExhaustedError
     inviter.invite_quota_remaining -= 1
-    return _create_invite_row(
+    invite = _create_invite_row(
         session, inviter, invitee_email, config, quota_consumed=True
     )
+    return invite, _send_invite_email_best_effort(invite)
 
 
 def admin_create_invite(
@@ -80,15 +91,16 @@ def admin_create_invite(
     inviter: User,
     invitee_email: str,
     config: RegistrationConfig,
-) -> Invite:
+) -> tuple[Invite, bool]:
     """Same as create_invite but bypasses invites_enabled AND quota entirely.
 
     Sets quota_consumed=False — CLI-issued invites cannot be disabled, per
-    spec.
+    spec. Also emails the invite link, same as create_invite.
     """
-    return _create_invite_row(
+    invite = _create_invite_row(
         session, inviter, invitee_email, config, quota_consumed=False
     )
+    return invite, _send_invite_email_best_effort(invite)
 
 
 def _create_invite_row(
@@ -234,6 +246,22 @@ def delete_invite(session: Session, invite_id: uuid.UUID) -> None:
     session.flush()
 
 
+def resend_invite(
+    session: Session, actor: User, invite_id: uuid.UUID, config: RegistrationConfig
+) -> tuple[Invite, bool]:
+    """Re-send the invite email for a still-usable invite the actor sent.
+
+    Raises InvitePermissionError if actor isn't the sender.
+    Raises InvitesDisabledError / InviteNotUsableError per
+    get_valid_pending_invite — an expired or already-voided/converted
+    invite has nothing to resend. No rate limit (see grilling recap).
+    """
+    invite = get_valid_pending_invite(session, invite_id, config)
+    if invite.inviter_id != actor.uid:
+        raise InvitePermissionError
+    return invite, _send_invite_email_best_effort(invite)
+
+
 def replenish_quota(session: Session, user: User, amount: int) -> None:
     """Add amount to user.invite_quota_remaining.
 
@@ -256,6 +284,7 @@ def create_gated_user(  # noqa: PLR0913
     lastname: str,
     invite_id: uuid.UUID | None,
     invite_quota_override: int | None = None,
+    status: str = UserStatus.ACTIVE.value,
 ) -> tuple[User, Invite | None]:
     """Create a User row after enforcing the registration/invite gate.
 
@@ -266,6 +295,11 @@ def create_gated_user(  # noqa: PLR0913
     (a password hash, a google provider_subject, or nothing at all for
     the generic POST /user path) since it's the one part that actually
     differs per caller.
+
+    `status` defaults to ACTIVE (immediate activation — correct for
+    Google sign-up, which has no confirmation flow, and for the generic
+    POST /user path). Password registration passes PENDING and drives
+    its own email-confirmation dance on top.
 
     Returns (user, invite) so a caller that needs invite.id (none do
     today — on_user_created already takes invite.id if invite else None
@@ -282,6 +316,7 @@ def create_gated_user(  # noqa: PLR0913
         email=email,
         firstname=firstname,
         lastname=lastname,
+        status=status,
         invite_quota_remaining=default_quota_for_new_user(config, invite_quota_override),
     )
     session.add(user)

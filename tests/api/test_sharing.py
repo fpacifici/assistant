@@ -4,16 +4,29 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from assistant.email.exceptions import EmailSendError
 from assistant.models.schema import Entitlement, RoleName
 from assistant.notes.service import create_note, create_notebook
 from assistant.notes.user_service import create_user
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session
 
     from assistant.models.schema import User
+
+
+@pytest.fixture(autouse=True)
+def mock_send_email() -> Iterator[MagicMock]:
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
+
 
 # ---------------------------------------------------------------------------
 # Notebook sharing
@@ -38,6 +51,54 @@ def test_share_notebook_by_email_succeeds(
     body = response.json()
     assert body["principal_email"] == other_user.email
     assert body["role"] == "notebook_viewer"
+
+
+def test_share_notebook_sends_notification_once_on_fresh_grant(  # noqa: PLR0913
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    other_user: User,
+    db_session: Session,
+    mock_send_email: MagicMock,
+) -> None:
+    nb = create_notebook(db_session, "NB", test_user)
+
+    response = client.post(
+        f"/notebook/{nb.id}/share",
+        json={"email": other_user.email, "role": "notebook_viewer"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    mock_send_email.assert_called_once()
+
+    # Repeating the identical share is idempotent — no second notification.
+    response2 = client.post(
+        f"/notebook/{nb.id}/share",
+        json={"email": other_user.email, "role": "notebook_viewer"},
+        headers=auth_headers,
+    )
+    assert response2.status_code == 201
+    mock_send_email.assert_called_once()
+
+
+def test_share_notebook_response_unaffected_by_notification_failure(  # noqa: PLR0913
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    other_user: User,
+    db_session: Session,
+    mock_send_email: MagicMock,
+) -> None:
+    mock_send_email.side_effect = EmailSendError("smtp down")
+    nb = create_notebook(db_session, "NB", test_user)
+
+    response = client.post(
+        f"/notebook/{nb.id}/share",
+        json={"email": other_user.email, "role": "notebook_viewer"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["role"] == "notebook_viewer"
 
 
 def test_grantee_gets_access_on_next_request(  # noqa: PLR0913
@@ -208,6 +269,34 @@ def test_share_note_by_email_succeeds(
     )
     assert response.status_code == 201
     assert response.json()["role"] == "note_viewer"
+
+
+def test_share_note_sends_notification_once_on_fresh_grant(  # noqa: PLR0913
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_user: User,
+    other_user: User,
+    db_session: Session,
+    mock_send_email: MagicMock,
+) -> None:
+    nb = create_notebook(db_session, "NB", test_user)
+    note = create_note(db_session, nb.id, test_user, "N")
+
+    response = client.post(
+        f"/notebook/{nb.id}/note/{note.id}/share",
+        json={"email": other_user.email, "role": "note_viewer"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    mock_send_email.assert_called_once()
+
+    response2 = client.post(
+        f"/notebook/{nb.id}/note/{note.id}/share",
+        json={"email": other_user.email, "role": "note_viewer"},
+        headers=auth_headers,
+    )
+    assert response2.status_code == 201
+    mock_send_email.assert_called_once()
 
 
 def test_share_note_with_notebook_role_returns_422(

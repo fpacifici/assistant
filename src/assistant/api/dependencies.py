@@ -10,7 +10,8 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from assistant.attachments.storage import FileStorage
-from assistant.auth.service import AuthError, decode_access_token
+from assistant.auth.exceptions import AuthError
+from assistant.auth.service import decode_access_token
 from assistant.models.schema import User
 from assistant.notes.user_service import get_user
 

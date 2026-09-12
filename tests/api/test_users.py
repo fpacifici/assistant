@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -115,17 +116,18 @@ class TestCreateUser:
         )
         db_session.add(inviter)
         db_session.flush()
-        invite = create_invite(
-            db_session,
-            inviter,
-            "invitee@example.com",
-            {
-                "registration_enabled": True,
-                "invites_enabled": True,
-                "default_quota": 5,
-                "expiry_days": 1,
-            },
-        )
+        with patch("assistant.email.service.send_email"):
+            invite, _ = create_invite(
+                db_session,
+                inviter,
+                "invitee@example.com",
+                {
+                    "registration_enabled": True,
+                    "invites_enabled": True,
+                    "default_quota": 5,
+                    "expiry_days": 1,
+                },
+            )
         db_session.commit()
 
         monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")

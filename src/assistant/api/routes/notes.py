@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, BackgroundTasks, Response
 
 from assistant.api.dependencies import CurrentUser, SessionDep, StorageDep
 from assistant.api.routes._sharing import validate_role_for_subject_type
@@ -17,6 +17,7 @@ from assistant.notes.entitlements import (
     grant_entitlement,
     list_entitlements,
     revoke_entitlement,
+    send_share_notification_email,
 )
 from assistant.notes.exceptions import NoteNotFoundError
 from assistant.notes.permissions import note_permissions
@@ -158,22 +159,33 @@ def delete_note_endpoint(
     status_code=201,
     response_model=EntitlementResponse,
 )
-def share_note_endpoint(
+def share_note_endpoint(  # noqa: PLR0913
     notebook_id: uuid.UUID,
     note_id: uuid.UUID,
     body: EntitlementCreate,
     session: SessionDep,
     user: CurrentUser,
+    background_tasks: BackgroundTasks,
 ) -> EntitlementResponse:
     _get_note_in_notebook(session, notebook_id, note_id, user)
     validate_role_for_subject_type(body.role, SubjectType.NOTE)
-    entitlement = grant_entitlement(
+    entitlement, created = grant_entitlement(
         session,
         user,
         note_id=note_id,
         grantee_email=body.email,
         role_name=body.role,
     )
+    if created:
+        background_tasks.add_task(
+            send_share_notification_email,
+            granter_name=f"{user.firstname} {user.lastname}",
+            grantee_email=body.email,
+            role=body.role,
+            subject_type=SubjectType.NOTE,
+            notebook_id=notebook_id,
+            note_id=note_id,
+        )
     return EntitlementResponse.from_entitlement(entitlement)
 
 

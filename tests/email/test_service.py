@@ -14,7 +14,7 @@ from assistant.email.exceptions import (
     EmailTemplateError,
     EmailValidationError,
 )
-from assistant.email.service import Email, send_email
+from assistant.email.service import Email, send_best_effort_email, send_email
 
 _MAILGUN_CONFIG: MailgunConfig = {
     "apiurl": "https://api.mailgun.net/v3",
@@ -216,3 +216,53 @@ def test_send_email_passes_configured_timeout() -> None:
         send_email(email)
 
     assert mock_post.call_args.kwargs["timeout"] == _MAILGUN_CONFIG["timeout"]
+
+
+# --- send_best_effort_email ---
+
+
+def test_send_best_effort_email_returns_true_on_success() -> None:
+    email = Email(
+        recipient="user@example.com",
+        subject="Hi",
+        template=string.Template("Hello $name"),
+        values={"name": "Ada"},
+    )
+
+    with patch("assistant.email.service.requests.post") as mock_post:
+        mock_post.return_value = _make_response(ok=True, status_code=200)
+        result = send_best_effort_email(email, context="test email")
+
+    assert result is True
+
+
+def test_send_best_effort_email_returns_false_and_logs_on_send_failure() -> None:
+    email = Email(
+        recipient="user@example.com",
+        subject="Hi",
+        template=string.Template("Hello $name"),
+        values={"name": "Ada"},
+    )
+
+    with patch("assistant.email.service.requests.post") as mock_post:
+        mock_post.return_value = _make_response(
+            ok=False, status_code=401, text="bad api key"
+        )
+        result = send_best_effort_email(email, context="test email")
+
+    assert result is False
+
+
+def test_send_best_effort_email_returns_false_for_invalid_recipient() -> None:
+    email = Email(
+        recipient="not-an-email",
+        subject="Hi",
+        template=string.Template("Hello $name"),
+        values={"name": "Ada"},
+    )
+
+    with patch("assistant.email.service.requests.post") as mock_post:
+        result = send_best_effort_email(email, context="test email")
+
+    assert result is False
+    mock_post.assert_not_called()

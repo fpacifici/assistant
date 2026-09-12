@@ -7,6 +7,7 @@ import { ApiError } from '../api/client';
 
 vi.mock('../api/auth', () => ({
   login: vi.fn(),
+  resendConfirmation: vi.fn(),
 }));
 
 import { login } from '../api/auth';
@@ -72,6 +73,20 @@ describe('LoginPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Invalid email or password.')).toBeInTheDocument();
     });
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('shows a resend-confirmation affordance on a 403 not-confirmed response', async () => {
+    const user = userEvent.setup();
+    mockLogin.mockRejectedValueOnce(new ApiError(403, 'Account not confirmed'));
+
+    renderLogin();
+    await user.type(screen.getByLabelText('Email'), 'a@b.com');
+    await user.type(screen.getByLabelText('Password'), 'secret');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText(/account not confirmed/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /resend confirmation email/i })).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 

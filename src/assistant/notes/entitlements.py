@@ -13,6 +13,9 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from assistant.config import Config
+from assistant.email.service import Email, send_best_effort_email
+from assistant.email.templates import SHARE_NOTIFICATION_EMAIL
 from assistant.models.schema import (
     Entitlement,
     PermissionName,
@@ -29,6 +32,7 @@ from assistant.notes.permissions import (
     require_notebook_access,
 )
 from assistant.notes.user_service import get_user_by_email
+from assistant.urls import note_url, notebook_url
 
 if TYPE_CHECKING:
     import uuid
@@ -84,8 +88,13 @@ def grant_entitlement(  # noqa: PLR0913
     notebook_id: uuid.UUID | None = None,
     grantee_email: str,
     role_name: RoleName,
-) -> Entitlement:
+) -> tuple[Entitlement, bool]:
     """Grant `role_name` on the given subject to the user with `grantee_email`.
+
+    Returns (entitlement, created) — created is False when an identical
+    grant already existed (the idempotent case), which callers use to
+    decide whether to send a share notification (only on an actual new
+    grant, per spec).
 
     Raises `UserNotFoundError` if no user has that email. Raises
     `PermissionDeniedError` if `granter` lacks `share_note`/
@@ -117,7 +126,7 @@ def grant_entitlement(  # noqa: PLR0913
         ),
     )
     if existing is not None:
-        return existing
+        return existing, False
 
     entitlement = Entitlement(
         principal_id=grantee.uid,
@@ -127,7 +136,7 @@ def grant_entitlement(  # noqa: PLR0913
     )
     session.add(entitlement)
     session.flush()
-    return entitlement
+    return entitlement, True
 
 
 def revoke_entitlement(
@@ -212,4 +221,46 @@ def list_entitlements(
     return list(session.scalars(stmt))
 
 
-__all__ = ["grant_entitlement", "list_entitlements", "revoke_entitlement"]
+def send_share_notification_email(  # noqa: PLR0913
+    *,
+    granter_name: str,
+    grantee_email: str,
+    role: RoleName,
+    subject_type: SubjectType,
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID | None,
+) -> None:
+    """Best-effort notification for a new share grant.
+
+    Scheduled via FastAPI `BackgroundTasks` from the share route handlers
+    (this module has no access to `BackgroundTasks` itself — that stays a
+    route-layer concern) specifically so a failure here can't affect the
+    share API response.
+    """
+    config = Config()
+    url = (
+        note_url(notebook_id, note_id, config)
+        if note_id is not None
+        else notebook_url(notebook_id, config)
+    )
+
+    email = Email(
+        recipient=grantee_email,
+        subject="Something was shared with you on Assistant",
+        template=SHARE_NOTIFICATION_EMAIL,
+        values={
+            "granter_name": granter_name,
+            "subject_type": subject_type.value,
+            "role": role.value,
+            "url": url,
+        },
+    )
+    send_best_effort_email(email, context="share notification")
+
+
+__all__ = [
+    "grant_entitlement",
+    "list_entitlements",
+    "revoke_entitlement",
+    "send_share_notification_email",
+]

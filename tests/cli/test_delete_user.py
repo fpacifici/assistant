@@ -39,6 +39,12 @@ def _run(db_session: Session, argv: list[str]) -> None:
         main()
 
 
+@pytest.fixture(autouse=True)
+def _mock_send_invite_email():  # noqa: ANN202
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
+
+
 def test_delete_user_cascades_notebooks_notes_and_entitlements(
     db_session: Session,
 ) -> None:
@@ -69,7 +75,7 @@ def test_delete_user_cascades_notebooks_notes_and_entitlements(
 def test_delete_user_leaves_invitee_only_invite_untouched(db_session: Session) -> None:
     sender = _make_user(db_session, "sender@example.com")
     invitee = _make_user(db_session, "invitee@example.com")
-    invite = create_invite(
+    invite, _ = create_invite(
         db_session, sender, "invitee@example.com", _REGISTRATION_CONFIG
     )
     invite_id = invite.id
@@ -84,7 +90,7 @@ def test_delete_user_leaves_invitee_only_invite_untouched(db_session: Session) -
 
 def test_delete_user_removes_invites_sent(db_session: Session) -> None:
     sender = _make_user(db_session, "sender@example.com")
-    invite = create_invite(
+    invite, _ = create_invite(
         db_session, sender, "someone@example.com", _REGISTRATION_CONFIG
     )
     invite_id = invite.id

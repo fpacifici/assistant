@@ -24,6 +24,19 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterResponse(BaseModel):
+    """Returned by POST /auth/register — registration no longer auto-logs-in."""
+
+    email: str
+    confirmation_email_sent: bool
+
+
+class ConfirmationRequest(BaseModel):
+    """Request body for POST /auth/resend-confirmation."""
+
+    email: EmailStr
+
+
 class UserResponse(BaseModel):
     """User profile returned after registration or from /auth/me."""
 

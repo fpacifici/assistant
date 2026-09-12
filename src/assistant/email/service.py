@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
     import string
 
 _TRANSIENT_STATUS_THRESHOLD = 500
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -93,3 +96,19 @@ def send_email(email: Email) -> None:
         if response.status_code < _TRANSIENT_STATUS_THRESHOLD or attempts > 1:
             msg = f"Mailgun send failed ({response.status_code}): {response.text}"
             raise EmailSendError(msg, status_code=response.status_code)
+
+
+def send_best_effort_email(email: Email, *, context: str) -> bool:
+    """Send `email`; log-and-continue on failure. Returns whether it succeeded.
+
+    Shared by every call site whose own operation (registration, invite
+    creation, share notifications) must not be held hostage by a Mailgun
+    failure. `context` names the kind of email for the failure log line
+    (e.g. "confirmation email", "invite email").
+    """
+    try:
+        send_email(email)
+    except (EmailValidationError, EmailTemplateError, EmailSendError):
+        logger.exception("Failed to send %s to %s", context, email.recipient)
+        return False
+    return True

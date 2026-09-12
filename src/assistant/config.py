@@ -90,7 +90,7 @@ class AssistantConfig(TypedDict, total=False):
     domain: str
     port: int
     omit_port: bool
-    use_http: bool
+    use_https: bool
     mailgun: MailgunConfig
     registration: RegistrationConfig
     google: GoogleConfig
@@ -438,6 +438,17 @@ class Config:
             raise ValueError(msg)
         return domain
 
+    def get_use_https(self) -> bool:
+        """Get whether public URLs (see `public_origin()`) should use https://.
+
+        Env var override: `use_https` -> `USE_HTTPS`.
+
+        Returns:
+            Whether to use https, defaulting to True. Set to false for local/test
+            environments serving plain http.
+        """
+        return bool(self.get("use_https", True))
+
     def get_mailgun_config(self) -> MailgunConfig:
         """Get the effective Mailgun configuration with env-var overrides applied.
 
@@ -512,31 +523,18 @@ class Config:
         """
         return bool(self.get("omit_port", False))
 
-    def get_use_http(self) -> bool:
-        """Whether composed public URLs should use `http://` instead of `https://`.
-
-        Env var override: `use_http` -> `USE_HTTP`.
-
-        Set this for local/dev setups with no TLS termination in front of
-        the app. See `public_origin()`.
-
-        Returns:
-            `True` if `http://` should be used, defaulting to `False`
-            (`https://`).
-        """
-        return bool(self.get("use_http", False))
-
     def public_origin(self) -> str:
         """The assistant's single public origin, e.g. `https://mynotes.my` or
         `https://mynotes.my:8000`.
 
-        The one place `domain`/`port`/`omit_port`/`use_http` are composed
+        The one place `domain`/`port`/`omit_port`/`use_https` are composed
         into a URL origin — every caller that builds an externally-facing
         URL (invite links, the Google OAuth redirect URI, post-login
-        redirects) appends its own path to this instead of recomposing
-        domain/port itself.
+        redirects, confirmation-email links) appends its own path to this
+        instead of recomposing domain/port itself. See `assistant.urls`,
+        whose `_base_url` delegates here.
         """
-        scheme = "http" if self.get_use_http() else "https"
+        scheme = "https" if self.get_use_https() else "http"
         origin = f"{scheme}://{self.get_domain()}"
         if not self.get_omit_port():
             origin += f":{self.get_port()}"
@@ -575,7 +573,7 @@ class Config:
 
         `redirect_path` is not a full URL — it's appended to
         `public_origin()` (this app's existing top-level config, already
-        used the same way by invites.service.build_invite_url) to form
+        used the same way by assistant.urls' link builders) to form
         the URI registered with Google. Defaults to
         `/auth/google/callback`, matching this plan's own route.
 

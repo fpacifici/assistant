@@ -16,10 +16,10 @@ from assistant.api.schemas.invites import (
 from assistant.config import Config
 from assistant.invites.exceptions import InviteNotUsableError, InvitesDisabledError
 from assistant.invites.service import (
-    build_invite_url,
     create_invite,
     get_valid_pending_invite,
     list_invites_for_user,
+    resend_invite,
     void_invite,
 )
 from assistant.models.schema import Invite, InviteState
@@ -27,14 +27,14 @@ from assistant.models.schema import Invite, InviteState
 router = APIRouter()
 
 
-def _invite_response(invite: Invite, config: Config) -> InviteResponse:
+def _invite_response(invite: Invite, *, email_sent: bool | None = None) -> InviteResponse:
     return InviteResponse(
         id=invite.id,
         invitee_email=invite.invitee_email,
         state=InviteState(invite.state),
         created_at=invite.created_at,
         expires_at=invite.expires_at,
-        url=build_invite_url(invite.id, config),
+        email_sent=email_sent,
     )
 
 
@@ -51,10 +51,10 @@ def get_invites_config() -> InvitesConfigResponse:
 def get_invite_public(invite_id: uuid.UUID, session: SessionDep) -> InvitePublicResponse:
     config = Config().get_registration_config()
     try:
-        get_valid_pending_invite(session, invite_id, config)
+        invite = get_valid_pending_invite(session, invite_id, config)
     except (InviteNotUsableError, InvitesDisabledError):
         return InvitePublicResponse(valid=False)
-    return InvitePublicResponse(valid=True)
+    return InvitePublicResponse(valid=True, invitee_email=invite.invitee_email)
 
 
 @router.post("", status_code=201, response_model=InviteResponse)
@@ -63,11 +63,9 @@ def create_invite_endpoint(
     session: SessionDep,
     user: CurrentUser,
 ) -> InviteResponse:
-    config = Config()
-    invite = create_invite(
-        session, user, body.invitee_email, config.get_registration_config()
-    )
-    return _invite_response(invite, config)
+    config = Config().get_registration_config()
+    invite, email_sent = create_invite(session, user, body.invitee_email, config)
+    return _invite_response(invite, email_sent=email_sent)
 
 
 @router.get("", response_model=list[InviteResponse])
@@ -75,9 +73,19 @@ def list_invites_endpoint(
     session: SessionDep,
     user: CurrentUser,
 ) -> list[InviteResponse]:
-    config = Config()
     invites = list_invites_for_user(session, user)
-    return [_invite_response(invite, config) for invite in invites]
+    return [_invite_response(invite) for invite in invites]
+
+
+@router.post("/{invite_id}/resend", response_model=InviteResponse)
+def resend_invite_endpoint(
+    invite_id: uuid.UUID,
+    session: SessionDep,
+    user: CurrentUser,
+) -> InviteResponse:
+    config = Config().get_registration_config()
+    invite, email_sent = resend_invite(session, user, invite_id, config)
+    return _invite_response(invite, email_sent=email_sent)
 
 
 @router.delete("/{invite_id}", status_code=204)

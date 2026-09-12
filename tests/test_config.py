@@ -24,6 +24,8 @@ _CONFIG_ENV_KEYS: tuple[str, ...] = (
     "MAILGUN_SENDER",
     "MAILGUN_TIMEOUT",
     "PORT",
+    "OMIT_PORT",
+    "USE_HTTPS",
     "REGISTRATION_REGISTRATION_ENABLED",
     "REGISTRATION_INVITES_ENABLED",
     "REGISTRATION_DEFAULT_QUOTA",
@@ -492,35 +494,6 @@ def test_config_get_omit_port_env_override(tmp_path: Path) -> None:
         assert config.get_omit_port() is True
 
 
-def test_config_get_use_http_defaults(tmp_path: Path) -> None:
-    """Test that get_use_http defaults to False when absent from YAML and env."""
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text("other_key: value\n")
-
-    config = Config(config_path=config_file)
-    assert config.get_use_http() is False
-
-
-def test_config_get_use_http_from_yaml(tmp_path: Path) -> None:
-    """Test getting use_http from YAML."""
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text("use_http: true\n")
-
-    config = Config(config_path=config_file)
-    assert config.get_use_http() is True
-
-
-def test_config_get_use_http_env_override(tmp_path: Path) -> None:
-    """Test that USE_HTTP env var overrides YAML use_http."""
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text("use_http: false\n")
-
-    config = Config(config_path=config_file)
-
-    with patch.dict(os.environ, {"USE_HTTP": "true"}):
-        assert config.get_use_http() is True
-
-
 def test_config_public_origin_includes_port_by_default(tmp_path: Path) -> None:
     """Test that public_origin() includes the port when omit_port is unset."""
     config_file = tmp_path / "test_config.yaml"
@@ -540,7 +513,7 @@ def test_config_public_origin_omits_port_when_configured(tmp_path: Path) -> None
 
 
 def test_config_public_origin_uses_https_by_default(tmp_path: Path) -> None:
-    """Test that public_origin() uses https:// when use_http is unset."""
+    """Test that public_origin() uses https:// when use_https is unset."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text("domain: mynotes.my\nport: 9000\n")
 
@@ -549,12 +522,41 @@ def test_config_public_origin_uses_https_by_default(tmp_path: Path) -> None:
 
 
 def test_config_public_origin_uses_http_when_configured(tmp_path: Path) -> None:
-    """Test that public_origin() uses http:// when use_http is true."""
+    """Test that public_origin() uses http:// when use_https is false."""
     config_file = tmp_path / "test_config.yaml"
-    config_file.write_text("domain: mynotes.my\nport: 9000\nuse_http: true\n")
+    config_file.write_text("domain: mynotes.my\nport: 9000\nuse_https: false\n")
 
     config = Config(config_path=config_file)
     assert config.public_origin() == "http://mynotes.my:9000"
+
+
+def test_config_get_use_https_defaults(tmp_path: Path) -> None:
+    """Test that get_use_https defaults to True when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_https() is True
+
+
+def test_config_get_use_https_from_yaml(tmp_path: Path) -> None:
+    """Test getting the configured use_https flag from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_https: false\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_https() is False
+
+
+def test_config_get_use_https_env_override(tmp_path: Path) -> None:
+    """Test that USE_HTTPS env var overrides YAML use_https."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_https: true\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"USE_HTTPS": "false"}):
+        assert config.get_use_https() is False
 
 
 def test_config_get_registration_config_defaults(tmp_path: Path) -> None:
