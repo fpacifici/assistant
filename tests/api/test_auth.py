@@ -5,10 +5,22 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
 from assistant.auth.service import create_access_token, issue_tokens
+from assistant.google_auth.exceptions import (
+    GoogleAccountCollisionError,
+    GoogleEmailNotVerifiedError,
+    GoogleTokenExchangeError,
+)
+from assistant.google_auth.oauth import GoogleIdTokenClaims
+from assistant.google_auth.state import sign_state, verify_state
+from assistant.invites.exceptions import (
+    InviteEmailMismatchError,
+    RegistrationDisabledError,
+)
 from assistant.invites.service import create_invite
 from assistant.models.schema import Invite, InviteState, User
 
@@ -315,9 +327,17 @@ def test_logout_clears_cookies(client: TestClient) -> None:
         json={"email": "user@example.com", "password": "secret123"},
     )
     assert "access_token" in client.cookies
+    assert "refresh_token" in client.cookies
 
     response = client.post("/auth/logout")
     assert response.status_code == 204
+    assert "access_token" not in client.cookies
+    assert "refresh_token" not in client.cookies
+
+    # A cookie whose deletion header didn't reach the client (wrong path,
+    # missing Set-Cookie, etc.) would still authenticate this request.
+    me_response = client.get("/auth/me")
+    assert me_response.status_code == 401
 
 
 # --- Ambiguous auth ---
@@ -357,3 +377,209 @@ def test_refresh_issues_new_tokens(client: TestClient, db_session: Session) -> N
     assert response.status_code == 200
     assert "access_token" in client.cookies
     client.cookies.clear()
+
+
+# --- Google: start ---
+
+
+@pytest.fixture(autouse=True)
+def _google_client_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client.apps.googleusercontent.com")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-secret")
+
+
+def _google_claims(**overrides: object) -> GoogleIdTokenClaims:
+    defaults: dict[str, object] = {
+        "sub": "google-sub-1",
+        "email": "googleuser@example.com",
+        "email_verified": True,
+        "given_name": "Grace",
+        "family_name": "Hopper",
+    }
+    defaults.update(overrides)
+    return GoogleIdTokenClaims(**defaults)  # type: ignore[arg-type]
+
+
+def test_google_start_redirects_to_accounts_google(client: TestClient) -> None:
+    response = client.get("/auth/google", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"].startswith("https://accounts.google.com")
+
+
+def test_google_start_state_round_trips_invite_id(client: TestClient) -> None:
+    invite_id = uuid.uuid4()
+    response = client.get(
+        "/auth/google", params={"invite_id": str(invite_id)}, follow_redirects=False
+    )
+    location = response.headers["location"]
+
+    query = parse_qs(urlparse(location).query)
+    state = query["state"][0]
+    claims = verify_state(state)
+    assert claims.invite_id == invite_id
+
+
+# --- Google: callback errors ---
+
+
+def test_google_callback_denied(client: TestClient) -> None:
+    response = client.get(
+        "/auth/google/callback", params={"error": "access_denied"}, follow_redirects=False
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login?google_error=denied")
+
+
+def test_google_callback_missing_code_or_state(client: TestClient) -> None:
+    response = client.get("/auth/google/callback", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login?google_error=invalid_request")
+
+
+def test_google_callback_invalid_state(client: TestClient) -> None:
+    response = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": "not-a-valid-state"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login?google_error=invalid_state")
+
+
+def test_google_callback_token_exchange_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _raise_exchange_error(code: str) -> dict[str, str]:  # noqa: ARG001
+        raise GoogleTokenExchangeError("boom")
+
+    state = sign_state(nonce="nonce", invite_id=None)
+    monkeypatch.setattr(
+        "assistant.api.routes.auth.exchange_code_for_tokens", _raise_exchange_error
+    )
+    response = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login?google_error=google_failed")
+
+
+def _patch_google_boundary(
+    monkeypatch: pytest.MonkeyPatch, *, claims: GoogleIdTokenClaims
+) -> None:
+    def _fake_exchange(code: str) -> dict[str, str]:  # noqa: ARG001
+        return {"id_token": "fake-id-token"}
+
+    def _fake_verify(raw_id_token: str, *, expected_nonce: str) -> GoogleIdTokenClaims:  # noqa: ARG001
+        return claims
+
+    monkeypatch.setattr(
+        "assistant.api.routes.auth.exchange_code_for_tokens", _fake_exchange
+    )
+    monkeypatch.setattr("assistant.api.routes.auth.verify_id_token", _fake_verify)
+
+
+@pytest.mark.parametrize(
+    ("exception_cls", "error_code"),
+    [
+        (GoogleEmailNotVerifiedError, "unverified_email"),
+        (GoogleAccountCollisionError, "collision"),
+        (RegistrationDisabledError, "registration_closed"),
+    ],
+)
+def test_google_callback_service_error_maps_to_error_code(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    exception_cls: type[Exception],
+    error_code: str,
+) -> None:
+    state = sign_state(nonce="nonce", invite_id=None)
+    _patch_google_boundary(monkeypatch, claims=_google_claims())
+
+    def _fake_handle_google_callback(*args: object, **kwargs: object) -> User:  # noqa: ARG001
+        if exception_cls is GoogleAccountCollisionError:
+            raise GoogleAccountCollisionError("user@example.com")
+        raise exception_cls
+
+    monkeypatch.setattr(
+        "assistant.api.routes.auth.handle_google_callback", _fake_handle_google_callback
+    )
+
+    response = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith(f"/login?google_error={error_code}")
+
+
+def test_google_callback_invite_flow_failure_redirects_to_invite(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    invite_id = uuid.uuid4()
+    state = sign_state(nonce="nonce", invite_id=invite_id)
+    _patch_google_boundary(monkeypatch, claims=_google_claims())
+
+    def _fake_handle_google_callback(*args: object, **kwargs: object) -> User:  # noqa: ARG001
+        raise InviteEmailMismatchError(invite_id)
+
+    monkeypatch.setattr(
+        "assistant.api.routes.auth.handle_google_callback", _fake_handle_google_callback
+    )
+
+    response = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith(
+        f"/invite/{invite_id}?google_error=invite_email_mismatch"
+    )
+
+
+# --- Google: callback success ---
+
+
+def test_google_callback_success_sets_cookies_and_redirects(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = sign_state(nonce="nonce", invite_id=None)
+    _patch_google_boundary(monkeypatch, claims=_google_claims())
+
+    response = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/notebooks")
+    assert "access_token" in client.cookies
+
+
+def test_google_callback_returning_user_no_duplicate_row(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    claims = _google_claims()
+    _patch_google_boundary(monkeypatch, claims=claims)
+
+    state1 = sign_state(nonce="nonce1", invite_id=None)
+    first = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state1},
+        follow_redirects=False,
+    )
+    assert first.status_code == 302
+
+    state2 = sign_state(nonce="nonce2", invite_id=None)
+    second = client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state2},
+        follow_redirects=False,
+    )
+    assert second.status_code == 302
+
+    count = db_session.query(User).filter_by(email=claims.email).count()
+    assert count == 1

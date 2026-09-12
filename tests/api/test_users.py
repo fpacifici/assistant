@@ -166,31 +166,65 @@ class TestUpdateUser:
         self,
         client: TestClient,
         test_user: User,
+        auth_headers: dict[str, str],
     ) -> None:
         response = client.patch(
             f"/user/{test_user.uid}",
             json={"firstname": "Updated"},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["firstname"] == "Updated"
         assert data["lastname"] == "User"
 
-    def test_update_user_not_found(self, client: TestClient) -> None:
+    def test_update_user_unauthenticated(
+        self, client: TestClient, test_user: User
+    ) -> None:
+        response = client.patch(
+            f"/user/{test_user.uid}",
+            json={"firstname": "Ghost"},
+        )
+        assert response.status_code == 401
+
+    def test_update_user_nonexistent_uid_forbidden(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
         response = client.patch(
             f"/user/{uuid.uuid4()}",
             json={"firstname": "Ghost"},
+            headers=auth_headers,
         )
-        assert response.status_code == 404
+        assert response.status_code == 403
+
+    def test_update_user_other_real_user_forbidden(
+        self,
+        client: TestClient,
+        test_user: User,  # noqa: ARG002
+        other_user: User,
+        auth_headers: dict[str, str],
+        db_session: Session,
+    ) -> None:
+        db_session.commit()
+        response = client.patch(
+            f"/user/{other_user.uid}",
+            json={"firstname": "Hijacked"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 403
+        db_session.refresh(other_user)
+        assert other_user.firstname == "Other"
 
     def test_update_user_no_changes(
         self,
         client: TestClient,
         test_user: User,
+        auth_headers: dict[str, str],
     ) -> None:
         response = client.patch(
             f"/user/{test_user.uid}",
             json={},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         assert response.json()["email"] == "test@example.com"
@@ -199,6 +233,7 @@ class TestUpdateUser:
         self,
         client: TestClient,
         test_user: User,
+        auth_headers: dict[str, str],
         db_session: Session,
     ) -> None:
         other = UserModel(
@@ -212,5 +247,6 @@ class TestUpdateUser:
         response = client.patch(
             f"/user/{test_user.uid}",
             json={"email": "other@example.com"},
+            headers=auth_headers,
         )
         assert response.status_code == 409

@@ -14,11 +14,13 @@ from assistant.invites.exceptions import (
     InvitePermissionError,
     InvitesDisabledError,
     QuotaExhaustedError,
+    RegistrationDisabledError,
 )
 from assistant.invites.service import (
     admin_create_invite,
     admin_void_invite,
     convert_invite,
+    create_gated_user,
     create_invite,
     delete_invite,
     get_valid_pending_invite,
@@ -342,3 +344,74 @@ def test_delete_invite_non_pending_no_quota_change(
 
 def test_delete_invite_unknown_id_is_noop(db_session: Session) -> None:
     delete_invite(db_session, uuid.uuid4())
+
+
+# --- create_gated_user ---
+
+
+def test_create_gated_user_creates_user_with_default_quota(
+    db_session: Session,
+) -> None:
+    user, invite = create_gated_user(
+        db_session,
+        email="new@example.com",
+        firstname="New",
+        lastname="User",
+        invite_id=None,
+    )
+
+    assert invite is None
+    assert user.email == "new@example.com"
+    assert user.firstname == "New"
+    assert user.lastname == "User"
+    assert user.invite_quota_remaining == 5
+
+
+def test_create_gated_user_invite_quota_override_takes_precedence(
+    db_session: Session,
+) -> None:
+    user, _invite = create_gated_user(
+        db_session,
+        email="new2@example.com",
+        firstname="New",
+        lastname="User",
+        invite_id=None,
+        invite_quota_override=9,
+    )
+
+    assert user.invite_quota_remaining == 9
+
+
+def test_create_gated_user_valid_invite_converts_it(db_session: Session) -> None:
+    inviter = _make_user(db_session, "inviter@example.com", quota=5)
+    invite = _make_invite(db_session, inviter=inviter, email="invitee@example.com")
+
+    user, returned_invite = create_gated_user(
+        db_session,
+        email="invitee@example.com",
+        firstname="Invitee",
+        lastname="User",
+        invite_id=invite.id,
+    )
+
+    assert returned_invite is not None
+    assert returned_invite.id == invite.id
+    assert invite.state == InviteState.CONVERTED.value
+    assert user.email == "invitee@example.com"
+
+
+def test_create_gated_user_registration_disabled_without_invite_raises(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
+
+    with pytest.raises(RegistrationDisabledError):
+        create_gated_user(
+            db_session,
+            email="blocked@example.com",
+            firstname="Blocked",
+            lastname="User",
+            invite_id=None,
+        )
+
+    assert db_session.query(User).filter_by(email="blocked@example.com").first() is None

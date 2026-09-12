@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from assistant.api.dependencies import SessionDep
+from assistant.api.dependencies import CurrentUser, SessionDep
 from assistant.api.schemas.pagination import Pagination
 from assistant.api.schemas.users import UserCreate, UserResponse, UserUpdate
 from assistant.notes.user_service import create_user, get_user, list_users, update_user
@@ -57,12 +57,17 @@ def update_user_endpoint(
     uid: uuid.UUID,
     body: UserUpdate,
     session: SessionDep,
+    user: CurrentUser,
 ) -> UserResponse:
-    user = update_user(
+    if uid != user.uid:
+        raise HTTPException(
+            status_code=403, detail="Cannot update another user's profile"
+        )
+    updated = update_user(
         session,
         uid,
         email=body.email,
         firstname=body.firstname,
         lastname=body.lastname,
     )
-    return UserResponse.model_validate(user)
+    return UserResponse.model_validate(updated)

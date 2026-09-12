@@ -1,10 +1,13 @@
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchInvitePublic } from '../api/invites';
 import RegistrationForm from '../components/RegistrationForm';
+import { googleAuthErrorMessage } from '../lib/googleAuthErrors';
 
 export default function AcceptInvitePage() {
   const { inviteId } = useParams<{ inviteId: string }>();
+  const [searchParams] = useSearchParams();
+  const googleError = googleAuthErrorMessage(searchParams.get('google_error'));
 
   const { data, isLoading } = useQuery({
     queryKey: ['invites', 'public', inviteId],
@@ -16,6 +19,7 @@ export default function AcceptInvitePage() {
     <div className="auth-page">
       <div className="auth-card">
         <h1>Join Assistant</h1>
+        {googleError && <p className="auth-error">{googleError}</p>}
         {isLoading ? (
           <p>Loading...</p>
         ) : data?.valid ? (

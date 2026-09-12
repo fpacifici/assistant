@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { register, login } from '../api/auth';
 import { ApiError } from '../api/client';
+import GoogleAuthButton from './GoogleAuthButton';
 
 interface RegistrationFormProps {
   inviteId?: string;
@@ -95,6 +96,8 @@ export default function RegistrationForm({ inviteId }: RegistrationFormProps) {
       <button type="submit" disabled={loading} className="btn-primary">
         {loading ? 'Creating account…' : 'Create account'}
       </button>
+      <div className="auth-divider">or</div>
+      <GoogleAuthButton inviteId={inviteId} />
     </form>
   );
 }

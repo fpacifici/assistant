@@ -6,12 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from assistant.config import Config
-from assistant.invites.service import (
-    default_quota_for_new_user,
-    on_user_created,
-    resolve_registration_gate,
-)
+from assistant.invites.service import create_gated_user
 from assistant.models.schema import User
 from assistant.notes.exceptions import UserNotFoundError
 
@@ -30,24 +25,17 @@ def create_user(  # noqa: PLR0913
     invite_quota: int | None = None,
     invite_id: uuid.UUID | None = None,
 ) -> User:
-    """Create a user directly (the generic POST /user path).
-
-    Gated exactly like self-registration: raises RegistrationDisabledError
-    if registration_enabled is false and no (valid) invite_id was given.
-    This endpoint mints accounts from caller-supplied identity same as
-    /auth/register does, so it cannot bypass the invite-only gate.
-    """
-    config = Config().get_registration_config()
-    invite = resolve_registration_gate(session, config, email, invite_id)
-    user = User(
+    """The generic POST /user path — no Credential, matching today's
+    behavior (a user created this way can't log in via any provider
+    until one is added separately)."""
+    user, _invite = create_gated_user(
+        session,
         email=email,
         firstname=firstname,
         lastname=lastname,
-        invite_quota_remaining=default_quota_for_new_user(config, invite_quota),
+        invite_id=invite_id,
+        invite_quota_override=invite_quota,
     )
-    session.add(user)
-    session.flush()
-    on_user_created(session, user, used_invite_id=invite.id if invite else None)
     return user
 
 

@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/files': { target: API_BASE, changeOrigin: true },
+      '/auth': { target: API_BASE, changeOrigin: true },
     },
   },
   test: {

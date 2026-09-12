@@ -463,6 +463,100 @@ def test_config_get_port_env_override(tmp_path: Path) -> None:
         assert config.get_port() == 9001
 
 
+def test_config_get_omit_port_defaults(tmp_path: Path) -> None:
+    """Test that get_omit_port defaults to False when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_omit_port() is False
+
+
+def test_config_get_omit_port_from_yaml(tmp_path: Path) -> None:
+    """Test getting omit_port from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("omit_port: true\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_omit_port() is True
+
+
+def test_config_get_omit_port_env_override(tmp_path: Path) -> None:
+    """Test that OMIT_PORT env var overrides YAML omit_port."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("omit_port: false\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"OMIT_PORT": "true"}):
+        assert config.get_omit_port() is True
+
+
+def test_config_get_use_http_defaults(tmp_path: Path) -> None:
+    """Test that get_use_http defaults to False when absent from YAML and env."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_http() is False
+
+
+def test_config_get_use_http_from_yaml(tmp_path: Path) -> None:
+    """Test getting use_http from YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_http: true\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_use_http() is True
+
+
+def test_config_get_use_http_env_override(tmp_path: Path) -> None:
+    """Test that USE_HTTP env var overrides YAML use_http."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("use_http: false\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(os.environ, {"USE_HTTP": "true"}):
+        assert config.get_use_http() is True
+
+
+def test_config_public_origin_includes_port_by_default(tmp_path: Path) -> None:
+    """Test that public_origin() includes the port when omit_port is unset."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mynotes.my\nport: 9000\n")
+
+    config = Config(config_path=config_file)
+    assert config.public_origin() == "https://mynotes.my:9000"
+
+
+def test_config_public_origin_omits_port_when_configured(tmp_path: Path) -> None:
+    """Test that public_origin() omits the port when omit_port is true."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mynotes.my\nport: 9000\nomit_port: true\n")
+
+    config = Config(config_path=config_file)
+    assert config.public_origin() == "https://mynotes.my"
+
+
+def test_config_public_origin_uses_https_by_default(tmp_path: Path) -> None:
+    """Test that public_origin() uses https:// when use_http is unset."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mynotes.my\nport: 9000\n")
+
+    config = Config(config_path=config_file)
+    assert config.public_origin() == "https://mynotes.my:9000"
+
+
+def test_config_public_origin_uses_http_when_configured(tmp_path: Path) -> None:
+    """Test that public_origin() uses http:// when use_http is true."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("domain: mynotes.my\nport: 9000\nuse_http: true\n")
+
+    config = Config(config_path=config_file)
+    assert config.public_origin() == "http://mynotes.my:9000"
+
+
 def test_config_get_registration_config_defaults(tmp_path: Path) -> None:
     """Test that get_registration_config returns documented defaults when absent."""
     config_file = tmp_path / "test_config.yaml"
@@ -517,3 +611,103 @@ def test_config_get_registration_config_env_overrides(
 
     with patch.dict(os.environ, {env_key: env_value}):
         assert config.get_registration_config()[field] == expected  # type: ignore[literal-required]
+
+
+def test_config_get_google_config_from_yaml(tmp_path: Path) -> None:
+    """Test getting Google config with all fields present in YAML."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "google:\n"
+        "  client_id: client-123.apps.googleusercontent.com\n"
+        "  client_secret: secret-abc\n"
+        "  redirect_path: /custom/callback\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_google_config() == {
+        "client_id": "client-123.apps.googleusercontent.com",
+        "client_secret": "secret-abc",
+        "redirect_path": "/custom/callback",
+    }
+
+
+def test_config_get_google_config_redirect_path_defaults(tmp_path: Path) -> None:
+    """Test that redirect_path defaults to /auth/google/callback when absent."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "google:\n"
+        "  client_id: client-123.apps.googleusercontent.com\n"
+        "  client_secret: secret-abc\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_google_config()["redirect_path"] == "/auth/google/callback"
+
+
+@pytest.mark.parametrize("missing_field", ["client_id", "client_secret"])
+def test_config_get_google_config_missing_required_field_raises(
+    tmp_path: Path, missing_field: str
+) -> None:
+    """Test that each individually missing required Google field raises ValueError."""
+    fields = {
+        "client_id": "client-123.apps.googleusercontent.com",
+        "client_secret": "secret-abc",
+    }
+    del fields[missing_field]
+
+    config_file = tmp_path / "test_config.yaml"
+    body = "\n".join(f"  {key}: {value}" for key, value in fields.items())
+    config_file.write_text(f"google:\n{body}\n")
+
+    config = Config(config_path=config_file)
+
+    with pytest.raises(ValueError, match=missing_field):
+        config.get_google_config()
+
+
+def test_config_get_google_config_env_overrides(tmp_path: Path) -> None:
+    """Test that GOOGLE_* env vars override YAML Google config."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "google:\n"
+        "  client_id: client-123.apps.googleusercontent.com\n"
+        "  client_secret: secret-abc\n"
+        "  redirect_path: /custom/callback\n",
+    )
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(
+        os.environ,
+        {
+            "GOOGLE_CLIENT_ID": "env-client.apps.googleusercontent.com",
+            "GOOGLE_CLIENT_SECRET": "env-secret",
+            "GOOGLE_REDIRECT_PATH": "/env/callback",
+        },
+    ):
+        assert config.get_google_config() == {
+            "client_id": "env-client.apps.googleusercontent.com",
+            "client_secret": "env-secret",
+            "redirect_path": "/env/callback",
+        }
+
+
+def test_config_get_google_config_env_only_without_yaml(tmp_path: Path) -> None:
+    """Test that env-only Google configuration works without a YAML section."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+
+    with patch.dict(
+        os.environ,
+        {
+            "GOOGLE_CLIENT_ID": "env-client.apps.googleusercontent.com",
+            "GOOGLE_CLIENT_SECRET": "env-secret",
+        },
+    ):
+        assert config.get_google_config() == {
+            "client_id": "env-client.apps.googleusercontent.com",
+            "client_secret": "env-secret",
+            "redirect_path": "/auth/google/callback",
+        }

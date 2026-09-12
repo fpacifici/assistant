@@ -14,12 +14,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy import delete, select
 
-from assistant.config import Config
-from assistant.invites.service import (
-    default_quota_for_new_user,
-    on_user_created,
-    resolve_registration_gate,
-)
+from assistant.invites.service import create_gated_user
 from assistant.models.schema import Credential, RefreshToken, User
 
 if TYPE_CHECKING:
@@ -35,7 +30,7 @@ class AuthError(Exception):
     """Raised when authentication fails."""
 
 
-def _jwt_secret() -> str:
+def jwt_secret() -> str:
     secret = os.getenv("JWT_SECRET", "")
     if not secret:
         msg = "JWT_SECRET environment variable is not set"
@@ -58,13 +53,13 @@ def create_access_token(user_id: uuid_module.UUID) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=ACCESS_TOKEN_MINUTES),
     }
-    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+    return jwt.encode(payload, jwt_secret(), algorithm="HS256")
 
 
 def decode_access_token(token: str) -> uuid_module.UUID:
     """Validate a JWT and return the user UUID from the sub claim."""
     try:
-        payload = jwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+        payload = jwt.decode(token, jwt_secret(), algorithms=["HS256"])
         return uuid_module.UUID(payload["sub"])
     except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
         raise AuthError("Invalid or expired access token") from exc  # noqa: TRY003
@@ -99,25 +94,11 @@ def register_user(  # noqa: PLR0913
     lastname: str,
     invite_id: uuid_module.UUID | None = None,
 ) -> User:
-    """Create a user and a password credential.
-
-    Raises AuthError on duplicate email. Raises RegistrationDisabledError if
-    registration_enabled is false and no invite_id was given. Raises
-    InvitesDisabledError / InviteNotUsableError / InviteEmailMismatchError
-    per get_valid_pending_invite and the email-match check, when an
-    invite_id is given.
-    """
-    config = Config().get_registration_config()
-    invite = resolve_registration_gate(session, config, email, invite_id)
-    user = User(
-        email=email,
-        firstname=firstname,
-        lastname=lastname,
-        invite_quota_remaining=default_quota_for_new_user(config, None),
+    """Create a user and a password credential. See create_gated_user
+    for the registration-gate/quota/invite-conversion behavior."""
+    user, _invite = create_gated_user(
+        session, email=email, firstname=firstname, lastname=lastname, invite_id=invite_id
     )
-    session.add(user)
-    session.flush()
-
     credential = Credential(
         user_id=user.uid,
         provider="password",
@@ -125,8 +106,6 @@ def register_user(  # noqa: PLR0913
     )
     session.add(credential)
     session.flush()
-
-    on_user_created(session, user, used_invite_id=invite.id if invite else None)
     return user
 
 

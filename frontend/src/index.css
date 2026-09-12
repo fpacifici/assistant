@@ -655,6 +655,45 @@ ul {
   margin-bottom: 1rem;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #999;
+  font-size: 0.75rem;
+  margin: 1rem 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #ddd;
+}
+
+.auth-divider::before {
+  margin-right: 0.75rem;
+}
+
+.auth-divider::after {
+  margin-left: 0.75rem;
+}
+
+.btn-google {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.625rem;
+  background: white;
+  color: #1a1a1a;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .invites-page {
   max-width: 720px;
   margin: 0 auto;

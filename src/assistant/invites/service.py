@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from assistant.config import Config
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
     InviteNotUsableError,
@@ -22,16 +23,16 @@ if TYPE_CHECKING:
 
     from sqlalchemy.orm import Session
 
-    from assistant.config import Config, RegistrationConfig
+    from assistant.config import RegistrationConfig
 
 
 def build_invite_url(invite_id: uuid.UUID, config: Config) -> str:
     """Return the invite's share URL, recomputed fresh on every call.
 
-    Never stored. Depends on config.get_domain() (raises if unset, same as
-    the email service) and config.get_port() (defaults to 8000).
+    Never stored. Depends on config.public_origin() (raises if domain is
+    unset, same as the email service).
     """
-    return f"https://{config.get_domain()}:{config.get_port()}/invite/{invite_id}"
+    return f"{config.public_origin()}/invite/{invite_id}"
 
 
 def list_invites_for_user(session: Session, user: User) -> list[Invite]:
@@ -242,6 +243,51 @@ def replenish_quota(session: Session, user: User, amount: int) -> None:
     """
     user.invite_quota_remaining += amount
     session.flush()
+
+
+# --- Gated user creation ---
+
+
+def create_gated_user(  # noqa: PLR0913
+    session: Session,
+    *,
+    email: str,
+    firstname: str,
+    lastname: str,
+    invite_id: uuid.UUID | None,
+    invite_quota_override: int | None = None,
+) -> tuple[User, Invite | None]:
+    """Create a User row after enforcing the registration/invite gate.
+
+    Shared by every path that mints a User from caller-supplied identity
+    — password registration, direct POST /user, Google sign-up — so the
+    gate check, quota assignment, and on_user_created cascade live in
+    exactly one place. Does NOT create a Credential; callers own that
+    (a password hash, a google provider_subject, or nothing at all for
+    the generic POST /user path) since it's the one part that actually
+    differs per caller.
+
+    Returns (user, invite) so a caller that needs invite.id (none do
+    today — on_user_created already takes invite.id if invite else None
+    internally) or wants to branch on whether an invite was used can;
+    most callers only look at the User.
+
+    Raises RegistrationDisabledError / InvitesDisabledError /
+    InviteNotUsableError / InviteEmailMismatchError per
+    resolve_registration_gate — uncaught, same as today.
+    """
+    config = Config().get_registration_config()
+    invite = resolve_registration_gate(session, config, email, invite_id)
+    user = User(
+        email=email,
+        firstname=firstname,
+        lastname=lastname,
+        invite_quota_remaining=default_quota_for_new_user(config, invite_quota_override),
+    )
+    session.add(user)
+    session.flush()
+    on_user_created(session, user, used_invite_id=invite.id if invite else None)
+    return user, invite
 
 
 def on_user_created(
