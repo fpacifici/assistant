@@ -82,7 +82,7 @@ describe('AcceptInvitePage', () => {
   });
 
   it('renders the mapped message for a google_error query param alongside the form', async () => {
-    mockFetchInvitePublic.mockResolvedValue({ valid: true });
+    mockFetchInvitePublic.mockResolvedValue({ valid: true, invitee_email: 'invitee@example.com' });
 
     renderWithProviders(
       <Routes>

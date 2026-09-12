@@ -49,17 +49,23 @@ def _write_config(
 # --- redirect_uri ---
 
 
-def test_redirect_uri_uses_default_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_redirect_uri_uses_default_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     assert redirect_uri(config) == "https://example.com:8443/auth/google/callback"
 
 
-def test_redirect_uri_uses_configured_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_redirect_uri_uses_configured_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch, redirect_path="/custom/callback")
     assert redirect_uri(config) == "https://example.com:8443/custom/callback"
 
 
-def test_redirect_uri_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_redirect_uri_env_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with patch.dict(os.environ, {"GOOGLE_REDIRECT_PATH": "/env/callback"}):
         assert redirect_uri(config) == "https://example.com:8443/env/callback"
@@ -68,7 +74,9 @@ def test_redirect_uri_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 # --- build_authorization_url ---
 
 
-def test_build_authorization_url_includes_required_params(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_authorization_url_includes_required_params(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with patch("assistant.google_auth.oauth.Config", return_value=config):
         url = build_authorization_url(state="signed-state", nonce="the-nonce")
@@ -101,7 +109,9 @@ def _make_response(
     return response
 
 
-def test_exchange_code_for_tokens_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exchange_code_for_tokens_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with (
         patch("assistant.google_auth.oauth.Config", return_value=config),
@@ -115,7 +125,9 @@ def test_exchange_code_for_tokens_success(tmp_path: Path, monkeypatch: pytest.Mo
     assert result == {"id_token": "abc"}
 
 
-def test_exchange_code_for_tokens_non_2xx_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exchange_code_for_tokens_non_2xx_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with (
         patch("assistant.google_auth.oauth.Config", return_value=config),
@@ -128,7 +140,9 @@ def test_exchange_code_for_tokens_non_2xx_raises(tmp_path: Path, monkeypatch: py
             exchange_code_for_tokens("auth-code")
 
 
-def test_exchange_code_for_tokens_network_error_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exchange_code_for_tokens_network_error_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with (
         patch("assistant.google_auth.oauth.Config", return_value=config),
@@ -142,7 +156,9 @@ def test_exchange_code_for_tokens_network_error_raises(tmp_path: Path, monkeypat
 # --- verify_id_token ---
 
 
-def test_verify_id_token_valid_claims(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_id_token_valid_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     claims = {
         "sub": "1234567890",
@@ -170,7 +186,9 @@ def test_verify_id_token_valid_claims(tmp_path: Path, monkeypatch: pytest.Monkey
     )
 
 
-def test_verify_id_token_missing_names_map_to_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_id_token_missing_names_map_to_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     claims = {
         "sub": "1234567890",
@@ -191,7 +209,9 @@ def test_verify_id_token_missing_names_map_to_none(tmp_path: Path, monkeypatch: 
     assert result.family_name is None
 
 
-def test_verify_id_token_library_error_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_id_token_library_error_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     with (
         patch("assistant.google_auth.oauth.Config", return_value=config),
@@ -204,7 +224,9 @@ def test_verify_id_token_library_error_raises(tmp_path: Path, monkeypatch: pytes
         verify_id_token("raw-token", expected_nonce="the-nonce")
 
 
-def test_verify_id_token_nonce_mismatch_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_id_token_nonce_mismatch_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config = _write_config(tmp_path, monkeypatch)
     claims = {
         "sub": "1234567890",
