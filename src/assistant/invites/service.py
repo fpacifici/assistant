@@ -18,7 +18,7 @@ from assistant.invites.exceptions import (
     QuotaExhaustedError,
     RegistrationDisabledError,
 )
-from assistant.models.schema import Invite, InviteState, User
+from assistant.models.schema import Invite, InviteState, User, UserStatus
 from assistant.urls import invite_url
 
 if TYPE_CHECKING:
@@ -271,6 +271,58 @@ def replenish_quota(session: Session, user: User, amount: int) -> None:
     """
     user.invite_quota_remaining += amount
     session.flush()
+
+
+# --- Gated user creation ---
+
+
+def create_gated_user(  # noqa: PLR0913
+    session: Session,
+    *,
+    email: str,
+    firstname: str,
+    lastname: str,
+    invite_id: uuid.UUID | None,
+    invite_quota_override: int | None = None,
+    status: str = UserStatus.ACTIVE.value,
+) -> tuple[User, Invite | None]:
+    """Create a User row after enforcing the registration/invite gate.
+
+    Shared by every path that mints a User from caller-supplied identity
+    — password registration, direct POST /user, Google sign-up — so the
+    gate check, quota assignment, and on_user_created cascade live in
+    exactly one place. Does NOT create a Credential; callers own that
+    (a password hash, a google provider_subject, or nothing at all for
+    the generic POST /user path) since it's the one part that actually
+    differs per caller.
+
+    `status` defaults to ACTIVE (immediate activation — correct for
+    Google sign-up, which has no confirmation flow, and for the generic
+    POST /user path). Password registration passes PENDING and drives
+    its own email-confirmation dance on top.
+
+    Returns (user, invite) so a caller that needs invite.id (none do
+    today — on_user_created already takes invite.id if invite else None
+    internally) or wants to branch on whether an invite was used can;
+    most callers only look at the User.
+
+    Raises RegistrationDisabledError / InvitesDisabledError /
+    InviteNotUsableError / InviteEmailMismatchError per
+    resolve_registration_gate — uncaught, same as today.
+    """
+    config = Config().get_registration_config()
+    invite = resolve_registration_gate(session, config, email, invite_id)
+    user = User(
+        email=email,
+        firstname=firstname,
+        lastname=lastname,
+        status=status,
+        invite_quota_remaining=default_quota_for_new_user(config, invite_quota_override),
+    )
+    session.add(user)
+    session.flush()
+    on_user_created(session, user, used_invite_id=invite.id if invite else None)
+    return user, invite
 
 
 def on_user_created(

@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { register } from '../api/auth';
 import type { RegisterResult } from '../api/auth';
 import { ApiError } from '../api/client';
+import GoogleAuthButton from './GoogleAuthButton';
 import ResendConfirmation from './ResendConfirmation';
 
 interface RegistrationFormProps {
@@ -117,6 +118,8 @@ export default function RegistrationForm({
       <button type="submit" disabled={loading} className="btn-primary">
         {loading ? 'Creating account…' : 'Create account'}
       </button>
+      <div className="auth-divider">or</div>
+      <GoogleAuthButton inviteId={inviteId} />
     </form>
   );
 }

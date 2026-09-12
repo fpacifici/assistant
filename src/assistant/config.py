@@ -72,6 +72,14 @@ class RegistrationConfig(TypedDict):
     expiry_days: int
 
 
+class GoogleConfig(TypedDict):
+    """Google OAuth2/OIDC configuration."""
+
+    client_id: str
+    client_secret: str
+    redirect_path: str
+
+
 class AssistantConfig(TypedDict, total=False):
     """Top-level configuration structure loaded from YAML."""
 
@@ -81,9 +89,11 @@ class AssistantConfig(TypedDict, total=False):
     external_sources: ExternalSourcesConfig
     domain: str
     port: int
+    omit_port: bool
     use_https: bool
     mailgun: MailgunConfig
     registration: RegistrationConfig
+    google: GoogleConfig
 
 
 T = TypeVar("T")
@@ -429,7 +439,7 @@ class Config:
         return domain
 
     def get_use_https(self) -> bool:
-        """Get whether app-page links should be generated with an https:// scheme.
+        """Get whether public URLs (see `public_origin()`) should use https://.
 
         Env var override: `use_https` -> `USE_HTTPS`.
 
@@ -498,6 +508,38 @@ class Config:
         """
         return int(self.get("port", 8000))
 
+    def get_omit_port(self) -> bool:
+        """Whether composed public URLs should omit the `:{port}` suffix.
+
+        Env var override: `omit_port` -> `OMIT_PORT`.
+
+        Set this when the app sits behind a reverse proxy or load balancer
+        on the standard port (443/80) so `get_port()`'s value — the port
+        the app process actually listens on — shouldn't leak into
+        externally-facing URLs. See `public_origin()`.
+
+        Returns:
+            `True` if the port should be omitted, defaulting to `False`.
+        """
+        return bool(self.get("omit_port", False))
+
+    def public_origin(self) -> str:
+        """The assistant's single public origin, e.g. `https://mynotes.my` or
+        `https://mynotes.my:8000`.
+
+        The one place `domain`/`port`/`omit_port`/`use_https` are composed
+        into a URL origin — every caller that builds an externally-facing
+        URL (invite links, the Google OAuth redirect URI, post-login
+        redirects, confirmation-email links) appends its own path to this
+        instead of recomposing domain/port itself. See `assistant.urls`,
+        whose `_base_url` delegates here.
+        """
+        scheme = "https" if self.get_use_https() else "http"
+        origin = f"{scheme}://{self.get_domain()}"
+        if not self.get_omit_port():
+            origin += f":{self.get_port()}"
+        return origin
+
     def get_registration_config(self) -> RegistrationConfig:
         """Get the effective registration/invites configuration.
 
@@ -519,4 +561,45 @@ class Config:
             "invites_enabled": bool(self.get("registration.invites_enabled", True)),
             "default_quota": int(self.get("registration.default_quota", 5)),
             "expiry_days": int(self.get("registration.expiry_days", 1)),
+        }
+
+    def get_google_config(self) -> GoogleConfig:
+        """Get the effective Google OAuth2 configuration.
+
+        Env var overrides follow the module convention:
+            - `google.client_id`     -> `GOOGLE_CLIENT_ID`
+            - `google.client_secret` -> `GOOGLE_CLIENT_SECRET`
+            - `google.redirect_path` -> `GOOGLE_REDIRECT_PATH`
+
+        `redirect_path` is not a full URL — it's appended to
+        `public_origin()` (this app's existing top-level config, already
+        used the same way by assistant.urls' link builders) to form
+        the URI registered with Google. Defaults to
+        `/auth/google/callback`, matching this plan's own route.
+
+        Raises:
+            ValueError: if `client_id` or `client_secret` is missing from
+                both YAML and env. `redirect_path` always has a default.
+        """
+        client_id = self._get_typed_value(key="google.client_id", expected_type=str)
+        client_secret = self._get_typed_value(
+            key="google.client_secret", expected_type=str
+        )
+        redirect_path = self.get("google.redirect_path", "/auth/google/callback")
+
+        missing_keys: list[str] = []
+        if not client_id:
+            missing_keys.append("client_id")
+        if not client_secret:
+            missing_keys.append("client_secret")
+        if missing_keys:
+            msg = f"Google configuration missing required keys: {', '.join(missing_keys)}"
+            raise ValueError(msg)
+
+        assert client_id is not None
+        assert client_secret is not None
+        return {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_path": redirect_path,
         }

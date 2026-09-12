@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import secrets
+import uuid
+
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 
 from assistant.api.dependencies import CurrentUserId, SessionDep
@@ -22,6 +26,27 @@ from assistant.auth.service import (
     register_user,
     resend_confirmation,
     rotate_refresh_token,
+)
+from assistant.config import Config
+from assistant.google_auth.exceptions import (
+    GoogleAccountCollisionError,
+    GoogleEmailNotVerifiedError,
+    GoogleStateInvalidError,
+    GoogleTokenExchangeError,
+    GoogleTokenInvalidError,
+)
+from assistant.google_auth.oauth import (
+    build_authorization_url,
+    exchange_code_for_tokens,
+    verify_id_token,
+)
+from assistant.google_auth.service import handle_google_callback
+from assistant.google_auth.state import sign_state, verify_state
+from assistant.invites.exceptions import (
+    InviteEmailMismatchError,
+    InviteNotUsableError,
+    InvitesDisabledError,
+    RegistrationDisabledError,
 )
 from assistant.notes.user_service import get_user
 
@@ -142,7 +167,8 @@ def logout(
     if refresh_token is not None:
         logout_user(session, refresh_token)
     _clear_auth_cookies(response)
-    return Response(status_code=204)
+    response.status_code = 204
+    return response
 
 
 @router.get("/me", response_model=UserResponse)
@@ -152,3 +178,71 @@ def me(
 ) -> UserResponse:
     user = get_user(session, user_id)
     return UserResponse.model_validate(user)
+
+
+@router.get("/google")
+def google_start(invite_id: uuid.UUID | None = None) -> RedirectResponse:
+    nonce = secrets.token_urlsafe(16)
+    state = sign_state(nonce=nonce, invite_id=invite_id)
+    url = build_authorization_url(state=state, nonce=nonce)
+    return RedirectResponse(url, status_code=302)
+
+
+def _google_redirect(config: Config, path: str) -> RedirectResponse:
+    """Absolute redirect back into the app, via config.public_origin() —
+    the frontend is co-hosted with the API in production, so this is the
+    app's single public origin either way."""
+    url = f"{config.public_origin()}{path}"
+    return RedirectResponse(url, status_code=302)
+
+
+@router.get("/google/callback")
+def google_callback(  # noqa: PLR0911
+    session: SessionDep,
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    config = Config()
+
+    def fail(path: str, error_code: str) -> RedirectResponse:
+        return _google_redirect(config, f"{path}?google_error={error_code}")
+
+    if error is not None:
+        return fail("/login", "denied")
+    if code is None or state is None:
+        return fail("/login", "invalid_request")
+
+    try:
+        state_claims = verify_state(state)
+    except GoogleStateInvalidError:
+        return fail("/login", "invalid_state")
+
+    fail_path = (
+        f"/invite/{state_claims.invite_id}" if state_claims.invite_id else "/login"
+    )
+
+    try:
+        tokens = exchange_code_for_tokens(code)
+        id_claims = verify_id_token(tokens["id_token"], expected_nonce=state_claims.nonce)
+    except (GoogleTokenExchangeError, GoogleTokenInvalidError):
+        return fail(fail_path, "google_failed")
+
+    try:
+        user = handle_google_callback(
+            session, claims=id_claims, invite_id=state_claims.invite_id
+        )
+    except GoogleEmailNotVerifiedError:
+        return fail(fail_path, "unverified_email")
+    except GoogleAccountCollisionError:
+        return fail(fail_path, "collision")
+    except InviteEmailMismatchError:
+        return fail(fail_path, "invite_email_mismatch")
+    except (InviteNotUsableError, InvitesDisabledError, RegistrationDisabledError):
+        return fail(fail_path, "registration_closed")
+
+    access, refresh = issue_tokens(session, user.uid)
+    redirect = _google_redirect(config, "/notebooks")
+    _set_auth_cookies(request, redirect, access, refresh)
+    return redirect

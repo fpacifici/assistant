@@ -68,27 +68,46 @@ joining the user and credentials tables.
 
 ### Google OAuth2
 
-> **Not yet implemented.** Design details to be finalized when this is
-> built.
+Authentication via Google's [OpenID Connect
+flow](https://developers.google.com/identity/openid-connect/openid-connect#authenticatingtheuser)
+(authorization-code grant, backend-side code exchange, ID-token
+validation). Cookie/web mode only — there is no bearer/native path for
+Google sign-in.
 
-Authentication via Google OAuth2. Lookup is by
-`(provider='google', provider_subject=<google sub claim>)`.
+A returning user is looked up by
+`(provider='google', provider_subject=<google sub claim>)` — never by
+email, since email isn't guaranteed stable. An unrecognized Google
+identity is auto-provisioned: there's no separate login-vs-register UX,
+one button drives both. Provisioning still goes through the same
+registration gate as password registration
+(`invites.service.resolve_registration_gate`) — `registration_enabled`
+and invite validity are enforced identically.
 
-## Provider Linking
+Google's `email_verified` claim is checked at auth time and the attempt
+is rejected outright if false; the claim is never persisted (there is no
+email-confirmation flow in this system to key off of). Missing
+`given_name`/`family_name` claims fall back to an empty string rather
+than blocking account creation.
 
-A user's email is unique across the system. When a user authenticates
-with a new provider whose email matches an existing account, the system
-requires verification through the existing provider before linking.
+The `state` OAuth param carries the flow's CSRF nonce and (for the
+invite-acceptance path) which invite is being redeemed — signed with the
+same HS256 secret as access tokens, since this backend keeps no
+server-side session to stash that data in otherwise.
 
-**Example:** A user has a password account. They click "Log in with
-Google" and the Google account has the same email. The system prompts
-them to enter their existing password. Only after successful
-verification is the Google credential linked to the account.
+See `Provider collisions` below for what happens when the Google email
+already belongs to a different provider.
 
-This prevents account takeover via unverified provider linking.
+## Provider collisions
 
-Once linked, the previous credential is replaced — for example, linking
-Google to a password account disables password login for that user.
+There is no cross-provider account linking today. Each user has exactly
+one authentication mechanism. If a Google sign-in's email already
+belongs to a *different* provider's credential (a password account,
+currently the only other kind), the attempt is rejected with an
+actionable error rather than silently linking or overwriting anything.
+
+A "switch/link mechanism" (e.g. verify your password, then attach a
+Google identity to the same account) is deliberately out of scope here
+and left as future work.
 
 ## Data Model
 
@@ -179,19 +198,26 @@ refresh token invalidates the entire family.
 
 Invalidates the refresh token family. Client clears local state.
 
-### Google OAuth2 (future)
+### Google OAuth2
 
-`GET /auth/google` — Initiates the OAuth2 flow.
+`GET /auth/google` — Builds a signed `state` (CSRF nonce, plus the
+invite id if `?invite_id=` was given) and redirects (302) the browser to
+Google's consent screen (`prompt=select_account`, scopes `openid email
+profile`).
 
-`POST /auth/google/callback` — Completes the OAuth2 flow.
+`GET /auth/google/callback` — Google's own redirect target (a top-level
+browser navigation with `code`/`state` query params, always a GET, never
+something frontend JS reads a response body from). Exchanges the code,
+verifies the ID token, then either logs the user in or auto-provisions
+them per the registration gate. Every outcome — success or failure — is
+itself a redirect: success sets the auth cookies and sends the browser
+to `/notebooks`; failure sends it back to `/login` (or, for an
+invite-flow attempt, to `/invite/:inviteId`) with a machine-readable
+`?google_error=<code>` the frontend maps to a message. Neither route
+ever returns JSON.
 
-### Provider Linking
-
-`POST /auth/link`
-
-Links a new authentication provider to an existing account. Requires
-proof of ownership via the current provider (e.g., password
-verification) before linking.
+No `POST /auth/link` or other provider-linking endpoint exists — see
+"Provider collisions" above.
 
 ## Middleware
 
