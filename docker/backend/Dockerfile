@@ -11,7 +11,8 @@ RUN uv sync --frozen --no-install-project --no-dev
 
 # Now copy the source and install the project itself
 COPY src ./src
-COPY README.md LICENSE ./
+COPY alembic ./alembic
+COPY alembic.ini README.md LICENSE ./
 RUN uv sync --frozen --no-dev
 
 # Run as a non-root user
