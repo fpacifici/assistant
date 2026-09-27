@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Generator
 from typing import Annotated
 
+import sentry_sdk
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -59,9 +60,12 @@ def get_current_user_id(request: Request) -> uuid.UUID:
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        return decode_access_token(token)
+        user_id = decode_access_token(token)
     except AuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    # Scoped to this request by the SDK; a no-op when Sentry is disabled.
+    sentry_sdk.set_user({"id": str(user_id)})
+    return user_id
 
 
 def get_storage(request: Request) -> FileStorage:
@@ -80,7 +84,9 @@ def get_current_user(session: SessionDep, user_id: CurrentUserId) -> User:
     is the one place per request that resolves the JWT-decoded id into that
     entity (also naturally 404s a token issued for a since-deleted user).
     """
-    return get_user(session, user_id)
+    user = get_user(session, user_id)
+    sentry_sdk.set_user({"id": str(user.uid), "email": user.email})
+    return user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

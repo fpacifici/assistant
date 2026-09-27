@@ -80,6 +80,15 @@ class GoogleConfig(TypedDict):
     redirect_path: str
 
 
+class SentryConfig(TypedDict):
+    """Sentry SDK configuration. A `None` dsn means Sentry is disabled."""
+
+    dsn: str | None
+    environment: str
+    traces_sample_rate: float
+    profile_session_sample_rate: float
+
+
 class AssistantConfig(TypedDict, total=False):
     """Top-level configuration structure loaded from YAML."""
 
@@ -94,6 +103,7 @@ class AssistantConfig(TypedDict, total=False):
     mailgun: MailgunConfig
     registration: RegistrationConfig
     google: GoogleConfig
+    sentry: SentryConfig
 
 
 T = TypeVar("T")
@@ -603,3 +613,58 @@ class Config:
             "client_secret": client_secret,
             "redirect_path": redirect_path,
         }
+
+    def get_sentry_config(self) -> SentryConfig:
+        """Get the effective Sentry configuration.
+
+        Env var overrides follow the module convention:
+            - `sentry.dsn`                         -> `SENTRY_DSN`
+            - `sentry.environment`                 -> `SENTRY_ENVIRONMENT`
+            - `sentry.traces_sample_rate`          -> `SENTRY_TRACES_SAMPLE_RATE`
+            - `sentry.profile_session_sample_rate` ->
+              `SENTRY_PROFILE_SESSION_SAMPLE_RATE`
+
+        Returns:
+            A `SentryConfig` mapping. `dsn` is `None` when unset or empty,
+            which disables Sentry. `environment` defaults to `"development"`
+            and both sample rates default to `1.0`.
+
+        Raises:
+            ValueError: If a sample rate is not a number in `[0.0, 1.0]`.
+        """
+        dsn = self._get_typed_value(key="sentry.dsn", expected_type=str)
+        return {
+            "dsn": dsn or None,
+            "environment": str(self.get("sentry.environment", "development")),
+            "traces_sample_rate": self._get_sample_rate("sentry.traces_sample_rate"),
+            "profile_session_sample_rate": self._get_sample_rate(
+                "sentry.profile_session_sample_rate"
+            ),
+        }
+
+    def _get_sample_rate(self, key: str, default: float = 1.0) -> float:
+        """Read a `[0.0, 1.0]` sample rate, accepting YAML ints like `1`.
+
+        Bypasses `get()`'s type inference: a YAML `1` would otherwise make an
+        env override like `"0.5"` fail int coercion.
+
+        Raises:
+            ValueError: If the value is not a number or is out of range.
+        """
+        raw: object = os.getenv(_env_var_name(key))
+        if raw is None:
+            raw = self._get_from_config(key)
+        if raw is _MISSING:
+            raw = default
+        if isinstance(raw, bool) or not isinstance(raw, int | float | str):
+            msg = f"Invalid sample rate for {key!r}: {raw!r}"
+            raise ValueError(msg)  # noqa: TRY004
+        try:
+            rate = float(raw)
+        except ValueError as exc:
+            msg = f"Invalid sample rate for {key!r}: {raw!r}"
+            raise ValueError(msg) from exc
+        if not 0.0 <= rate <= 1.0:
+            msg = f"Sample rate {key!r} must be between 0.0 and 1.0, got {rate}"
+            raise ValueError(msg)
+        return rate

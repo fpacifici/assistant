@@ -37,8 +37,11 @@ The frontend runs as a Node/Vite dev server on port 5173 and communicates with t
 
 ## Provider Hierarchy
 
-`main.tsx` builds a data router (`createBrowserRouter(routes)`) from the route
-table in `routes.tsx` and mounts:
+`main.tsx` first calls `initSentry(routes)` (`lib/sentry.ts`, see
+[Observability](observability.md)), then builds a data router
+(`Sentry.wrapCreateBrowserRouter(createBrowserRouter)(routes)`) from the route
+table in `routes.tsx` and mounts it with `Sentry.reactErrorHandler()` on the
+React root's error hooks:
 
 ```
 StrictMode
@@ -46,11 +49,16 @@ StrictMode
     RouterProvider           -- React Router v7 data router
       RootProviders          -- root layout route (components/RouteLayouts.tsx)
         LayoutModeProvider   -- resolves 'mobile' | 'desktop' (see Responsive layout)
-          <public pages>
-          ProtectedLayout    -- pathless layout route
-            AuthProvider     -- GET /auth/me; redirects to /login without a session
-              <protected pages>
+          Sentry.ErrorBoundary -- reports render errors, shows a reload fallback
+            <public pages>
+            ProtectedLayout  -- pathless layout route
+              AuthProvider   -- GET /auth/me (sets the Sentry user); redirects to
+                                /login without a session
+                <protected pages>
 ```
+
+The root route also has `errorElement: <RouteErrorElement />`, which reports
+errors the data router catches itself (they never reach a React boundary).
 
 A data router is required for `useBlocker` (the unsaved-changes guard).
 Authentication is cookie based: `apiFetch` sends `credentials: 'include'`,

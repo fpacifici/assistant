@@ -30,6 +30,10 @@ _CONFIG_ENV_KEYS: tuple[str, ...] = (
     "REGISTRATION_INVITES_ENABLED",
     "REGISTRATION_DEFAULT_QUOTA",
     "REGISTRATION_EXPIRY_DAYS",
+    "SENTRY_DSN",
+    "SENTRY_ENVIRONMENT",
+    "SENTRY_TRACES_SAMPLE_RATE",
+    "SENTRY_PROFILE_SESSION_SAMPLE_RATE",
 )
 
 
@@ -713,3 +717,109 @@ def test_config_get_google_config_env_only_without_yaml(tmp_path: Path) -> None:
             "client_secret": "env-secret",
             "redirect_path": "/auth/google/callback",
         }
+
+
+# --- Sentry ---
+
+
+def test_config_get_sentry_config_defaults(tmp_path: Path) -> None:
+    """Without a sentry section, Sentry is disabled with default rates."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    assert config.get_sentry_config() == {
+        "dsn": None,
+        "environment": "development",
+        "traces_sample_rate": 1.0,
+        "profile_session_sample_rate": 1.0,
+    }
+
+
+def test_config_get_sentry_config_from_yaml(tmp_path: Path) -> None:
+    """YAML values are read, and integer rates are coerced to float."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "sentry:\n"
+        "  dsn: https://key@o1.ingest.sentry.io/1\n"
+        "  environment: production\n"
+        "  traces_sample_rate: 0.25\n"
+        "  profile_session_sample_rate: 0\n",
+    )
+
+    config = Config(config_path=config_file)
+    sentry = config.get_sentry_config()
+    assert sentry == {
+        "dsn": "https://key@o1.ingest.sentry.io/1",
+        "environment": "production",
+        "traces_sample_rate": 0.25,
+        "profile_session_sample_rate": 0.0,
+    }
+    assert isinstance(sentry["profile_session_sample_rate"], float)
+
+
+def test_config_get_sentry_config_env_overrides(tmp_path: Path) -> None:
+    """Env vars override YAML, with string rates parsed as floats."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "sentry:\n  environment: development\n  traces_sample_rate: 1\n",
+    )
+
+    config = Config(config_path=config_file)
+    env = {
+        "SENTRY_DSN": "https://key@o1.ingest.sentry.io/2",
+        "SENTRY_ENVIRONMENT": "staging",
+        "SENTRY_TRACES_SAMPLE_RATE": "0.5",
+        "SENTRY_PROFILE_SESSION_SAMPLE_RATE": "0.1",
+    }
+    with patch.dict(os.environ, env):
+        assert config.get_sentry_config() == {
+            "dsn": "https://key@o1.ingest.sentry.io/2",
+            "environment": "staging",
+            "traces_sample_rate": 0.5,
+            "profile_session_sample_rate": 0.1,
+        }
+
+
+def test_config_get_sentry_config_empty_dsn_is_none(tmp_path: Path) -> None:
+    """An empty SENTRY_DSN disables Sentry even if YAML sets one."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("sentry:\n  dsn: https://key@o1.ingest.sentry.io/1\n")
+
+    config = Config(config_path=config_file)
+    with patch.dict(os.environ, {"SENTRY_DSN": ""}):
+        assert config.get_sentry_config()["dsn"] is None
+
+
+@pytest.mark.parametrize(
+    ("env_key", "env_value"),
+    [
+        ("SENTRY_TRACES_SAMPLE_RATE", "1.5"),
+        ("SENTRY_TRACES_SAMPLE_RATE", "-0.1"),
+        ("SENTRY_PROFILE_SESSION_SAMPLE_RATE", "2"),
+        ("SENTRY_PROFILE_SESSION_SAMPLE_RATE", "lots"),
+    ],
+)
+def test_config_get_sentry_config_invalid_rate_raises(
+    tmp_path: Path, env_key: str, env_value: str
+) -> None:
+    """A rate outside [0, 1] or not a number fails fast."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("other_key: value\n")
+
+    config = Config(config_path=config_file)
+    with (
+        patch.dict(os.environ, {env_key: env_value}),
+        pytest.raises(ValueError, match=r"(?i)sample rate"),
+    ):
+        config.get_sentry_config()
+
+
+def test_config_get_sentry_config_invalid_yaml_rate_raises(tmp_path: Path) -> None:
+    """An out-of-range YAML rate fails fast too."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("sentry:\n  traces_sample_rate: 3\n")
+
+    config = Config(config_path=config_file)
+    with pytest.raises(ValueError, match=r"between 0\.0 and 1\.0"):
+        config.get_sentry_config()

@@ -8,7 +8,11 @@ import RegisterPage from './pages/RegisterPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import InvitesPage from './pages/InvitesPage';
-import { ProtectedLayout, RootProviders } from './components/RouteLayouts';
+import {
+  ProtectedLayout,
+  RootProviders,
+  RouteErrorElement,
+} from './components/RouteLayouts';
 
 // The three note routes are siblings rendering the same `<Layout />` element
 // at the same position, so React reuses the Layout (and NoteEditor) instance
@@ -16,6 +20,7 @@ import { ProtectedLayout, RootProviders } from './components/RouteLayouts';
 export const routes: RouteObject[] = [
   {
     element: <RootProviders />,
+    errorElement: <RouteErrorElement />,
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/register', element: <RegisterPage /> },

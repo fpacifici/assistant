@@ -35,6 +35,7 @@ dependencies = [
     "requests>=2.31.0",
     "alembic>=1.13.0",
     "google-auth>=2.35.0",
+    "sentry-sdk[fastapi]>=2.35",
 ]
 
 [project.optional-dependencies]

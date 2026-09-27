@@ -1,4 +1,4 @@
-# Manual dev end setup 
+# Manual dev end setup
 
 > [!NOTE]
 > Under normal operations you should not read this. The dev env standard
@@ -37,3 +37,19 @@ black --check src/
 ruff check --fix src/
 black src/
 ```
+
+## Enabling Sentry locally
+
+Sentry is off by default. To send local errors, traces and replays to Sentry
+(see [`observability.md`](architecture/observability.md)):
+
+```bash
+# .env (repo root) — backend
+SENTRY_DSN=https://<key>@<org>.ingest.us.sentry.io/<backend-project>
+SENTRY_ENVIRONMENT=development
+
+# frontend/.env.local — frontend (read by Vite at startup/build)
+VITE_SENTRY_DSN=https://<key>@<org>.ingest.us.sentry.io/<frontend-project>
+```
+
+Restart `make dev` after changing them. Tests always run with Sentry off.

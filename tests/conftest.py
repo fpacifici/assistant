@@ -29,6 +29,21 @@ def _set_test_domain() -> Iterator[None]:
     os.environ.pop("PORT", None)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _disable_sentry() -> Iterator[None]:
+    """Keep Sentry off in tests even if a developer's `.env` sets `SENTRY_DSN`.
+
+    `create_app()` calls `init_sentry()`; an empty DSN makes it a no-op.
+    """
+    previous = os.environ.get("SENTRY_DSN")
+    os.environ["SENTRY_DSN"] = ""
+    yield
+    if previous is None:
+        os.environ.pop("SENTRY_DSN", None)
+    else:
+        os.environ["SENTRY_DSN"] = previous
+
+
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
     """Provide a temporary directory for tests.

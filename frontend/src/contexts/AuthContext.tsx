@@ -1,6 +1,7 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMe, logout as apiLogout } from '../api/auth';
+import { setSentryUser } from '../lib/sentry';
 import type { User } from '../types';
 
 interface AuthContextValue {
@@ -21,6 +22,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  useEffect(() => {
+    setSentryUser(user ?? null);
+  }, [user]);
+
   if (isLoading) return <div className="loading">Loading...</div>;
 
   if (error || !user) {
@@ -33,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiLogout();
     } finally {
+      setSentryUser(null);
       queryClient.clear();
       window.location.href = '/login';
     }

@@ -48,3 +48,9 @@ mailgun:
 # the Google Cloud Console.
 google:
   redirect_path: /auth/google/callback  # optional, this is the default
+
+# Sentry (dsn is always supplied via SENTRY_DSN env var; omit it to disable)
+sentry:
+  environment: development
+  # traces_sample_rate: 1.0            # optional, this is the default
+  # profile_session_sample_rate: 1.0   # optional, this is the default
