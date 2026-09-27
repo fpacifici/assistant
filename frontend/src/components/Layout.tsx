@@ -15,6 +15,7 @@ import NoteEditor from './NoteEditor';
 import DesktopHeader from './DesktopHeader';
 import MobileTopBar from './MobileTopBar';
 import { TopBarMenuProvider } from './TopBarMenuContext';
+import { TopBarSlotProvider } from './TopBarSlot';
 import { useLayoutMode } from '../layout/LayoutModeContext';
 import { fetchNotebooks } from '../api/notebooks';
 import { fetchNote } from '../api/notes';
@@ -59,26 +60,28 @@ export default function Layout() {
 
   return (
     <TopBarMenuProvider>
-      <div className="app-shell" data-layout={mode}>
-        {mobile ? <MobileTopBar title={title} backTo={backTo} /> : <DesktopHeader />}
-        <div className="layout">
-          {showSidebar && (
-            <div key="sidebar" className="sidebar">
-              {showNotebookList && <NotebookList />}
-              {showNoteList && <NoteList />}
-            </div>
-          )}
-          {showMain && (
-            <div key="main" className="main">
-              {noteId ? <NoteEditor /> : (
-                <div className="editor-placeholder">
-                  {notebookId ? 'Select a note to edit' : 'Select a notebook to get started'}
-                </div>
-              )}
-            </div>
-          )}
+      <TopBarSlotProvider>
+        <div className="app-shell" data-layout={mode}>
+          {mobile ? <MobileTopBar title={title} backTo={backTo} /> : <DesktopHeader />}
+          <div className="layout">
+            {showSidebar && (
+              <div key="sidebar" className="sidebar">
+                {showNotebookList && <NotebookList />}
+                {showNoteList && <NoteList />}
+              </div>
+            )}
+            {showMain && (
+              <div key="main" className="main">
+                {noteId ? <NoteEditor /> : (
+                  <div className="editor-placeholder">
+                    {notebookId ? 'Select a note to edit' : 'Select a notebook to get started'}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </TopBarSlotProvider>
     </TopBarMenuProvider>
   );
 }

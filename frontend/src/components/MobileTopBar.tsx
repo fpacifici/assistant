@@ -2,6 +2,7 @@
 
 import { Link } from 'react-router';
 import OverflowMenu from './OverflowMenu';
+import { useTopBarSlotRef } from './TopBarSlot';
 
 interface MobileTopBarProps {
   title: string;
@@ -11,6 +12,7 @@ interface MobileTopBarProps {
 }
 
 export default function MobileTopBar({ title, backTo, children }: MobileTopBarProps) {
+  const slotRef = useTopBarSlotRef();
   return (
     <header className="mobile-topbar">
       {backTo ? (
@@ -21,7 +23,7 @@ export default function MobileTopBar({ title, backTo, children }: MobileTopBarPr
         <span className="topbar-spacer" />
       )}
       <h1 className="topbar-title">{title}</h1>
-      <div className="topbar-actions" />
+      <div className="topbar-actions" ref={slotRef} />
       <OverflowMenu>{children}</OverflowMenu>
     </header>
   );

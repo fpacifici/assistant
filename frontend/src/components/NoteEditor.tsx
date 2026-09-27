@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router';
 import { useCreateBlockNote } from '@blocknote/react';
@@ -13,12 +13,16 @@ import MarkdownToolbar from './MarkdownToolbar';
 import AttachmentList from './AttachmentList';
 import DebugBlockView from './DebugBlockView';
 import ShareDialog from './ShareDialog';
+import { TopBarActions } from './TopBarSlot';
+import { useTopBarMenuItems } from './TopBarMenuContext';
+import { useIsMobile } from '../layout/LayoutModeContext';
 import type { NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
+  const isMobile = useIsMobile();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -115,27 +119,59 @@ export default function NoteEditor() {
     setAttachmentNodes((prev) => [...prev, node]);
   }, []);
 
+  // On mobile, Share and Debug live in the top bar's ⋯ menu.
+  const menuItems = useMemo(() => {
+    if (!isMobile) return [];
+    const items = [
+      {
+        id: 'debug',
+        label: debugOpen ? 'Hide Debug' : 'Debug',
+        onSelect: () => setDebugOpen((prev) => !prev),
+      },
+    ];
+    if (canShare) items.unshift({ id: 'share', label: 'Share', onSelect: () => setSharing(true) });
+    return items;
+  }, [isMobile, canShare, debugOpen]);
+  useTopBarMenuItems(menuItems);
+
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
   }
 
   if (isLoading) return <div>Loading...</div>;
 
+  const saveDisabled = !isDirty || saving || !canUpdate;
+  const saveLabel = saving ? 'Saving...' : 'Save';
+  const statusLine = status && (
+    <span
+      className={`status ${
+        status.startsWith('Error') || status.startsWith('Conflict') ? 'error' : 'success'
+      }`}
+    >
+      {status}
+    </span>
+  );
+
+  // Keep the children in fixed slots for both modes so BlockNoteView is never
+  // remounted when the layout mode switches.
   return (
     <div className="note-editor">
+      {isMobile && status && (
+        <div className="editor-status" role="status">{statusLine}</div>
+      )}
       <MarkdownToolbar
         editor={editor}
         notebookId={notebookId}
         noteId={noteId}
         onAttached={handleAttached}
       />
-      <div className={`editor-content${debugOpen ? ' with-debug' : ''}`}>
+      <div className={`editor-content${debugOpen && !isMobile ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}
           theme="light"
           portalElements={{ default: null }}
         />
-        {debugOpen && (
+        {debugOpen && !isMobile && (
           <DebugBlockView
             key={debugTick}
             blocks={editor.document}
@@ -145,31 +181,45 @@ export default function NoteEditor() {
         )}
       </div>
       <AttachmentList nodes={attachmentNodes} />
-      <div className="editor-toolbar">
-        <button onClick={handleSave} disabled={!isDirty || saving || !canUpdate}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button
-          className="debug-toggle"
-          onClick={() => setDebugOpen((prev) => !prev)}
-        >
-          {debugOpen ? 'Hide Debug' : 'Debug'}
-        </button>
-        {canShare && (
-          <button className="share-btn" onClick={() => setSharing(true)}>
-            Share
+      {!isMobile && (
+        <div className="editor-toolbar">
+          <button onClick={handleSave} disabled={saveDisabled}>
+            {saveLabel}
           </button>
-        )}
-        {status && (
-          <span
-            className={`status ${
-              status.startsWith('Error') || status.startsWith('Conflict') ? 'error' : 'success'
-            }`}
+          <button
+            className="debug-toggle"
+            onClick={() => setDebugOpen((prev) => !prev)}
           >
-            {status}
-          </span>
-        )}
-      </div>
+            {debugOpen ? 'Hide Debug' : 'Debug'}
+          </button>
+          {canShare && (
+            <button className="share-btn" onClick={() => setSharing(true)}>
+              Share
+            </button>
+          )}
+          {statusLine}
+        </div>
+      )}
+      {isMobile && (
+        <TopBarActions>
+          <button onClick={handleSave} disabled={saveDisabled}>
+            {saveLabel}
+          </button>
+        </TopBarActions>
+      )}
+      {isMobile && debugOpen && (
+        <div className="fullscreen-panel" role="dialog" aria-label="Debug blocks">
+          <div className="fullscreen-panel-header">
+            <button onClick={() => setDebugOpen(false)}>Close</button>
+          </div>
+          <DebugBlockView
+            key={debugTick}
+            blocks={editor.document}
+            editor={editor}
+            registry={registry.current}
+          />
+        </div>
+      )}
       {sharing && notebookId && noteId && (
         <ShareDialog
           subjectType="note"
