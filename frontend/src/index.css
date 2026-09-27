@@ -985,3 +985,197 @@ ul {
 [data-layout="mobile"] .editor-status + .markdown-toolbar {
   margin-top: 0;
 }
+
+/* Confirmation dialog */
+
+.confirm-message {
+  margin-bottom: 20px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: #fff;
+  border: 1px solid #ccc;
+  color: #1a1a1a;
+}
+
+.btn-danger {
+  background: #c00;
+  border: 1px solid #c00;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #a00;
+}
+
+/* Mobile: touch targets, full-screen dialogs */
+
+[data-layout="mobile"] .notebook-item,
+[data-layout="mobile"] .note-item {
+  min-height: 48px;
+  padding: 0 0 0 12px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .item-name {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+[data-layout="mobile"] .share-btn,
+[data-layout="mobile"] .delete-btn {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .create-form input,
+[data-layout="mobile"] .create-form button {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .modal-overlay {
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+[data-layout="mobile"] .modal {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 28px;
+}
+
+[data-layout="mobile"] .share-form {
+  flex-wrap: wrap;
+}
+
+[data-layout="mobile"] .share-form input {
+  flex-basis: 100%;
+}
+
+[data-layout="mobile"] .share-form input,
+[data-layout="mobile"] .share-form select,
+[data-layout="mobile"] .share-form button {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .share-form select,
+[data-layout="mobile"] .share-form button {
+  flex: 1;
+}
+
+[data-layout="mobile"] .confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+[data-layout="mobile"] .confirm-actions button {
+  flex: 1;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+/* Mobile: auth and invites pages */
+
+[data-layout="mobile"] .auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: flex-start;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .auth-card {
+  padding: 1.5rem 1.25rem;
+}
+
+[data-layout="mobile"] .form-group input,
+[data-layout="mobile"] .invites-page input {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .btn-primary,
+[data-layout="mobile"] .btn-secondary,
+[data-layout="mobile"] .btn-google {
+  min-height: 44px;
+}
+
+[data-layout="mobile"] .form-row {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+[data-layout="mobile"] .invites-page {
+  padding: 16px max(16px, env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .invites-page button {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .invites-page table,
+[data-layout="mobile"] .invites-page tbody,
+[data-layout="mobile"] .invites-page tr,
+[data-layout="mobile"] .invites-page td {
+  display: block;
+  width: 100%;
+}
+
+[data-layout="mobile"] .invites-page tr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+[data-layout="mobile"] .invites-page td {
+  width: auto;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .invites-page td:first-child {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+[data-layout="mobile"] .invites-page td:empty {
+  display: none;
+}

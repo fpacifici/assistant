@@ -125,6 +125,14 @@ describe('LoginPage', () => {
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register');
   });
 
+  it('renders the form and Google sign-in in mobile mode', () => {
+    renderWithProviders(<LoginPage />, { layout: 'mobile' });
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /continue with google/i })).toBeInTheDocument();
+  });
+
   it('renders a Google sign-in button', () => {
     renderLogin();
     expect(screen.getByRole('link', { name: /continue with google/i })).toBeInTheDocument();

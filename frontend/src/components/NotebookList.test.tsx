@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NotebookList from './NotebookList';
 import { renderWithProviders } from '../test/renderWithProviders';
@@ -82,7 +82,7 @@ describe('NotebookList', () => {
     });
   });
 
-  it('calls delete when delete button is clicked', async () => {
+  it('asks for confirmation and deletes on confirm', async () => {
     const user = userEvent.setup();
     mockFetch.mockResolvedValue([
       { id: 'nb-1', name: 'To Delete', owner_id: 'test-user', permissions: ['delete_notebook'] },
@@ -96,9 +96,32 @@ describe('NotebookList', () => {
 
     await user.click(screen.getByTitle('Delete notebook'));
 
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Delete notebook "To Delete"? This cannot be undone.');
+    expect(mockDelete).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
     await waitFor(() => {
       expect(mockDelete).toHaveBeenCalledWith('nb-1');
     });
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('does not delete when the confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+    mockFetch.mockResolvedValue([
+      { id: 'nb-1', name: 'Keep Me', owner_id: 'test-user', permissions: ['delete_notebook'] },
+    ]);
+
+    renderWithProviders(<NotebookList />);
+    await screen.findByText('Keep Me');
+
+    await user.click(screen.getByTitle('Delete notebook'));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mockDelete).not.toHaveBeenCalled();
   });
 
   it('highlights active notebook', async () => {

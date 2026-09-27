@@ -49,6 +49,14 @@ describe('RegisterPage', () => {
     });
   });
 
+  it('renders the form and Google sign-in in mobile mode', () => {
+    renderWithProviders(<RegisterPage />, { layout: 'mobile' });
+    expect(screen.getByLabelText('First name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /continue with google/i })).toBeInTheDocument();
+  });
+
   it('renders all form fields and a submit button', () => {
     renderRegister();
     expect(screen.getByLabelText('First name')).toBeInTheDocument();
