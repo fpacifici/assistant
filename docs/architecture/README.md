@@ -159,3 +159,4 @@ the webui.
 - [`Web frontend`](frontend.md)
 - [`Attachments`](attachments.md)
 - [`Authentication`](authentication.md)
+- [`Observability (Sentry)`](observability.md)

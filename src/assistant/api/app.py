@@ -19,6 +19,7 @@ from assistant.api.routes.notes import router as notes_router
 from assistant.api.routes.users import router as users_router
 from assistant.attachments.storage import FileStorage, LocalFileStorage
 from assistant.config import Config
+from assistant.observability import init_sentry
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -29,6 +30,10 @@ def create_app(
     file_storage: FileStorage | None = None,
     file_storage_path: Path | None = None,
 ) -> FastAPI:
+    # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
+    # before anything below is built. No-op without a DSN (tests, local dev).
+    init_sentry()
+
     app = FastAPI(title="Assistant API", version="0.1.0")
 
     if session_factory is None:
