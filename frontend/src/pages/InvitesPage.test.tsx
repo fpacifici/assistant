@@ -11,6 +11,10 @@ vi.mock('../api/invites', () => ({
   createInvite: vi.fn(),
   voidInvite: vi.fn(),
   resendInvite: vi.fn(),
+  fetchInvitesConfig: vi.fn().mockResolvedValue({
+    registration_enabled: true,
+    invites_enabled: true,
+  }),
 }));
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -148,5 +152,24 @@ describe('InvitesPage', () => {
     await user.type(screen.getByPlaceholderText('Email address'), 'new@example.com');
 
     expect(screen.getByRole('button', { name: /send invite/i })).toBeDisabled();
+  });
+
+  it('shows the inline back link on desktop', async () => {
+    renderPage();
+    expect(screen.getByRole('link', { name: /back to notebooks/i })).toHaveAttribute(
+      'href',
+      '/notebooks',
+    );
+    expect(screen.queryByRole('button', { name: 'Menu' })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockListInvites).toHaveBeenCalled());
+  });
+
+  it('renders the mobile top bar with a back link on mobile', async () => {
+    renderWithProviders(<InvitesPage />, { layout: 'mobile' });
+    expect(screen.getByRole('heading', { name: 'Invites' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/notebooks');
+    expect(screen.getByRole('button', { name: 'Menu' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /back to notebooks/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(mockListInvites).toHaveBeenCalled());
   });
 });

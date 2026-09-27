@@ -33,6 +33,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
 }
 
 .app-header {
@@ -113,6 +114,165 @@ body {
   padding: 24px;
   overflow-y: auto;
   height: 100%;
+}
+
+@media (max-width: 1023px) {
+  [data-layout="desktop"] .sidebar {
+    width: 240px;
+  }
+}
+
+/* Mobile layout: one full-screen view at a time under a top bar */
+
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: env(safe-area-inset-top) max(4px, env(safe-area-inset-right)) 0
+    max(4px, env(safe-area-inset-left));
+  background: #1a1a1a;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+}
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-btn,
+.topbar-spacer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.topbar-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.topbar-btn:active {
+  background: #333;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-actions button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.topbar-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  min-width: 220px;
+  max-width: calc(100vw - 16px);
+  background: #fff;
+  color: #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.overflow-menu-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+}
+
+.overflow-menu-user .user-name {
+  color: #1a1a1a;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.overflow-menu-popover [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 16px;
+  color: #1a1a1a;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.overflow-menu-popover [role="menuitem"]:active {
+  background: #f0f0f0;
+}
+
+[data-layout="mobile"] .layout {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+[data-layout="mobile"] .sidebar {
+  width: 100%;
+  border-right: 0;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+[data-layout="mobile"] .main {
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+[data-layout="mobile"] .notebook-list {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+[data-layout="mobile"] .notebook-list h2,
+[data-layout="mobile"] .note-list h3 {
+  display: none;
 }
 
 h2, h3 {
