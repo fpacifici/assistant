@@ -13,6 +13,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Uvicorn installs its own logging config (no timestamps). Override the
+# formatters so its server and access logs carry a timestamp too.
+_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - "
+LOG_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": _LOG_FORMAT + "%(message)s",
+            "use_colors": None,
+        },
+        "access": {
+            "()": "uvicorn.logging.AccessFormatter",
+            "fmt": _LOG_FORMAT + '%(client_addr)s - "%(request_line)s" %(status_code)s',
+        },
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+        },
+        "access": {
+            "formatter": "access",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+        },
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"level": "INFO"},
+        "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+    },
+}
+
 
 def main() -> int:
     """Run the Assistant API server."""
@@ -50,6 +86,7 @@ def main() -> int:
         host=args.host,
         port=args.port,
         reload=args.reload,
+        log_config=LOG_CONFIG,
         # Behind nginx, uvicorn only ever sees the proxy's IP and the original
         # scheme is carried in X-Forwarded-Proto/X-Forwarded-For. Trust those
         # headers so request.url.scheme reflects the client's actual scheme
