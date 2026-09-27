@@ -16,6 +16,7 @@ import ShareDialog from './ShareDialog';
 import { TopBarActions } from './TopBarSlot';
 import { useTopBarMenuItems } from './TopBarMenuContext';
 import { useIsMobile } from '../layout/LayoutModeContext';
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import type { NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
@@ -134,6 +135,8 @@ export default function NoteEditor() {
   }, [isMobile, canShare, debugOpen]);
   useTopBarMenuItems(menuItems);
 
+  const unsavedChangesDialog = useUnsavedChangesGuard(isDirty);
+
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
   }
@@ -229,6 +232,7 @@ export default function NoteEditor() {
           onClose={() => setSharing(false)}
         />
       )}
+      {unsavedChangesDialog}
     </div>
   );
 }

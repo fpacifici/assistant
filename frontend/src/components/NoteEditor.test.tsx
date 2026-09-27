@@ -267,6 +267,74 @@ describe('NoteEditor on mobile', () => {
   });
 });
 
+// --- Unsaved-changes guard ---
+
+describe('NoteEditor unsaved-changes guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onChangeCallback = undefined;
+    mockFetchNodes.mockResolvedValue([]);
+    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
+  });
+
+  it('asks before leaving via the mobile back arrow when dirty', async () => {
+    const user = userEvent.setup();
+    const { router } = renderMobileEditor();
+    await within(topBar()).findByRole('button', { name: 'Save' });
+    await makeDirty();
+
+    await user.click(screen.getByRole('link', { name: 'Back' }));
+
+    expect(screen.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-1');
+    expect(within(topBar()).getByRole('button', { name: 'Save' })).not.toBeDisabled();
+  });
+
+  it('lets the mobile back arrow through when clean', async () => {
+    const user = userEvent.setup();
+    const { router } = renderMobileEditor();
+    await within(topBar()).findByRole('button', { name: 'Save' });
+
+    await user.click(screen.getByRole('link', { name: 'Back' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes');
+  });
+
+  it('asks before switching notes on desktop when dirty, and discards on confirm', async () => {
+    const user = userEvent.setup();
+    const { router } = renderEditor();
+    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
+    await makeDirty();
+
+    act(() => {
+      router.navigate('/notebooks/nb-1/notes/note-2');
+    });
+
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-1');
+
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-2');
+  });
+
+  it('does not ask after a successful save', async () => {
+    const user = userEvent.setup();
+    mockExecuteSave.mockResolvedValue(new Map());
+    const { router } = renderEditor();
+    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
+    await makeDirty();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Saved');
+
+    await act(() => router.navigate('/notebooks/nb-1/notes/note-2'));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-2');
+  });
+});
+
 describe('NoteEditor on desktop', () => {
   beforeEach(() => {
     vi.clearAllMocks();
