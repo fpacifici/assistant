@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
+import type { Notebook } from '../types';
 import ShareDialog from './ShareDialog';
+import ConfirmDialog from './ConfirmDialog';
 
 const NOTEBOOK_ROLE_OPTIONS = ['notebook_viewer', 'notebook_editor', 'notebook_owner'];
 
@@ -14,6 +16,7 @@ export default function NotebookList() {
   const { notebookId } = useParams();
   const [newName, setNewName] = useState('');
   const [sharingNotebookId, setSharingNotebookId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Notebook | null>(null);
 
   const { data: notebooks = [], isLoading } = useQuery({
     queryKey: ['notebooks'],
@@ -85,7 +88,7 @@ export default function NotebookList() {
                   className="delete-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteMutation.mutate(nb.id);
+                    setPendingDelete(nb);
                   }}
                   title="Delete notebook"
                 >
@@ -97,6 +100,17 @@ export default function NotebookList() {
         ))}
       </ul>
       {notebooks.length === 0 && <p className="empty">No notebooks yet</p>}
+      {pendingDelete && (
+        <ConfirmDialog
+          message={`Delete notebook "${pendingDelete.name}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            deleteMutation.mutate(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
       {sharingNotebookId && (
         <ShareDialog
           subjectType="notebook"

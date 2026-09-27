@@ -22,8 +22,12 @@ assistant/
 │       ├── api/                # API client layer
 │       ├── components/         # React components (Layout, NoteEditor, etc.)
 │       ├── contexts/           # React context providers
+│       ├── hooks/              # Reusable hooks (unsaved-changes guard)
+│       ├── layout/             # Layout mode (mobile/desktop) detection
 │       ├── markdown/           # Markdown parsing & rendering
+│       ├── pages/              # Standalone pages (auth, invites)
 │       ├── test/               # Frontend test utilities
+│       ├── routes.tsx          # Data-router route table
 │       └── types/              # TypeScript type definitions
 ├── tests/                      # Python test suite (mirrors src/ structure)
 ├── data/                       # Runtime data assets

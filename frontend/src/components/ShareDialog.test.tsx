@@ -33,6 +33,23 @@ describe('ShareDialog', () => {
     vi.clearAllMocks();
   });
 
+  it('renders its form and entitlements in mobile mode', async () => {
+    mockFetch.mockResolvedValue([]);
+    renderWithProviders(
+      <ShareDialog
+        subjectType="notebook"
+        notebookId="nb-1"
+        roleOptions={ROLE_OPTIONS}
+        onClose={() => {}}
+      />,
+      { layout: 'mobile' },
+    );
+
+    expect(screen.getByPlaceholderText('Email address')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(await screen.findByText('Not shared with anyone')).toBeInTheDocument();
+  });
+
   it('renders current entitlements', async () => {
     mockFetch.mockResolvedValue([
       {

@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
+import type { Note } from '../types';
 import ShareDialog from './ShareDialog';
+import ConfirmDialog from './ConfirmDialog';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 
@@ -14,6 +16,7 @@ export default function NoteList() {
   const navigate = useNavigate();
   const [newTitle, setNewTitle] = useState('');
   const [sharingNoteId, setSharingNoteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['notes', notebookId],
@@ -87,7 +90,7 @@ export default function NoteList() {
                   className="delete-btn"
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteMutation.mutate(note.id);
+                    setPendingDelete(note);
                   }}
                   title="Delete note"
                 >
@@ -99,6 +102,17 @@ export default function NoteList() {
         ))}
       </ul>
       {notes.length === 0 && <p className="empty">No notes yet</p>}
+      {pendingDelete && (
+        <ConfirmDialog
+          message={`Delete note "${pendingDelete.title}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => {
+            deleteMutation.mutate(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
       {sharingNoteId && (
         <ShareDialog
           subjectType="note"

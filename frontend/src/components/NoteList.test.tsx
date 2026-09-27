@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NoteList from './NoteList';
 import { renderWithProviders } from '../test/renderWithProviders';
@@ -92,7 +92,7 @@ describe('NoteList', () => {
     });
   });
 
-  it('deletes a note when delete button is clicked', async () => {
+  it('asks for confirmation and deletes on confirm', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
       { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Delete Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
@@ -106,11 +106,51 @@ describe('NoteList', () => {
 
     await user.click(screen.getByTitle('Delete note'));
 
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('Delete note "Delete Me"? This cannot be undone.');
+    expect(mockDeleteNote).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
     await waitFor(() => {
       expect(mockDeleteNote).toHaveBeenCalledWith('nb-1', 'note-1');
     });
   });
 
+  it('does not delete when the confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+    mockFetchNotes.mockResolvedValue([
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Keep Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
+    ]);
+
+    renderNoteList();
+    await screen.findByText('Keep Me');
+
+    await user.click(screen.getByTitle('Delete note'));
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mockDeleteNote).not.toHaveBeenCalled();
+  });
+
+  it('confirms deletion in mobile mode too', async () => {
+    const user = userEvent.setup();
+    mockFetchNotes.mockResolvedValue([
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Phone Note', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
+    ]);
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/notebooks/:notebookId/notes" element={<NoteList />} />
+      </Routes>,
+      { initialEntries: ['/notebooks/nb-1/notes'], layout: 'mobile' },
+    );
+    await screen.findByText('Phone Note');
+
+    await user.click(screen.getByTitle('Delete note'));
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(mockDeleteNote).not.toHaveBeenCalled();
+  });
 });
 
 describe('NoteList permission gating', () => {

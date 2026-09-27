@@ -33,6 +33,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
 }
 
 .app-header {
@@ -115,6 +116,165 @@ body {
   height: 100%;
 }
 
+@media (max-width: 1023px) {
+  [data-layout="desktop"] .sidebar {
+    width: 240px;
+  }
+}
+
+/* Mobile layout: one full-screen view at a time under a top bar */
+
+.mobile-topbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: env(safe-area-inset-top) max(4px, env(safe-area-inset-right)) 0
+    max(4px, env(safe-area-inset-left));
+  background: #1a1a1a;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+}
+
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-btn,
+.topbar-spacer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.topbar-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.topbar-btn:active {
+  background: #333;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.topbar-actions button {
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.topbar-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.overflow-menu {
+  position: relative;
+}
+
+.overflow-menu-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  min-width: 220px;
+  max-width: calc(100vw - 16px);
+  background: #fff;
+  color: #1a1a1a;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.overflow-menu-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+}
+
+.overflow-menu-user .user-name {
+  color: #1a1a1a;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.overflow-menu-popover [role="menuitem"] {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 16px;
+  color: #1a1a1a;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.overflow-menu-popover [role="menuitem"]:active {
+  background: #f0f0f0;
+}
+
+[data-layout="mobile"] .layout {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+[data-layout="mobile"] .sidebar {
+  width: 100%;
+  border-right: 0;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+[data-layout="mobile"] .main {
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+[data-layout="mobile"] .notebook-list {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+[data-layout="mobile"] .notebook-list h2,
+[data-layout="mobile"] .note-list h3 {
+  display: none;
+}
+
 h2, h3 {
   margin-bottom: 12px;
   font-size: 16px;
@@ -129,6 +289,7 @@ h2, h3 {
 
 .create-form input {
   flex: 1;
+  min-width: 0;
   padding: 6px 10px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -735,4 +896,287 @@ ul {
   padding: 6px 8px;
   border-bottom: 1px solid #eee;
   font-size: 13px;
+}
+
+/* Mobile editor chrome */
+
+[data-layout="mobile"] .note-editor {
+  height: auto;
+  min-height: 100%;
+}
+
+[data-layout="mobile"] .markdown-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  margin: -12px -12px 8px;
+  border-width: 0 0 1px;
+  border-radius: 0;
+}
+
+[data-layout="mobile"] .markdown-toolbar .toolbar-group {
+  flex-shrink: 0;
+}
+
+[data-layout="mobile"] .markdown-toolbar .toolbar-btn {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .editor-content {
+  flex: none;
+  min-height: 50vh;
+  overflow: visible;
+}
+
+.editor-status {
+  margin: -12px -12px 0;
+  padding: 4px 12px;
+  font-size: 13px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.editor-status .status {
+  font-size: 13px;
+}
+
+.fullscreen-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  overflow-y: auto;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.fullscreen-panel-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.fullscreen-panel-header button {
+  min-height: 44px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #6366f1;
+  cursor: pointer;
+}
+
+.fullscreen-panel .debug-panel {
+  width: auto;
+  min-width: 0;
+  border-left: 0;
+  flex: 1;
+}
+
+[data-layout="mobile"] .editor-status + .markdown-toolbar {
+  margin-top: 0;
+}
+
+/* Confirmation dialog */
+
+.confirm-message {
+  margin-bottom: 20px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background: #fff;
+  border: 1px solid #ccc;
+  color: #1a1a1a;
+}
+
+.btn-danger {
+  background: #c00;
+  border: 1px solid #c00;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #a00;
+}
+
+/* Mobile: touch targets, full-screen dialogs */
+
+[data-layout="mobile"] .notebook-item,
+[data-layout="mobile"] .note-item {
+  min-height: 48px;
+  padding: 0 0 0 12px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .item-name {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+[data-layout="mobile"] .share-btn,
+[data-layout="mobile"] .delete-btn {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .create-form input,
+[data-layout="mobile"] .create-form button {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .modal-overlay {
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+[data-layout="mobile"] .modal {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 28px;
+}
+
+[data-layout="mobile"] .share-form {
+  flex-wrap: wrap;
+}
+
+[data-layout="mobile"] .share-form input {
+  flex-basis: 100%;
+}
+
+[data-layout="mobile"] .share-form input,
+[data-layout="mobile"] .share-form select,
+[data-layout="mobile"] .share-form button {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .share-form select,
+[data-layout="mobile"] .share-form button {
+  flex: 1;
+}
+
+[data-layout="mobile"] .confirm-dialog {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+[data-layout="mobile"] .confirm-actions button {
+  flex: 1;
+  min-height: 44px;
+  font-size: 16px;
+}
+
+/* Mobile: auth and invites pages */
+
+[data-layout="mobile"] .auth-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: flex-start;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .auth-card {
+  padding: 1.5rem 1.25rem;
+}
+
+[data-layout="mobile"] .form-group input,
+[data-layout="mobile"] .invites-page input {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .btn-primary,
+[data-layout="mobile"] .btn-secondary,
+[data-layout="mobile"] .btn-google {
+  min-height: 44px;
+}
+
+[data-layout="mobile"] .form-row {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+[data-layout="mobile"] .invites-page {
+  padding: 16px max(16px, env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+[data-layout="mobile"] .invites-page button {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .invites-page table,
+[data-layout="mobile"] .invites-page tbody,
+[data-layout="mobile"] .invites-page tr,
+[data-layout="mobile"] .invites-page td {
+  display: block;
+  width: 100%;
+}
+
+[data-layout="mobile"] .invites-page tr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+[data-layout="mobile"] .invites-page td {
+  width: auto;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 15px;
+}
+
+[data-layout="mobile"] .invites-page td:first-child {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+[data-layout="mobile"] .invites-page td:empty {
+  display: none;
 }
