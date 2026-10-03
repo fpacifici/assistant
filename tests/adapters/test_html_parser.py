@@ -105,6 +105,101 @@ def test_inline_tags_inside_list_item_do_not_add_spaces() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Nested lists
+# ---------------------------------------------------------------------------
+
+
+def _ul(*items: str, cls: str = "") -> str:
+    class_attr = f' class="{cls}"' if cls else ""
+    return f'<ul role="list"{class_attr}>{"".join(items)}</ul>'
+
+
+def _item(text: str) -> str:
+    return f'<li><div class="list-content"><div class="para">{text}</div></div></li>'
+
+
+def test_sibling_nested_list_attaches_to_previous_item() -> None:
+    html = _ul(_item("parent"), _ul(_item("child")), _item("next"))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- parent\n  - child"),
+        ParsedBlock("list_item", "- next"),
+    ]
+
+
+def test_three_levels_deep() -> None:
+    html = _ul(_item("a"), _ul(_item("b"), _ul(_item("c"))))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- a\n  - b\n    - c")]
+
+
+def test_nested_list_inside_li() -> None:
+    html = "<ul><li>a<ul><li>b</li></ul></li><li>c</li></ul>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- a\n  - b"),
+        ParsedBlock("list_item", "- c"),
+    ]
+
+
+def test_nested_list_deep_inside_li_content_is_not_inlined() -> None:
+    html = "<ul><li><div>a</div><div><ul><li>b</li></ul></div></li></ul>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- a\n  - b")]
+
+
+def test_leading_nested_list_gets_an_empty_parent() -> None:
+    html = _ul(_ul(_item("orphan")), _item("a"))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- \n  - orphan"),
+        ParsedBlock("list_item", "- a"),
+    ]
+
+
+def test_bullets_inside_numbered_list() -> None:
+    html = "<ol><li>one</li><ul><li>x</li></ul><li>two</li></ol>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "1. one\n   - x"),
+        ParsedBlock("list_item", "2. two"),
+    ]
+
+
+def test_numbered_list_inside_bullets() -> None:
+    html = "<ul><li>a</li><ol><li>x</li><li>y</li></ol></ul>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- a\n  1. x\n  2. y")]
+
+
+def test_two_top_level_items_with_children_give_two_blocks() -> None:
+    html = _ul(_item("a"), _ul(_item("a1")), _item("b"), _ul(_item("b1"), _item("b2")))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- a\n  - a1"),
+        ParsedBlock("list_item", "- b\n  - b1\n  - b2"),
+    ]
+
+
+def test_nested_items_keep_formatting_and_escaping() -> None:
+    html = _ul(_item("a"), _ul(_item("<b>bold</b> 1. x"), _item("- y")))
+    parsed = parse_html_note(html, fallback_title="t")
+    payload = "- a\n  - **bold** 1. x\n  - \\- y"
+    assert parsed.blocks == [ParsedBlock("list_item", payload)]
+
+
+def test_todo_list_nesting() -> None:
+    html = (
+        '<ul class="en-todolist"><li data-checked="true">task</li>'
+        '<ul class="en-todolist"><li data-checked="false">sub</li></ul>'
+        "<ul><li>note</li></ul></ul>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    payload = "- [x] task\n  - [ ] sub\n  - note"
+    assert parsed.blocks == [ParsedBlock("list_item", payload)]
+
+
+# ---------------------------------------------------------------------------
 # Checklists
 # ---------------------------------------------------------------------------
 
@@ -143,10 +238,7 @@ def test_plain_list_nested_in_todo_list_stays_plain() -> None:
         f'<ul role="list">{_li("detail")}</ul></ul>'
     )
     parsed = parse_html_note(html, fallback_title="t")
-    payloads = [b.payload for b in parsed.blocks]
-    assert payloads[0] == "- [ ] task"
-    assert "[ ]" not in "".join(payloads[1:])
-    assert "detail" in "".join(payloads[1:])
+    assert parsed.blocks == [ParsedBlock("list_item", "- [ ] task\n  - detail")]
 
 
 @pytest.mark.parametrize(("checked", "box"), [("true", "[x]"), ("false", "[ ]")])

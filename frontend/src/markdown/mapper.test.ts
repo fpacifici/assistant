@@ -150,6 +150,44 @@ describe('importer payload contract', () => {
     expect(blocks[0].content).toMatchObject([{ text: 'Section header', styles: { bold: true } }]);
   });
 
+  type Tree = [string, string, Tree[]];
+  const tree = (block: Block): Tree => [block.type, text(block), block.children.map(tree)];
+
+  it.each<[string, Tree]>([
+    [
+      '- a\n  - b\n    - c',
+      ['bulletListItem', 'a', [['bulletListItem', 'b', [['bulletListItem', 'c', []]]]]],
+    ],
+    [
+      '1. a\n   1. b\n   2. c',
+      ['numberedListItem', 'a', [['numberedListItem', 'b', []], ['numberedListItem', 'c', []]]],
+    ],
+    [
+      '10. a\n    - b',
+      ['numberedListItem', 'a', [['bulletListItem', 'b', []]]],
+    ],
+    [
+      '- a\n  1. x\n  2. y',
+      ['bulletListItem', 'a', [['numberedListItem', 'x', []], ['numberedListItem', 'y', []]]],
+    ],
+    [
+      '- [x] task\n  - [ ] sub\n  - note',
+      ['checkListItem', 'task', [['checkListItem', 'sub', []], ['bulletListItem', 'note', []]]],
+    ],
+    ['- \n  - orphan', ['bulletListItem', '', [['bulletListItem', 'orphan', []]]]],
+    [
+      '- a\n  - \n    - b',
+      ['bulletListItem', 'a', [['bulletListItem', '', [['bulletListItem', 'b', []]]]]],
+    ],
+  ])('reads nested list payload %j as one block with children', (payload, expected) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(tree(blocks[0])).toEqual(expected);
+    // What the editor saves for this block reloads as the same tree.
+    const saved = editor.blocksToMarkdownLossy([blocks[0]]);
+    expect(load(saved).map(tree)).toEqual([expected]);
+  });
+
   it.each([
     ['- [x] done', true],
     ['- [ ] open', false],

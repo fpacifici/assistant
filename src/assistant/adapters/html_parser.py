@@ -177,7 +177,7 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
         level = _HEADING_LEVELS[name]
         return [ParsedBlock("heading", f"{'#' * level} {_inline_text(el)}")]
     if name in ("ul", "ol"):
-        return _process_list(el, ordered=name == "ol")
+        return _process_list(el)
     if name == "table":
         # TODO: table support (see spec Out of Scope)
         return [ParsedBlock("paragraph", "Skipped block: table")]
@@ -235,20 +235,73 @@ def _has_block_child(el: Tag) -> bool:
     return any(isinstance(c, Tag) and _is_block(c) for c in el.children)
 
 
-def _process_list(el: Tag, *, ordered: bool) -> list[ParsedBlock]:
-    # TODO: nested list support (see spec Out of Scope) — nested <li>s are
-    # flattened to top-level list_item blocks via this recursive find_all.
-    blocks: list[ParsedBlock] = []
+@dataclass(slots=True)
+class _ListItem:
+    """One list item: its marker (``- ``, ``2. ``, ``- [x] ``), text and sub-items."""
+
+    marker: str
+    text: str
+    children: list[_ListItem] = field(default_factory=list)
+
+
+def _process_list(el: Tag) -> list[ParsedBlock]:
+    """Emit one ``list_item`` block per top-level item of ``el``.
+
+    Each block's payload is the item line followed by its sub-items as
+    indented Markdown, which is how the editor stores a list block with
+    nested children (one node per top-level block).
+    """
+    return [
+        ParsedBlock("list_item", "\n".join(_render_list_item(item, indent="")))
+        for item in _list_items(el)
+    ]
+
+
+def _list_items(el: Tag) -> list[_ListItem]:
+    """Build the item tree of the ``<ul>``/``<ol>`` ``el``.
+
+    Evernote nests a sub-list as a *sibling* ``<ul>`` following the ``<li>``
+    it belongs to; standard HTML nests it inside the ``<li>``. Both attach
+    the sub-list's items as children of that ``<li>``.
+    """
+    ordered = el.name == "ol"
+    todo = _is_todo_list(el)
+    items: list[_ListItem] = []
     counter = 1
-    for li in el.find_all("li"):
-        text = _li_text(li)
+    for child in list(el.children):
+        if not isinstance(child, Tag):
+            continue
+        if child.name in ("ul", "ol"):
+            nested = _list_items(child)
+            if items:
+                items[-1].children.extend(nested)
+            else:
+                items.append(_ListItem("- ", "", nested))
+            continue
         marker = f"{counter}. " if ordered else "- "
-        if _is_todo_list(li.parent):
-            marker += "[x] " if li.get("data-checked") == "true" else "[ ] "
-        blocks.append(ParsedBlock("list_item", marker + text))
-        if ordered:
-            counter += 1
-    return blocks
+        if todo and child.name == "li":
+            marker += "[x] " if child.get("data-checked") == "true" else "[ ] "
+        # Sub-lists are detached so the item's own text excludes them.
+        sub_lists = [
+            sub.extract()
+            for sub in child.find_all(["ul", "ol"])
+            if sub.find_parent(["ul", "ol"]) is el
+        ]
+        children = [item for sub in sub_lists for item in _list_items(sub)]
+        text = _finish_block_text(_render_inline(child))
+        items.append(_ListItem(marker, text, children))
+        counter += 1
+    return items
+
+
+def _render_list_item(item: _ListItem, *, indent: str) -> list[str]:
+    lines = [f"{indent}{item.marker}{item.text}"]
+    # Children sit at the parent's content column: 2 spaces under "- " and
+    # "- [ ] " (what BlockNote writes), the marker width under "N. ".
+    child_indent = indent + " " * (2 if item.marker.startswith("-") else len(item.marker))
+    for child in item.children:
+        lines.extend(_render_list_item(child, indent=child_indent))
+    return lines
 
 
 def _is_todo_list(el: Tag | None) -> bool:
@@ -274,15 +327,6 @@ def _legacy_todo_input(el: Tag) -> Tag | None:
             return child
         return None
     return None
-
-
-def _li_text(li: Tag) -> str:
-    parts = []
-    for child in li.children:
-        if isinstance(child, Tag) and child.name in ("ul", "ol"):
-            continue
-        parts.append(_render_inline(child))
-    return _finish_block_text("".join(parts))
 
 
 def _inline_text(el: Tag) -> str:

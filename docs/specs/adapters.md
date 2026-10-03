@@ -48,8 +48,8 @@ notes-import path, not removed, deleted, or migrated in this iteration.
    itemprop=source` = `web.clip` skipped entirely, so that web clippings (which
    aren't really "my notes") don't clutter my notebooks.
 6. As the person running the import, I want bulleted and numbered lists
-   preserved as lists, so that imported notes keep their original structure
-   instead of collapsing into flat paragraphs.
+   preserved as lists, including their nesting, so that imported notes keep
+   their original structure instead of collapsing into flat paragraphs.
 7. As the person running the import, I want headings below the title (`<h2>`
    through `<h6>`) preserved as headings, so that imported notes keep their
    internal structure and are easy to navigate.
@@ -150,6 +150,13 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   - `<ul>`/`<ol>` → `list_item` blocks (list style, ordered vs. unordered, is
     encoded in the block's markdown payload text, since the schema's
     `MarkdownBlockType` has no separate ordered/unordered type).
+  - Nesting is preserved. There is one `list_item` block per **top-level**
+    item; its payload is the item line followed by its sub-items as indented
+    Markdown (2 spaces under `- ` and `- [ ] `, the marker width under
+    `N. `), which is how the editor stores a list block with children. A
+    nested `<ul>`/`<ol>` that is a sibling of an `<li>` (Evernote's markup)
+    belongs to the preceding `<li>`; one with no preceding `<li>` gets an
+    empty parent item.
   - Checklists → `list_item` blocks with a `- [x] ` / `- [ ] ` prefix: items
     of a `ul.en-todolist` (state from `data-checked`), and Evernote's older
     `<div><input class="en-todo" checked="true|false"/>…</div>` paragraphs.
