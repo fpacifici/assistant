@@ -12,7 +12,8 @@ from langsmith import Client
 
 from assistant.agents.infra import init_environment
 from assistant.evals.dataset import create_dataset
-from assistant.evals.target import correctness_evaluator, target as langsmith_target
+from assistant.evals.target import correctness_evaluator
+from assistant.evals.target import target as langsmith_target
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,7 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def run_langsmith_evaluate() -> object:
+def run_langsmith_evaluate(
+    *,
+    data: str,
+    experiment_prefix: str,
+    max_concurrency: int,
+) -> object:
     """Run LangSmith evaluation with OpenEvals evaluators.
 
     Args:
@@ -33,16 +39,42 @@ def run_langsmith_evaluate() -> object:
         The result object returned by LangSmith.
     """
 
-    client = cast(Any, Client())
+    client = cast("Any", Client())
     experiment_results = client.evaluate(
         langsmith_target,
-        data="Assistant dataset",
+        data=data,
         evaluators=[correctness_evaluator],
-        experiment_prefix="first-eval-in-langsmith",
-        max_concurrency=2,
+        experiment_prefix=experiment_prefix,
+        max_concurrency=max_concurrency,
     )
-    print(experiment_results)
+    print(experiment_results)  # noqa: T201
     return experiment_results
+
+
+def _create_dataset(yaml_file: Path | None) -> int:
+    """Create a LangSmith dataset from a YAML file.
+
+    Args:
+        yaml_file: Path to the dataset YAML file.
+
+    Returns:
+        Exit code. `0` on success, `1` on failure.
+    """
+    if yaml_file is None:
+        logger.error("yaml_file is required for createdataset")
+        return 1
+    if not yaml_file.is_file():
+        logger.error("YAML file does not exist or is not a file: %s", yaml_file)
+        return 1
+
+    try:
+        init_environment()
+        create_dataset(yaml_file)
+        logger.info("Dataset created from %s", yaml_file)
+    except Exception:
+        logger.exception("Failed to create dataset")
+        return 1
+    return 0
 
 
 def main() -> int:
@@ -60,7 +92,12 @@ def main() -> int:
         help="Evaluation action to run.",
     )
     parser.add_argument("yaml_file", nargs="?", type=Path, help="Path to the YAML file.")
-    parser.add_argument("--data", type=str, default="Sample dataset", help="Dataset name for evaluation.")
+    parser.add_argument(
+        "--data",
+        type=str,
+        default="Assistant dataset",
+        help="Dataset name for evaluation.",
+    )
     parser.add_argument(
         "--experiment-prefix",
         type=str,
@@ -76,29 +113,15 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.action == "createdataset":
-        if args.yaml_file is None:
-            logger.error("yaml_file is required for createdataset")
-            return 1
-        if not args.yaml_file.exists():
-            logger.error("YAML file does not exist: %s", args.yaml_file)
-            return 1
-        if not args.yaml_file.is_file():
-            logger.error("Path is not a file: %s", args.yaml_file)
-            return 1
-
-        try:
-            init_environment()
-            create_dataset(args.yaml_file)
-            logger.info("Dataset created from %s", args.yaml_file)
-        except Exception:
-            logger.exception("Failed to create dataset")
-            return 1
-
-        return 0
+        return _create_dataset(args.yaml_file)
     if args.action == "langsmith-evaluate":
         try:
             init_environment()
-            run_langsmith_evaluate()
+            run_langsmith_evaluate(
+                data=args.data,
+                experiment_prefix=args.experiment_prefix,
+                max_concurrency=args.max_concurrency,
+            )
         except Exception:
             logger.exception("LangSmith evaluation failed")
             return 1

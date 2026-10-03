@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Generic, NamedTuple, TypeVar
+from typing import NamedTuple
 
 import keyring
 
@@ -47,10 +47,8 @@ class KeyRingSecretsStore(SecretsStore):
 # TODO: Adds a secret store that reads and writes from DB encrypted with a KMS
 # provided main key.
 
-Credential = TypeVar("Credential")
 
-
-class AuthProvider(ABC, Generic[Credential]):
+class AuthProvider[Credential](ABC):
     """
     An AuthProvider abstractgs multiple types of credentials storage.
     A Credential contains everything the client needs to authenticate with a

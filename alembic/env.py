@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import create_engine, pool, text
 
-from alembic import context
 from assistant.models import schema as _schema  # noqa: F401  registers models on Base
 from assistant.models.database import (
     Base,

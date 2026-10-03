@@ -1,3 +1,4 @@
+import ast
 import json
 import uuid
 from collections.abc import Mapping, Sequence
@@ -10,6 +11,46 @@ from assistant.agents.rag import SearchAgent
 
 if TYPE_CHECKING:
     from langchain_core.messages import BaseMessage
+
+
+def _iter_sources(content: str | Sequence[Any]) -> list[Mapping[str, object]]:
+    """Return the `source` mappings found in a tool message payload.
+
+    Strings are parsed as JSON (a list of `{"source": ..., "content": ...}` items)
+    and, failing that, as legacy `Source: {...}` lines. Malformed entries are skipped.
+    """
+    items: Sequence[Any]
+    if isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            return _parse_legacy_source_lines(content)
+        items = parsed if isinstance(parsed, list) else []
+    else:
+        items = content
+
+    sources: list[Mapping[str, object]] = []
+    for item in items:
+        if isinstance(item, Mapping):
+            source = item.get("source")
+            if isinstance(source, Mapping):
+                sources.append(source)
+    return sources
+
+
+def _parse_legacy_source_lines(content: str) -> list[Mapping[str, object]]:
+    """Parse `Source: {...}` lines (Python dict literals) from a string payload."""
+    sources: list[Mapping[str, object]] = []
+    for line in content.splitlines():
+        if not line.startswith("Source:"):
+            continue
+        try:
+            source = ast.literal_eval(line.removeprefix("Source:").strip())
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(source, Mapping):
+            sources.append(source)
+    return sources
 
 
 def _extract_source_fields(content: str | Sequence[Any]) -> tuple[list[str], list[str]]:
@@ -32,13 +73,7 @@ def _extract_source_fields(content: str | Sequence[Any]) -> tuple[list[str], lis
     seen_external_ids: set[str] = set()
     seen_notebooks: set[str] = set()
 
-    parsed_sources: list[Mapping[str, object]] = []
-
-    parsed_sources = json.loads(str(content))
-    for parsed in parsed_sources:
-        source = parsed["source"]
-        if not isinstance(source, Mapping):
-            continue
+    for source in _iter_sources(content):
         external_id = source.get("external_id")
         notebook = source.get("notebook")
 

@@ -44,6 +44,19 @@ def _disable_sentry() -> Iterator[None]:
         os.environ["SENTRY_DSN"] = previous
 
 
+@pytest.fixture(autouse=True)
+def _clear_google_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hide a developer's `.env` Google OAuth settings from the tests.
+
+    `load_dotenv()` runs when `assistant.config` is imported (and again in
+    `init_environment()`), and `GOOGLE_*` env vars override YAML config, so
+    real credentials would break tests that assert on their own config files.
+    Function-scoped so it also undoes any reload that happens mid-run.
+    """
+    for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_PATH"):
+        monkeypatch.delenv(key, raising=False)
+
+
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
     """Provide a temporary directory for tests.

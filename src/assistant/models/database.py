@@ -5,12 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from alembic import command
-from alembic.config import Config as AlembicConfig
 from assistant.config import Config, DatabaseComponentsConfig
 
 if TYPE_CHECKING:

@@ -25,11 +25,20 @@ def test_format_message_human_content() -> None:
 
 
 def test_format_message_tool_message() -> None:
-    """Test that _format_message uses Tool label for tool messages."""
+    """Test that _format_message hides tool output behind a short placeholder."""
     msg = MagicMock(spec=["content", "__class__"])
     msg.content = "tool result"
     msg.__class__.__name__ = "ToolMessage"
-    assert _format_message(msg) == "[bold]Tool:[/bold] tool result"
+    assert _format_message(msg) == "Tool message"
+
+
+def test_format_message_tool_message_with_call_id() -> None:
+    """Test that _format_message includes the tool call id when present."""
+    msg = MagicMock(spec=["content", "tool_call_id", "__class__"])
+    msg.content = "tool result"
+    msg.tool_call_id = "call-42"
+    msg.__class__.__name__ = "ToolMessage"
+    assert _format_message(msg) == "Tool message: call-42"
 
 
 def test_chat_app_constructs_with_thread_id_and_agent() -> None:
