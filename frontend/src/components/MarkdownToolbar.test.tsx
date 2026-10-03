@@ -14,6 +14,10 @@ function makeEditor(): BlockNoteEditor {
     getTextCursorPosition: vi.fn(() => ({ block: { id: 'b1', type: 'paragraph' } })),
     updateBlock: vi.fn(),
     toggleStyles: vi.fn(),
+    canNestBlock: vi.fn(() => true),
+    nestBlock: vi.fn(),
+    canUnnestBlock: vi.fn(() => true),
+    unnestBlock: vi.fn(),
   } as unknown as BlockNoteEditor;
 }
 
@@ -102,6 +106,42 @@ describe('MarkdownToolbar', () => {
       expect.anything(),
       expect.objectContaining({ type: 'paragraph' }),
     );
+  });
+
+  // --- indent buttons ---
+
+  it('renders indent and unindent buttons', () => {
+    render(<MarkdownToolbar editor={editor} {...DEFAULT_PROPS} />);
+    expect(screen.getByTitle('Indent')).toBeInTheDocument();
+    expect(screen.getByTitle('Unindent')).toBeInTheDocument();
+  });
+
+  it('nests the current block on Indent mousedown', () => {
+    render(<MarkdownToolbar editor={editor} {...DEFAULT_PROPS} />);
+    fireEvent.mouseDown(screen.getByTitle('Indent'));
+    expect(editor.nestBlock).toHaveBeenCalledTimes(1);
+    expect(editor.unnestBlock).not.toHaveBeenCalled();
+  });
+
+  it('unnests the current block on Unindent mousedown', () => {
+    render(<MarkdownToolbar editor={editor} {...DEFAULT_PROPS} />);
+    fireEvent.mouseDown(screen.getByTitle('Unindent'));
+    expect(editor.unnestBlock).toHaveBeenCalledTimes(1);
+    expect(editor.nestBlock).not.toHaveBeenCalled();
+  });
+
+  it('does not nest when the block cannot be nested', () => {
+    vi.mocked(editor.canNestBlock).mockReturnValue(false);
+    render(<MarkdownToolbar editor={editor} {...DEFAULT_PROPS} />);
+    fireEvent.mouseDown(screen.getByTitle('Indent'));
+    expect(editor.nestBlock).not.toHaveBeenCalled();
+  });
+
+  it('does not unnest a top-level block', () => {
+    vi.mocked(editor.canUnnestBlock).mockReturnValue(false);
+    render(<MarkdownToolbar editor={editor} {...DEFAULT_PROPS} />);
+    fireEvent.mouseDown(screen.getByTitle('Unindent'));
+    expect(editor.unnestBlock).not.toHaveBeenCalled();
   });
 
   // --- inline style buttons ---

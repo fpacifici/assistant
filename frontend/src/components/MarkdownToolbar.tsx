@@ -23,6 +23,11 @@ const BLOCK_BUTTONS = [
   { label: '< >', title: 'Code block', type: 'codeBlock', props: {} },
 ] as const;
 
+const INDENT_BUTTONS = [
+  { label: '⇤', title: 'Unindent', action: 'unnest' },
+  { label: '⇥', title: 'Indent', action: 'nest' },
+] as const;
+
 const STYLE_BUTTONS = [
   { label: 'B', title: 'Bold', style: 'bold', className: 'font-bold' },
   { label: 'I', title: 'Italic', style: 'italic', className: 'font-italic' },
@@ -53,6 +58,21 @@ export default function MarkdownToolbar({
       const position = editor.getTextCursorPosition();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       editor.updateBlock(position.block, { type: type as any, props: props as any });
+    } catch {
+      // no-op: editor may not have an active cursor position
+    }
+  };
+
+  // Nesting a list item under its previous sibling is how BlockNote models
+  // indentation (same as Tab / Shift+Tab).
+  const applyIndent = (e: ReactMouseEvent, action: 'nest' | 'unnest') => {
+    e.preventDefault();
+    try {
+      if (action === 'nest' && editor.canNestBlock()) {
+        editor.nestBlock();
+      } else if (action === 'unnest' && editor.canUnnestBlock()) {
+        editor.unnestBlock();
+      }
     } catch {
       // no-op: editor may not have an active cursor position
     }
@@ -115,6 +135,20 @@ export default function MarkdownToolbar({
             title={btn.title}
             className="toolbar-btn"
             onMouseDown={(e) => applyBlockType(e, btn.type, btn.props)}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+      <div className="toolbar-divider" />
+      <div className="toolbar-group">
+        {INDENT_BUTTONS.map((btn) => (
+          <button
+            key={btn.label}
+            title={btn.title}
+            aria-label={btn.title}
+            className="toolbar-btn"
+            onMouseDown={(e) => applyIndent(e, btn.action)}
           >
             {btn.label}
           </button>
