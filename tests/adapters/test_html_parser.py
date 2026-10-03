@@ -237,10 +237,64 @@ def test_nested_bullets_do_not_advance_the_numbered_counter() -> None:
     assert [b.payload.split("\n")[0] for b in parsed.blocks] == ["1. a", "2. b"]
 
 
+def test_leading_nested_list_parent_is_not_numbered() -> None:
+    html = "<ol><ol><li>x</li></ol><li>a</li><li>b</li></ol>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- \n  1. x"),
+        ParsedBlock("list_item", "1. a"),
+        ParsedBlock("list_item", "2. b"),
+    ]
+
+
+def test_empty_numbered_item_with_children_keeps_its_number() -> None:
+    html = "<ol><li>a</li><li></li><ol><li>x</li></ol><li>b</li></ol>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert [b.payload for b in parsed.blocks] == ["1. a", "2. \n   1. x", "3. b"]
+
+
 def test_ordered_item_width_sets_child_indent() -> None:
     items = "".join(f"<li>i{n}</li>" for n in range(1, 11))
     parsed = parse_html_note(f"<ol>{items}<ul><li>x</li></ul></ol>", fallback_title="t")
     assert parsed.blocks[-1] == ParsedBlock("list_item", "10. i10\n    - x")
+
+
+# ---------------------------------------------------------------------------
+# Empty list items
+# ---------------------------------------------------------------------------
+
+
+def test_trailing_empty_item_is_dropped() -> None:
+    html = _ul(_item("a"), _item("<br>"))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- a")]
+
+
+def test_middle_empty_item_is_dropped_without_breaking_numbering() -> None:
+    html = "<ol><li>a</li><li> </li><li>b</li></ol>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "1. a"),
+        ParsedBlock("list_item", "2. b"),
+    ]
+
+
+def test_empty_nested_item_is_dropped() -> None:
+    html = _ul(_item("a"), _ul(_item(""), _item("b")))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- a\n  - b")]
+
+
+def test_empty_item_with_children_is_kept() -> None:
+    html = _ul(_item("<br>"), _ul(_item("child")))
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- \n  - child")]
+
+
+def test_empty_checklist_item_is_dropped() -> None:
+    html = '<ul class="en-todolist"><li data-checked="false"><br></li></ul>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == []
 
 
 # ---------------------------------------------------------------------------

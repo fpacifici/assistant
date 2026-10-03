@@ -175,6 +175,7 @@ describe('importer payload contract', () => {
       ['checkListItem', 'task', [['checkListItem', 'sub', []], ['bulletListItem', 'note', []]]],
     ],
     ['- \n  - orphan', ['bulletListItem', '', [['bulletListItem', 'orphan', []]]]],
+    ['2. \n   1. x', ['numberedListItem', '', [['numberedListItem', 'x', []]]]],
     [
       '- a\n  - \n    - b',
       ['bulletListItem', 'a', [['bulletListItem', '', [['bulletListItem', 'b', []]]]]],

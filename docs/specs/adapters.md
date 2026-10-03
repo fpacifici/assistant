@@ -156,7 +156,10 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     `N. `), which is how the editor stores a list block with children. A
     nested `<ul>`/`<ol>` that is a sibling of an `<li>` (Evernote's markup)
     belongs to the preceding `<li>`; one with no preceding `<li>` gets an
-    empty parent item.
+    empty, unnumbered parent item.
+  - Empty list items (no text, no sub-items, e.g. Evernote's trailing
+    `<li><br></li>`) are dropped. An empty item with sub-items is kept as
+    their parent.
   - Each `<ol>` numbers its own items from its `start` attribute (default
     1), so nested ordered lists restart and nested bullet lists do not
     advance the parent's numbering.

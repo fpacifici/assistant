@@ -241,11 +241,17 @@ def _has_block_child(el: Tag) -> bool:
 
 @dataclass(slots=True)
 class _ListItem:
-    """One list item: its marker (``- ``, ``2. ``, ``- [x] ``), text and sub-items."""
+    """One list item: its own text, its sub-items and how its marker renders."""
 
-    marker: str
     text: str
     children: list[_ListItem] = field(default_factory=list)
+    number: int | None = None  # set for items of an <ol>
+    box: str = ""  # "[x] " / "[ ] " for checklist items
+    synthetic: bool = False  # empty parent for a sub-list with no <li> before it
+
+    @property
+    def marker(self) -> str:
+        return f"{self.number}. " if self.number is not None else f"- {self.box}"
 
 
 def _process_list(el: Tag) -> list[ParsedBlock]:
@@ -268,10 +274,8 @@ def _list_items(el: Tag) -> list[_ListItem]:
     it belongs to; standard HTML nests it inside the ``<li>``. Both attach
     the sub-list's items as children of that ``<li>``.
     """
-    ordered = el.name == "ol"
     todo = _is_todo_list(el)
     items: list[_ListItem] = []
-    counter = _list_start(el)
     for child in list(el.children):
         if not isinstance(child, Tag):
             continue
@@ -279,22 +283,31 @@ def _list_items(el: Tag) -> list[_ListItem]:
             nested = _list_items(child)
             if items:
                 items[-1].children.extend(nested)
-            else:
-                items.append(_ListItem("- ", "", nested))
+            elif nested:
+                # No <li> to attach to: an unnumbered empty parent holds it.
+                items.append(_ListItem("", nested, synthetic=True))
             continue
-        marker = f"{counter}. " if ordered else "- "
-        if todo and child.name == "li":
-            marker += "[x] " if child.get("data-checked") == "true" else "[ ] "
         # Sub-lists are detached so the item's own text excludes them.
         sub_lists = [
             sub.extract()
             for sub in child.find_all(["ul", "ol"])
             if sub.find_parent(["ul", "ol"]) is el
         ]
-        children = [item for sub in sub_lists for item in _list_items(sub)]
-        text = _finish_block_text(_render_inline(child))
-        items.append(_ListItem(marker, text, children))
-        counter += 1
+        item = _ListItem(
+            _finish_block_text(_render_inline(child)),
+            [item for sub in sub_lists for item in _list_items(sub)],
+        )
+        if todo and child.name == "li":
+            item.box = "[x] " if child.get("data-checked") == "true" else "[ ] "
+        items.append(item)
+
+    # Empty items (Evernote often leaves a trailing <li><br></li>) are dropped
+    # once sibling sub-lists have attached to them; an empty parent is kept.
+    items = [item for item in items if item.text or item.children]
+    if el.name == "ol":
+        numbered = [item for item in items if not item.synthetic]
+        for number, item in enumerate(numbered, start=_list_start(el)):
+            item.number = number
     return items
 
 
