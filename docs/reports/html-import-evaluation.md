@@ -58,6 +58,56 @@ How often each issue appeared in the sample:
 The sample rates are close to the rates across all imported notes, so the sample is
 representative.
 
+## Results after the fixes
+
+The fixes in [`docs/plans/html-import-fidelity-fixes.md`](../plans/html-import-fidelity-fixes.md)
+(one commit per step) were re-measured with `scripts/eval_html_import.py` (see
+"Re-running the evaluation"). That script compares the HTML with the importer's
+Markdown *as loaded by a Markdown parser*, so it also catches payloads that would load
+as the wrong structure. "Before" is the same script run against the parser before the
+fixes. It is stricter than the hand review above (it counts escaping and spacing), so its
+"before" clean count is 41 rather than 43.
+
+| | Before | After |
+|---|---:|---:|
+| Sample notes that match the HTML (of 95) | 41 | **92** |
+| Imported notes that match the HTML (of 886) | 365 | **851** |
+| Notes with words missing from the import (of 886) | 25 | **0** |
+| Notes with nested lists flattened | 365 | 0 |
+| Notes with empty bullets | 152 | 0 |
+| Notes with formatting lost or different | 78 | 1 |
+| Notes with checkbox state lost | 14 | 0 |
+| Notes with nested numbered lists renumbered | 8 | 0 |
+| Notes with tables dropped | 2 | 0 |
+| Notes showing `Untitled Attachment` as text | 54 | 0 |
+
+The 35 imported notes that still differ:
+
+- **33 `Evernote_index` notes:** their links point to other notes' `.html` files. These are
+  the dead links between notes, which are out of scope until the app has links between
+  notes.
+- **`diststream/A simple explanation of Bitcoin “Sidechains”`:** bold inside italic is written
+  as `*a **b** c*` rather than `*a* ***b*** *c*`. Both render the same.
+- **`system design/Counting Objects`:** italic around inline code (`<i><code>`) keeps the
+  code and drops the italic.
+
+### Web clips (`--include-web-clips`)
+
+Web clips are still skipped by default, as the spec intends. With `--include-web-clips` all
+1392 notes import with no errors, and **359 of the 506 clips** match the HTML. Over a random
+sample of 20 clips (`--only-web-clips --sample 20 --seed 2026`), 14 match. All 6 differences
+are lines that the clipped page separates only through CSS (e.g. a `<span>` styled as a
+block), which the importer joins into one paragraph. No text is lost.
+
+Across all clips, the remaining differences are:
+
+- **Joined lines (about 140 clips):** CSS-only line breaks, as above.
+- **Glued words (19 clips):** words the page separates only with CSS spacing. Examples are
+  adjacent button links (`Read the docs` + `fully…`) and a hex dump laid out as a grid of
+  spans.
+- **Numbering (2 clips):** code shown as an `<ol>` with one `<li>` per line. Blank lines are
+  empty items, which are dropped, so the line numbers shift.
+
 ## Per-note results
 
 ### Round 1 (20 notes, reviewed by hand)
@@ -251,13 +301,20 @@ finding 1 have the same problem, on top of losing their text.
 5. Drop empty `<li>`s and attachment captions (finding 7).
 6. Decide on web clips (finding 2).
 
-## Reproducing
+## Re-running the evaluation
 
-The scripts live in the session scratchpad and are not committed. The core loop is:
+`scripts/eval_html_import.py` reproduces the results. It needs a local export, so it is not
+part of `make check`.
 
-```python
-src = HTMLFileImportSource(Path("~/Documents/notes").expanduser())
-for doc in src.list_documents():
-    note = src.get_note(doc)
-    md = f"# {note.parsed.title}\n\n" + "\n\n".join(b.payload for b in note.parsed.blocks)
+```bash
+python scripts/eval_html_import.py ~/Documents/notes                  # all imported notes
+python scripts/eval_html_import.py ~/Documents/notes --sample 95 -v   # random sample, with diffs
+python scripts/eval_html_import.py ~/Documents/notes --only-web-clips # web clips only
 ```
+
+The script renders the HTML and the importer's Markdown through the same independent
+reference walker, and compares the two line by line. For the Markdown, it converts each
+payload with markdown-it, the same per-node parse the editor does. Each difference is
+classified as nesting, numbering, checkbox, formatting, wrong block type, empty bullet,
+or missing/extra line. A word-level check reports words in the HTML that are missing from
+the import. Links are compared by text only. Attachments are compared as placeholders.
