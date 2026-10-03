@@ -152,6 +152,12 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     `MarkdownBlockType` has no separate ordered/unordered type).
   - `<h2>`–`<h6>` → `heading` blocks.
   - Links are preserved inline within block text.
+  - Inline formatting is preserved as Markdown: `b`/`strong` → `**…**`,
+    `i`/`em` → `*…*`, `s`/`strike`/`del` → `~~…~~`, `code` → a code span.
+    A paragraph that is only bold (Evernote's section headers) stays a
+    paragraph. Text that would otherwise read as Markdown (`*`, `_`, `[`, a
+    leading `#` or `- `, …) is backslash-escaped so it loads literally. The
+    note title is plain text.
   - Tables and images are not rendered, but they are **not silently dropped**
     either: each produces a single placeholder `paragraph` block, in its
     original position, stating what kind of block was skipped (a table

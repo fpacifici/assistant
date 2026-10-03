@@ -6,6 +6,7 @@ parsing-rule matrix can be tested cheaply with raw HTML strings.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup, NavigableString, Tag
@@ -92,6 +93,30 @@ _BLOCK_TAGS = {
 }
 
 
+# Inline formatting tags and the Markdown marker wrapping their content.
+_FORMAT_MARKERS = {
+    "b": "**",
+    "strong": "**",
+    "i": "*",
+    "em": "*",
+    "s": "~~",
+    "strike": "~~",
+    "del": "~~",
+}
+
+# Characters that would otherwise be read as inline Markdown in plain text.
+_INLINE_ESCAPE_RE = re.compile(r"([\\`*_\[\]~])")
+
+# "<" starting something tag-like (``vector<int>``). The editor's Markdown
+# parser swallows it as raw HTML and mishandles the ``\<`` escape, so a
+# zero-width space is inserted after the "<" to keep the text visible.
+_TAG_START_RE = re.compile(r"<(?=[A-Za-z/!?])")
+
+# Line starts that would otherwise turn a paragraph into a heading, quote,
+# list item or thematic break.
+_BLOCK_START_RE = re.compile(r"^(?:[#>+-]|(\d+)([.)])(?=\s|$))")
+
+
 @dataclass(frozen=True, slots=True)
 class ParsedBlock:
     """One storable note block, ready to become a MarkdownNode."""
@@ -132,7 +157,7 @@ def parse_html_note(html: str, *, fallback_title: str) -> ParsedNote:
 
 def _resolve_title(soup: BeautifulSoup, title_h1: Tag | None, fallback_title: str) -> str:
     if title_h1 is not None:
-        return _inline_text(title_h1)
+        return _plain_text(title_h1)
     title_meta = soup.find("meta", attrs={"itemprop": "title"})
     if isinstance(title_meta, Tag):
         content = title_meta.get("content")
@@ -180,7 +205,7 @@ def _process_children(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:
     run: list[object] = []
 
     def flush() -> None:
-        text = _normalize("".join(_render_inline(n) for n in run))
+        text = _finish_block_text("".join(_render_inline(n) for n in run))
         run.clear()
         if text:
             blocks.append(ParsedBlock("paragraph", text))
@@ -225,32 +250,107 @@ def _li_text(li: Tag) -> str:
         if isinstance(child, Tag) and child.name in ("ul", "ol"):
             continue
         parts.append(_render_inline(child))
-    return _normalize("".join(parts))
+    return _finish_block_text("".join(parts))
 
 
 def _inline_text(el: Tag) -> str:
-    return _normalize(_render_inline(el))
+    """Render ``el``'s content as one line of inline Markdown."""
+    return _finish_block_text(_render_inline(el))
 
 
-def _render_inline(node: object) -> str:  # noqa: PLR0911
+def _plain_text(el: Tag) -> str:
+    """Render ``el``'s content as plain text (no Markdown markers or escapes)."""
+    return _normalize(_render_inline(el, markdown=False))
+
+
+def _finish_block_text(text: str) -> str:
+    """Normalize whitespace and escape a leading block-level Markdown marker."""
+    text = _normalize(text)
+    return _BLOCK_START_RE.sub(
+        lambda m: f"{m[1]}\\{m[2]}" if m[1] else f"\\{m[0]}", text, count=1
+    )
+
+
+def _escape_markdown(text: str) -> str:
+    return _TAG_START_RE.sub("<\u200b", _INLINE_ESCAPE_RE.sub(r"\\\1", text))
+
+
+def _render_inline(node: object, *, markdown: bool = True) -> str:  # noqa: PLR0911
     if isinstance(node, PreformattedString):  # comments, doctypes, CDATA...
         return ""
     if isinstance(node, NavigableString):
-        return str(node)
+        return _escape_markdown(str(node)) if markdown else str(node)
     if not isinstance(node, Tag):
         return ""
     if node.name in _IGNORED_TAGS:
         return ""
     if node.name == "br":
         return " "
-    inner = "".join(_render_inline(c) for c in node.children)
-    if node.name == "a" and node.get("href"):
+    if markdown and node.name == "code":
+        return _code_span(_normalize(_render_inline(node, markdown=False)))
+    inner = _render_children(node, markdown=markdown)
+    marker = _FORMAT_MARKERS.get(node.name) if markdown else None
+    if marker:
+        return _wrap(marker, inner)
+    if markdown and node.name == "a" and node.get("href"):
         return f"[{inner}]({node['href']})"
     if _is_block(node):
         # Block boundaries inside inline content (e.g. several div.para in one
         # <li>) separate words, like <br>; _normalize collapses the spaces.
         return f" {inner} "
     return inner
+
+
+def _render_children(node: Tag, *, markdown: bool) -> str:
+    """Render ``node``'s children, merging adjacent same-format siblings.
+
+    ``<b>a</b><b>b</b>`` becomes ``**ab**`` rather than ``**a****b**``, which
+    Markdown would not read back as two bold runs.
+    """
+    parts: list[str] = []
+    children = list(node.children)
+    i = 0
+    while i < len(children):
+        marker = _marker_of(children[i]) if markdown else None
+        end = i + 1
+        if marker is not None:
+            while end < len(children) and _marker_of(children[end]) == marker:
+                end += 1
+        if end - i == 1:
+            parts.append(_render_inline(children[i], markdown=markdown))
+        else:
+            group = [t for t in children[i:end] if isinstance(t, Tag)]
+            inner = "".join(_render_children(t, markdown=markdown) for t in group)
+            parts.append(_wrap(marker or "", inner))
+        i = end
+    return "".join(parts)
+
+
+def _marker_of(node: object) -> str | None:
+    return _FORMAT_MARKERS.get(node.name) if isinstance(node, Tag) else None
+
+
+def _wrap(marker: str, inner: str) -> str:
+    """Wrap ``inner`` in ``marker``, keeping surrounding whitespace outside.
+
+    Markdown does not read ``** bold **`` as emphasis, and an empty or
+    whitespace-only run must not produce bare markers.
+    """
+    core = inner.strip()
+    if not core:
+        return inner
+    lead = inner[: len(inner) - len(inner.lstrip())]
+    trail = inner[len(inner.rstrip()) :]
+    return f"{lead}{marker}{core}{marker}{trail}"
+
+
+def _code_span(text: str) -> str:
+    if not text:
+        return ""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * (longest + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
 
 
 def _normalize(text: str) -> str:

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildBlocksFromNodes, buildSnapshot } from './mapper';
 import { ServerRegistry } from './serverRegistry';
 import type { NoteNode } from '../types';
+import { BlockNoteEditor as RealBlockNoteEditor } from '@blocknote/core';
 import type { Block, BlockNoteEditor } from '@blocknote/core';
 
 // Minimal Block factory
@@ -113,5 +114,54 @@ describe('buildSnapshot', () => {
   it('returns empty map for empty block list', () => {
     const editor = { blocksToMarkdownLossy: vi.fn(() => '') } as unknown as BlockNoteEditor;
     expect(buildSnapshot([], editor).size).toBe(0);
+  });
+});
+
+// Contract between the HTML notes importer (src/assistant/adapters/html_parser.py)
+// and the editor: each payload the importer writes must load, through the real
+// BlockNote parser, as the block tree the importer intended.
+describe('importer payload contract', () => {
+  const editor = RealBlockNoteEditor.create();
+
+  const load = (payload: string): Block[] =>
+    buildBlocksFromNodes([makeNode('n1', payload)], editor, new ServerRegistry());
+
+  const text = (block: Block): string =>
+    (block.content as { text: string }[]).map((c) => c.text).join('');
+
+  it('reads inline formatting as BlockNote styles', () => {
+    const [block] = load('**a** *b* ~~c~~ `d` ***e***');
+    const styled = (block.content as { text: string; styles: object }[]).filter(
+      (c) => c.text.trim(),
+    );
+    expect(styled.map((c) => [c.text, c.styles])).toEqual([
+      ['a', { bold: true }],
+      ['b', { italic: true }],
+      ['c', { strike: true }],
+      ['d', { code: true }],
+      ['e', { bold: true, italic: true }],
+    ]);
+  });
+
+  it('reads a bold-only paragraph as a bold paragraph', () => {
+    const blocks = load('**Section header**');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    expect(blocks[0].content).toMatchObject([{ text: 'Section header', styles: { bold: true } }]);
+  });
+
+  it.each([
+    ['A\\[Ix, J\\] \\* B\\_c \\`d\\` \\~e\\~ a\\\\b', 'A[Ix, J] * B_c `d` ~e~ a\\b'],
+    ['vector<\u200bint> a < b', 'vector<\u200bint> a < b'],
+    ['\\# not a heading', '# not a heading'],
+    ['\\- not a list', '- not a list'],
+    ['1\\. not a list', '1. not a list'],
+    ['\\> not a quote', '> not a quote'],
+    ['\\---', '---'],
+  ])('reads escaped text %s literally', (payload, expected) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    expect(text(blocks[0])).toBe(expected);
   });
 });

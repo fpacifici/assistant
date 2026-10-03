@@ -130,6 +130,129 @@ def test_links_preserved_inline() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Inline formatting
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("tag", "marker"),
+    [
+        ("b", "**"),
+        ("strong", "**"),
+        ("i", "*"),
+        ("em", "*"),
+        ("s", "~~"),
+        ("strike", "~~"),
+        ("del", "~~"),
+        ("code", "`"),
+    ],
+)
+def test_inline_formatting_maps_to_markdown_markers(tag: str, marker: str) -> None:
+    html = f"<p>a <{tag}>styled</{tag}> b</p>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", f"a {marker}styled{marker} b")]
+
+
+def test_nested_bold_italic() -> None:
+    parsed = parse_html_note("<p><b><i>x</i></b></p>", fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "***x***")]
+
+
+def test_whitespace_moves_outside_markers() -> None:
+    parsed = parse_html_note("<p>a<b> bold </b>b</p>", fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "a **bold** b")]
+
+
+def test_empty_formatting_emits_nothing() -> None:
+    parsed = parse_html_note("<p>a<b></b><i> </i>b</p>", fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "a b")]
+
+
+def test_adjacent_same_formatting_is_merged() -> None:
+    parsed = parse_html_note("<p><b>one</b><b>two</b></p>", fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "**onetwo**")]
+
+
+def test_bold_only_paragraph_stays_a_paragraph() -> None:
+    html = '<div class="para"><b>Section header</b></div>'
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "**Section header**")]
+
+
+def test_formatting_inside_list_item_and_heading() -> None:
+    html = "<h2>A <i>title</i></h2><ul><li>an <b>item</b></li></ul>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [
+        ParsedBlock("heading", "## A *title*"),
+        ParsedBlock("list_item", "- an **item**"),
+    ]
+
+
+def test_code_content_is_not_formatted_or_escaped() -> None:
+    parsed = parse_html_note("<p><code>a*b <b>c</b>_d</code></p>", fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "`a*b c_d`")]
+
+
+def test_code_containing_backtick_uses_longer_fence() -> None:
+    parsed = parse_html_note("<p><code>a`b</code></p>", fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "``a`b``")]
+
+
+def test_title_is_plain_text() -> None:
+    parsed = parse_html_note("<h1>My <b>bold</b> *title*</h1>", fallback_title="t")
+    assert parsed.title == "My bold *title*"
+
+
+# ---------------------------------------------------------------------------
+# Markdown escaping
+# ---------------------------------------------------------------------------
+
+
+def test_literal_markdown_characters_are_escaped() -> None:
+    parsed = parse_html_note("<p>A[Ix, J] * B_c `d` ~e~</p>", fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", r"A\[Ix, J\] \* B\_c \`d\` \~e\~"),
+    ]
+
+
+def test_literal_html_like_text_gets_a_zero_width_space() -> None:
+    parsed = parse_html_note("<p>vector&lt;int&gt; a &lt; b a\\b</p>", fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "vector<\u200bint> a < b a\\\\b"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "payload"),
+    [
+        ("# not a heading", r"\# not a heading"),
+        ("- not a list", r"\- not a list"),
+        ("+ not a list", r"\+ not a list"),
+        ("1. not a list", r"1\. not a list"),
+        ("2) not a list", r"2\) not a list"),
+        ("> not a quote", r"\> not a quote"),
+        ("---", r"\---"),
+        ("1.5 is a number", "1.5 is a number"),
+        ("-5 degrees", r"\-5 degrees"),
+    ],
+)
+def test_text_that_looks_like_block_markdown_is_escaped(text: str, payload: str) -> None:
+    parsed = parse_html_note(f"<p>{text}</p>", fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", payload)]
+
+
+def test_list_item_text_that_looks_like_a_list_is_escaped() -> None:
+    parsed = parse_html_note("<ul><li>- dash</li></ul>", fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", r"- \- dash")]
+
+
+def test_link_url_is_not_escaped() -> None:
+    html = '<p><a href="http://x.com/a_b*c">a_b</a></p>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", r"[a\_b](http://x.com/a_b*c)")]
+
+
+# ---------------------------------------------------------------------------
 # Table / image placeholders
 # ---------------------------------------------------------------------------
 
