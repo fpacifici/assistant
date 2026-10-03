@@ -243,10 +243,14 @@ def _render_inline(node: object) -> str:  # noqa: PLR0911
         return ""
     if node.name == "br":
         return " "
+    inner = "".join(_render_inline(c) for c in node.children)
     if node.name == "a" and node.get("href"):
-        inner = "".join(_render_inline(c) for c in node.children)
         return f"[{inner}]({node['href']})"
-    return "".join(_render_inline(c) for c in node.children)
+    if _is_block(node):
+        # Block boundaries inside inline content (e.g. several div.para in one
+        # <li>) separate words, like <br>; _normalize collapses the spaces.
+        return f" {inner} "
+    return inner
 
 
 def _normalize(text: str) -> str:

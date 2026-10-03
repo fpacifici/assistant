@@ -82,6 +82,28 @@ def test_ordered_list_to_list_items_with_distinguishable_markers() -> None:
     ]
 
 
+def test_multi_paragraph_list_item_separates_words() -> None:
+    html = (
+        '<ul><li><div class="list-content">'
+        '<div class="para">first</div><div class="para">second</div>'
+        "</div></li></ul>"
+    )
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("list_item", "- first second")]
+
+
+def test_nested_div_inside_para_is_a_word_boundary() -> None:
+    html = '<ul><li><div class="para">one<div>two</div>three</div></li></ul>'
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("list_item", "- one two three")]
+
+
+def test_inline_tags_inside_list_item_do_not_add_spaces() -> None:
+    html = "<ul><li>un<u>der</u>line</li></ul>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("list_item", "- underline")]
+
+
 # ---------------------------------------------------------------------------
 # Headings
 # ---------------------------------------------------------------------------
