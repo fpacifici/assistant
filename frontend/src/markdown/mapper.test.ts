@@ -203,6 +203,22 @@ describe('importer payload contract', () => {
     expect(shown).toEqual([1, 2, 3]);
   });
 
+  it('reads a pipe table payload as a table block', () => {
+    const payload = '| a | **b** |\n| --- | --- |\n| x \\| y | |\n| 1 | 2 |';
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('table');
+    type Cell = { content: { text: string; styles: object }[] };
+    const rows = (blocks[0].content as unknown as { rows: { cells: Cell[] }[] }).rows;
+    const cellText = (c: Cell) => c.content.map((t) => t.text).join('');
+    expect(rows.map((r) => r.cells.map(cellText))).toEqual([
+      ['a', 'b'],
+      ['x | y', ''],
+      ['1', '2'],
+    ]);
+    expect(rows[0].cells[1].content[0].styles).toEqual({ bold: true });
+  });
+
   it.each([
     ['- [x] done', true],
     ['- [ ] open', false],

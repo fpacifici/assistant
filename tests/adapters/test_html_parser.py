@@ -516,18 +516,93 @@ def test_link_url_is_not_escaped() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Table / image placeholders
+# Tables and image placeholders
 # ---------------------------------------------------------------------------
 
 
-def test_table_becomes_placeholder_paragraph_in_position() -> None:
-    html = "<p>Before</p><table><tr><td>x</td></tr></table><p>After</p>"
+# --- Tables ---
+
+
+def test_table_becomes_pipe_table_paragraph_in_position() -> None:
+    html = (
+        "<p>Before</p><table><tr><td>a</td><td>b</td></tr>"
+        "<tr><td>1</td><td>2</td></tr></table><p>After</p>"
+    )
     parsed = parse_html_note(html, fallback_title="fallback")
     assert parsed.blocks == [
         ParsedBlock("paragraph", "Before"),
-        ParsedBlock("paragraph", "Skipped block: table"),
+        ParsedBlock("paragraph", "| a | b |\n| --- | --- |\n| 1 | 2 |"),
         ParsedBlock("paragraph", "After"),
     ]
+
+
+def test_table_with_thead_and_tbody() -> None:
+    html = (
+        "<table><thead><tr><th>h1</th><th>h2</th></tr></thead>"
+        "<tbody><tr><td>x</td><td>y</td></tr></tbody></table>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    payload = "| h1 | h2 |\n| --- | --- |\n| x | y |"
+    assert parsed.blocks == [ParsedBlock("paragraph", payload)]
+
+
+def test_ragged_rows_are_padded() -> None:
+    html = "<table><tr><td>a</td></tr><tr><td>1</td><td>2</td><td>3</td></tr></table>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "| a |  |  |\n| --- | --- | --- |\n| 1 | 2 | 3 |"),
+    ]
+
+
+def test_colspan_repeats_and_rowspan_leaves_empty_cells() -> None:
+    html = (
+        '<table><tr><td colspan="2">wide</td><td rowspan="2">tall</td></tr>'
+        "<tr><td>a</td><td>b</td></tr></table>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    payload = "| wide | wide | tall |\n| --- | --- | --- |\n| a | b |  |"
+    assert parsed.blocks == [ParsedBlock("paragraph", payload)]
+
+
+def test_cell_pipes_are_escaped_and_breaks_become_spaces() -> None:
+    html = (
+        "<table><tr><td>a | b<br>c</td></tr>"
+        "<tr><td><div>x</div><div>y</div></td></tr></table>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "| a \\| b c |\n| --- |\n| x y |")]
+
+
+def test_cell_keeps_inline_formatting() -> None:
+    html = '<table><tr><td><b>bold</b> <a href="http://x">l</a></td></tr></table>'
+    parsed = parse_html_note(html, fallback_title="t")
+    payload = "| **bold** [l](http://x) |\n| --- |"
+    assert parsed.blocks == [ParsedBlock("paragraph", payload)]
+
+
+def test_nested_table_is_flattened_into_its_cell() -> None:
+    html = (
+        "<table><tr><td>outer</td><td>"
+        "<table><tr><td>i1</td><td>i2</td></tr></table>"
+        "</td></tr></table>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "| outer | i1 i2 |\n| --- | --- |")]
+
+
+def test_evernote_wrapped_table() -> None:
+    html = (
+        '<en-table><div class="container"><table><tbody><tr>'
+        '<td><div class="para">k</div></td><td><div class="para">v</div></td>'
+        "</tr></tbody></table></div></en-table>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "| k | v |\n| --- | --- |")]
+
+
+def test_empty_table_emits_nothing() -> None:
+    parsed = parse_html_note("<table></table>", fallback_title="t")
+    assert parsed.blocks == []
 
 
 def test_image_becomes_placeholder_paragraph_in_position() -> None:

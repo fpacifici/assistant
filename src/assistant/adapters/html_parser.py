@@ -117,6 +117,9 @@ _TAG_START_RE = re.compile(r"<(?=[A-Za-z/!?])")
 _BLOCK_START_RE = re.compile(r"^(?:[#>+-]|(\d+)([.)])(?=\s|$))")
 
 
+# Upper bound on a cell's colspan/rowspan, against malformed HTML.
+_MAX_TABLE_SPAN = 100
+
 # CommonMark ordered-list numbers have at most 9 digits.
 _MAX_LIST_NUMBER_DIGITS = 9
 
@@ -183,8 +186,7 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
     if name in ("ul", "ol"):
         return _process_list(el)
     if name == "table":
-        # TODO: table support (see spec Out of Scope)
-        return [ParsedBlock("paragraph", "Skipped block: table")]
+        return _process_table(el)
     if name == "img":
         # TODO: image support (see spec Out of Scope)
         return [ParsedBlock("paragraph", "Skipped block: image")]
@@ -248,6 +250,49 @@ def _is_attachment(el: Tag) -> bool:
 
 def _has_block_child(el: Tag) -> bool:
     return any(isinstance(c, Tag) and _is_block(c) for c in el.children)
+
+
+def _process_table(el: Tag) -> list[ParsedBlock]:
+    """Render a table as one GFM pipe table in a ``paragraph`` block.
+
+    The editor stores its own tables the same way. The first row is the
+    header. GFM has no merged cells, so a ``colspan`` cell repeats its content
+    and a ``rowspan`` leaves the cells below it empty: no text is lost.
+    A table nested in a cell is flattened into that cell's text.
+    """
+    rows: list[list[str]] = []
+    spanned: dict[int, int] = {}  # column -> rows still covered by a rowspan
+    for tr in el.find_all("tr"):
+        if tr.find_parent("table") is not el:
+            continue
+        row: list[str] = []
+        for cell in tr.find_all(["td", "th"], recursive=False):
+            while spanned.get(len(row)):
+                spanned[len(row)] -= 1
+                row.append("")
+            text = _normalize(_render_inline(cell)).replace("|", "\\|")
+            rowspan = _span(cell, "rowspan")
+            for _ in range(_span(cell, "colspan")):
+                if rowspan > 1:
+                    spanned[len(row)] = rowspan - 1
+                row.append(text)
+        while spanned.get(len(row)):
+            spanned[len(row)] -= 1
+            row.append("")
+        rows.append(row)
+    width = max((len(row) for row in rows), default=0)
+    if width == 0:
+        return []
+    lines = ["| " + " | ".join(row + [""] * (width - len(row))) + " |" for row in rows]
+    lines.insert(1, "| " + " | ".join(["---"] * width) + " |")
+    return [ParsedBlock("paragraph", "\n".join(lines))]
+
+
+def _span(cell: Tag, attr: str) -> int:
+    value = cell.get(attr)
+    if isinstance(value, str) and value.isdigit():
+        return max(1, min(int(value), _MAX_TABLE_SPAN))
+    return 1
 
 
 @dataclass(slots=True)

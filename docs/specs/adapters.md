@@ -55,11 +55,11 @@ notes-import path, not removed, deleted, or migrated in this iteration.
    internal structure and are easy to navigate.
 8. As the person running the import, I want links inside notes preserved, so
    that references to other pages or notes still work after import.
-9. As the person running the import, I want to know that tables, images and
-   attachments are not yet supported, and to see a clear placeholder marking where they were
-   skipped rather than either mangled garbage paragraphs or silently missing
-   content, so that I get a clean, honest note instead of corrupted or
-   unexplained gaps.
+9. As the person running the import, I want to know that images and
+   attachments are not yet supported, and to see a clear placeholder marking
+   where they were skipped rather than either mangled garbage paragraphs or
+   silently missing content, so that I get a clean, honest note instead of
+   corrupted or unexplained gaps. Tables are imported as tables.
 10. As the person running the import, I want everything not explicitly handled
     to fall back to a plain paragraph, so that no content is silently lost even
     when the parser doesn't understand its original structure.
@@ -108,7 +108,7 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     running the whole import pipeline against a fixture directory and a real
     test database, so that dedup/override/notebook-resolution behavior is
     verified end-to-end, not just in pieces.
-24. As a future contributor, I want image and table support tracked as
+24. As a future contributor, I want image and attachment support tracked as
     explicit TODOs rather than silently forgotten, so that the gap is visible
     and intentional, not an accidental oversight.
 25. As a future contributor, I want the UI zip-upload import flow (importing a
@@ -176,19 +176,23 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     paragraph. Text that would otherwise read as Markdown (`*`, `_`, `[`, a
     leading `#` or `- `, …) is backslash-escaped so it loads literally. The
     note title is plain text.
-  - Tables and images are not rendered, but they are **not silently dropped**
-    either: each produces a single placeholder `paragraph` block, in its
-    original position, stating what kind of block was skipped (a table
-    becomes a paragraph reading `Skipped block: table`; an image becomes
-    `Skipped block: image`), so the note's structure and block count reflect
-    the original content. Real table/image rendering remains a TODO for a
-    future iteration (see Out of Scope).
+  - `<table>` → one `paragraph` block holding a GFM pipe table, which is how
+    the editor stores its own tables. The first row is the header; short
+    rows are padded. GFM has no merged cells, so a `colspan` cell repeats
+    its content and a `rowspan` leaves the cells below it empty. Cells keep
+    inline formatting, `|` is escaped, and a table nested in a cell is
+    flattened into that cell's text.
+  - Images are not rendered, but they are **not silently dropped** either:
+    each produces a single placeholder `paragraph` block, in its original
+    position, reading `Skipped block: image`, so the note's structure and
+    block count reflect the original content. Real image rendering remains
+    a TODO for a future iteration (see Out of Scope).
   - Attachments get the same treatment: an `en-media` element or an
     Evernote resource card (an element with `data-resource-hash` other
     than `<img>`) becomes `Skipped block: attachment`. The card's caption
     (the file name, often `Untitled Attachment`) is not imported as text.
   - This placeholder treatment applies only to element types the parser
-    recognizes and deliberately does not render (currently: `table`, `img`,
+    recognizes and deliberately does not render (currently: `img` and
     attachments).
     It does **not** apply to inline `style`/`class` attributes, which
     continue to be silently ignored throughout — a "skipped block"
@@ -196,7 +200,7 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   - Unhandled **container** elements (`div`, `article`, `section`, and the
     like) are recursed into rather than treated as opaque: their handled
     descendants still produce their normal structured blocks (headings,
-    list items, table/image placeholders) in document order, and the first
+    list items, tables, placeholders) in document order, and the first
     `<h1>` is consumed as the title wherever it sits in the tree, not only
     at the top level. Only genuinely unhandled *leaf* content — an element
     with no handled descendants — collapses to a single `paragraph`.
@@ -272,7 +276,7 @@ with this repo's existing adapter/notes tests.
 - **Secondary seam — pure HTML→MarkdownNode parser tests**: feed raw HTML
   strings directly into the parsing function and assert the returned node
   tree, to affordably cover the parsing-rule matrix (title precedence,
-  `ul`/`ol`, heading levels, link preservation, table/image skip, `web.clip`
+  `ul`/`ol`, heading levels, link preservation, tables, image skip, `web.clip`
   skip) without paying for a full DB round-trip per case.
 - **CLI seam — thin, matching existing convention**: mock the pipeline call
   itself; assert the CLI correctly resolves auth precedence (argument / env
@@ -297,14 +301,13 @@ convention. See Further Notes.
    format, ENML vs. HTML-export, is a separate open design question).
 2. The UI zip-file upload import flow (Goal 5 in the original spec framing).
 3. Image and attachment support in the HTML parser (tracked as a TODO).
-4. Table support in the HTML parser (tracked as a TODO).
-5. Deletion propagation — deleting a `Note` because its source file was
+4. Deletion propagation — deleting a `Note` because its source file was
    deleted or moved.
-6. Per-owner scoping of notebook name uniqueness (currently global; flagged
+5. Per-owner scoping of notebook name uniqueness (currently global; flagged
    as a "for now" simplification).
-7. Selective/targeted override (only a run-wide `--override` flag exists;
+6. Selective/targeted override (only a run-wide `--override` flag exists;
    there's no mechanism to force-override a specific note by id).
-8. Handling of note renames as updates — a renamed source note currently
+7. Handling of note renames as updates — a renamed source note currently
    imports as a new note rather than updating the old one in place.
 
 ## Further Notes
