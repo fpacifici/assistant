@@ -37,7 +37,7 @@ def create_app(
     app = FastAPI(title="Assistant API", version="0.1.0")
 
     if session_factory is None:
-        from assistant.models.database import get_session_factory
+        from assistant.models.database import get_session_factory  # noqa: PLC0415
 
         session_factory = get_session_factory()
     app.state.session_factory = session_factory

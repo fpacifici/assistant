@@ -92,5 +92,5 @@ class SearchAgent:
 
             checkpoint = checkpoint_tuple.checkpoint
             channel_values = checkpoint["channel_values"]
-            messages = cast(list[BaseMessage], channel_values["messages"])
+            messages = cast("list[BaseMessage]", channel_values["messages"])
             yield from messages

@@ -16,16 +16,19 @@ repos:
         args: [--fix=lf]
       - id: debug-statements
 
-  # Ruff for linting and import sorting
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+  # Ruff for linting, import sorting and formatting (use project .venv so the
+  # version matches `make lint` / uv.lock)
+  - repo: local
     hooks:
-      # Run the linter
       - id: ruff
-        args: [--fix]
+        name: ruff
+        entry: .venv/bin/ruff check --fix
+        language: system
         types_or: [python, pyi]
-      # Run the formatter
       - id: ruff-format
+        name: ruff-format
+        entry: .venv/bin/ruff format
+        language: system
         types_or: [python, pyi]
 
   # mypy for type checking (use project .venv to avoid duplicate-module and get deps)

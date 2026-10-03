@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -20,6 +21,8 @@ from assistant.invites.service import create_invite
 from assistant.models.schema import Credential, InviteState, User
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
 
 _REGISTRATION_CONFIG = {
@@ -28,6 +31,13 @@ _REGISTRATION_CONFIG = {
     "default_quota": 5,
     "expiry_days": 1,
 }
+
+
+@pytest.fixture(autouse=True)
+def _no_real_email() -> Iterator[None]:
+    """`create_invite` sends an invite email; keep it off the network."""
+    with patch("assistant.email.service.send_email"):
+        yield
 
 
 def _claims(**overrides: object) -> GoogleIdTokenClaims:

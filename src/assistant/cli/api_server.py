@@ -57,7 +57,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--host",
-        default="0.0.0.0",
+        default="0.0.0.0",  # nosec B104 - intentional dev-server default
         help="Bind host (default: 0.0.0.0)",
     )
     parser.add_argument(
@@ -73,7 +73,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    import uvicorn
+    import uvicorn  # noqa: PLC0415
 
     logger.info(
         "Starting API server on %s:%d",

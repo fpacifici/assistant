@@ -1,13 +1,13 @@
 ---
 - inputs:
-    question: 
+    question:
     - "List the note titles that describe database consistency models"
   outputs:
     answer: |
       - Metadata: The many faces of consistency
       - Why you should pick strong consistency, whenever possible
-      - Keeping CALM: When Distributed Consistency Is Easy       
-      - Postgres consistency notes     
+      - Keeping CALM: When Distributed Consistency Is Easy
+      - Postgres consistency notes
       - https://jepsen.io/consistency
       - DB transactions summary
     notes_ids:
@@ -19,7 +19,7 @@
       - c2ea16ec-1dae-bf56-77b3-a472fbd31a14
     topics:
       - database
-      - consistency 
+      - consistency
       - transactions
     notebooks:
       - DB/storage
@@ -39,7 +39,7 @@
       - 33c24f8d-7524-4223-a9d9-5ac5a992653f
     topics:
       - database
-      - consistency 
+      - consistency
       - transactions
     notebooks:
       - DB/storage
@@ -55,7 +55,7 @@
     topics:
       - database
       - distributed systems
-      - kafka 
+      - kafka
     notebooks:
       - DB/storage
       - dist/stream
@@ -114,7 +114,7 @@
   outputs:
     answer: |
       - JobManager
-        - Assign work to task managers when it sees enough slots 
+        - Assign work to task managers when it sees enough slots
         - Coordinates checkpoint management
       - ResourceManager
         - Keeps track of idle slots to tell the JobManager to provide them
@@ -129,8 +129,3 @@
       - streaming
     notebooks:
       - dist/stream
-
-      
-
-
-

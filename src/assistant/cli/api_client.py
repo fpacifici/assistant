@@ -10,6 +10,7 @@ import httpx
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 _NO_CONTENT = 204
+_TIMEOUT = 10.0
 
 
 def _print_response(response: httpx.Response) -> None:
@@ -33,12 +34,12 @@ def cmd_create_user(args: argparse.Namespace) -> None:
         body["invite_quota"] = args.invite_quota
     if args.invite_id is not None:
         body["invite_id"] = args.invite_id
-    response = httpx.post(f"{args.base_url}/user", json=body)
+    response = httpx.post(f"{args.base_url}/user", json=body, timeout=_TIMEOUT)
     _print_response(response)
 
 
 def cmd_get_user(args: argparse.Namespace) -> None:
-    response = httpx.get(f"{args.base_url}/user/{args.uid}")
+    response = httpx.get(f"{args.base_url}/user/{args.uid}", timeout=_TIMEOUT)
     _print_response(response)
 
 
@@ -51,8 +52,7 @@ def cmd_update_user(args: argparse.Namespace) -> None:
     if args.lastname:
         body["lastname"] = args.lastname
     response = httpx.patch(
-        f"{args.base_url}/user/{args.uid}",
-        json=body,
+        f"{args.base_url}/user/{args.uid}", json=body, timeout=_TIMEOUT
     )
     _print_response(response)
 
@@ -62,6 +62,7 @@ def cmd_create_notebook(args: argparse.Namespace) -> None:
         f"{args.base_url}/notebook",
         json={"name": args.name},
         headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -71,20 +72,19 @@ def cmd_list_notebooks(args: argparse.Namespace) -> None:
         f"{args.base_url}/notebook",
         headers={"X-User-Id": args.user_id},
         params={"offset": args.offset, "limit": args.limit},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
 
 def cmd_get_notebook(args: argparse.Namespace) -> None:
-    response = httpx.get(
-        f"{args.base_url}/notebook/{args.notebook_id}",
-    )
+    response = httpx.get(f"{args.base_url}/notebook/{args.notebook_id}", timeout=_TIMEOUT)
     _print_response(response)
 
 
 def cmd_delete_notebook(args: argparse.Namespace) -> None:
     response = httpx.delete(
-        f"{args.base_url}/notebook/{args.notebook_id}",
+        f"{args.base_url}/notebook/{args.notebook_id}", timeout=_TIMEOUT
     )
     _print_response(response)
 
@@ -94,6 +94,7 @@ def cmd_create_note(args: argparse.Namespace) -> None:
         f"{args.base_url}/notebook/{args.notebook_id}/note",
         json={"title": args.title},
         headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -102,6 +103,7 @@ def cmd_list_notes(args: argparse.Namespace) -> None:
     response = httpx.get(
         f"{args.base_url}/notebook/{args.notebook_id}/note",
         params={"offset": args.offset, "limit": args.limit},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -109,6 +111,7 @@ def cmd_list_notes(args: argparse.Namespace) -> None:
 def cmd_get_note(args: argparse.Namespace) -> None:
     response = httpx.get(
         f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}",
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -116,6 +119,7 @@ def cmd_get_note(args: argparse.Namespace) -> None:
 def cmd_delete_note(args: argparse.Namespace) -> None:
     response = httpx.delete(
         f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}",
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -130,6 +134,7 @@ def cmd_create_node(args: argparse.Namespace) -> None:
         f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node",
         json=body,
         headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -142,6 +147,7 @@ def cmd_update_node(args: argparse.Namespace) -> None:
             "payload": args.payload,
             "expected_version": args.expected_version,
         },
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -155,6 +161,7 @@ def cmd_merge_node(args: argparse.Namespace) -> None:
             "expected_version": args.expected_version,
             "source_expected_version": args.source_expected_version,
         },
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -167,6 +174,7 @@ def cmd_split_node(args: argparse.Namespace) -> None:
             "expected_version": args.expected_version,
         },
         headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 
@@ -174,6 +182,7 @@ def cmd_split_node(args: argparse.Namespace) -> None:
 def cmd_delete_node(args: argparse.Namespace) -> None:
     response = httpx.delete(
         f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/node/{args.node_id}",
+        timeout=_TIMEOUT,
     )
     _print_response(response)
 

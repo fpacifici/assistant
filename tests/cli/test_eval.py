@@ -18,7 +18,7 @@ def test_run_langsmith_evaluate_calls_langsmith(
     class FakeClient:
         def evaluate(
             self,
-            target: object,
+            _target: object,
             data: object,
             evaluators: list[object],
             experiment_prefix: str,
@@ -28,7 +28,10 @@ def test_run_langsmith_evaluate_calls_langsmith(
             captured["evaluators"] = evaluators
             captured["experiment_prefix"] = experiment_prefix
             captured["max_concurrency"] = max_concurrency
-            return {"experiment_prefix": experiment_prefix, "max_concurrency": max_concurrency}
+            return {
+                "experiment_prefix": experiment_prefix,
+                "max_concurrency": max_concurrency,
+            }
 
     monkeypatch.setattr("assistant.cli.eval.Client", lambda: FakeClient())
 
@@ -46,4 +49,3 @@ def test_run_langsmith_evaluate_calls_langsmith(
 
     out = capsys.readouterr().out
     assert "first-eval-in-langsmith" in out
-

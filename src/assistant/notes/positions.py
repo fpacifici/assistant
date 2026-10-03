@@ -94,7 +94,7 @@ def generate_position_between(
     """
     if before is not None and after is not None:
         if before >= after:
-            msg = f"before ({before!r}) must be less than " f"after ({after!r})"
+            msg = f"before ({before!r}) must be less than after ({after!r})"
             raise ValueError(msg)
         a = _to_digits(before)
         b = _to_digits(after)
