@@ -188,6 +188,20 @@ describe('importer payload contract', () => {
     expect(load(saved).map(tree)).toEqual([expected]);
   });
 
+  it('shows the written numbers for consecutive numbered items', () => {
+    const nodes = ['1. a', '2. b\n   1. b1', '3. c'].map((p, i) => makeNode(`n${i}`, p));
+    const blocks = buildBlocksFromNodes(nodes, editor, new ServerRegistry());
+    expect(blocks.map((b) => b.type)).toEqual(Array(3).fill('numberedListItem'));
+    // BlockNote shows `start` when set, else continues from the previous item.
+    // It drops `start` from an item with children, which then continues.
+    const shown: number[] = [];
+    blocks.forEach((b, i) => {
+      const start = (b.props as { start?: number }).start;
+      shown.push(start ?? (i > 0 ? shown[i - 1] + 1 : 1));
+    });
+    expect(shown).toEqual([1, 2, 3]);
+  });
+
   it.each([
     ['- [x] done', true],
     ['- [ ] open', false],

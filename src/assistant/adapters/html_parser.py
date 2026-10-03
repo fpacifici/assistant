@@ -117,6 +117,10 @@ _TAG_START_RE = re.compile(r"<(?=[A-Za-z/!?])")
 _BLOCK_START_RE = re.compile(r"^(?:[#>+-]|(\d+)([.)])(?=\s|$))")
 
 
+# CommonMark ordered-list numbers have at most 9 digits.
+_MAX_LIST_NUMBER_DIGITS = 9
+
+
 @dataclass(frozen=True, slots=True)
 class ParsedBlock:
     """One storable note block, ready to become a MarkdownNode."""
@@ -267,7 +271,7 @@ def _list_items(el: Tag) -> list[_ListItem]:
     ordered = el.name == "ol"
     todo = _is_todo_list(el)
     items: list[_ListItem] = []
-    counter = 1
+    counter = _list_start(el)
     for child in list(el.children):
         if not isinstance(child, Tag):
             continue
@@ -292,6 +296,18 @@ def _list_items(el: Tag) -> list[_ListItem]:
         items.append(_ListItem(marker, text, children))
         counter += 1
     return items
+
+
+def _list_start(el: Tag) -> int:
+    """First number of an ``<ol>``: its ``start`` attribute, else 1.
+
+    Each list counts only its own items, so nested lists restart.
+    """
+    start = el.get("start")
+    max_digits = _MAX_LIST_NUMBER_DIGITS
+    if isinstance(start, str) and start.isdigit() and len(start) <= max_digits:
+        return int(start)
+    return 1
 
 
 def _render_list_item(item: _ListItem, *, indent: str) -> list[str]:

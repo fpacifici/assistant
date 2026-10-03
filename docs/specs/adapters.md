@@ -157,6 +157,9 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     nested `<ul>`/`<ol>` that is a sibling of an `<li>` (Evernote's markup)
     belongs to the preceding `<li>`; one with no preceding `<li>` gets an
     empty parent item.
+  - Each `<ol>` numbers its own items from its `start` attribute (default
+    1), so nested ordered lists restart and nested bullet lists do not
+    advance the parent's numbering.
   - Checklists → `list_item` blocks with a `- [x] ` / `- [ ] ` prefix: items
     of a `ul.en-todolist` (state from `data-checked`), and Evernote's older
     `<div><input class="en-todo" checked="true|false"/>…</div>` paragraphs.

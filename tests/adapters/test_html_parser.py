@@ -200,6 +200,50 @@ def test_todo_list_nesting() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Ordered list numbering
+# ---------------------------------------------------------------------------
+
+
+def test_nested_ordered_lists_number_each_level_separately() -> None:
+    html = (
+        "<ol><li>a</li><ol><li>a1</li><li>a2</li></ol>"
+        "<li>b</li><ol><li>b1</li><li>b2</li></ol></ol>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "1. a\n   1. a1\n   2. a2"),
+        ParsedBlock("list_item", "2. b\n   1. b1\n   2. b2"),
+    ]
+
+
+def test_ordered_list_start_is_respected() -> None:
+    html = '<ol start="5"><li>five</li><li>six</li><ol start="3"><li>c</li></ol></ol>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "5. five"),
+        ParsedBlock("list_item", "6. six\n   3. c"),
+    ]
+
+
+@pytest.mark.parametrize("start", ["", "abc", "-1"])
+def test_invalid_ordered_list_start_falls_back_to_one(start: str) -> None:
+    parsed = parse_html_note(f'<ol start="{start}"><li>a</li></ol>', fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "1. a")]
+
+
+def test_nested_bullets_do_not_advance_the_numbered_counter() -> None:
+    html = "<ol><li>a</li><ul><li>x</li><li>y</li></ul><li>b</li></ol>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert [b.payload.split("\n")[0] for b in parsed.blocks] == ["1. a", "2. b"]
+
+
+def test_ordered_item_width_sets_child_indent() -> None:
+    items = "".join(f"<li>i{n}</li>" for n in range(1, 11))
+    parsed = parse_html_note(f"<ol>{items}<ul><li>x</li></ul></ol>", fallback_title="t")
+    assert parsed.blocks[-1] == ParsedBlock("list_item", "10. i10\n    - x")
+
+
+# ---------------------------------------------------------------------------
 # Checklists
 # ---------------------------------------------------------------------------
 
