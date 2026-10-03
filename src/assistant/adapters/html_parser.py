@@ -188,6 +188,10 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
     if name == "img":
         # TODO: image support (see spec Out of Scope)
         return [ParsedBlock("paragraph", "Skipped block: image")]
+    if _is_attachment(el):
+        # TODO: attachment support (see spec Out of Scope). The card's caption
+        # (the file name) is not note content.
+        return [ParsedBlock("paragraph", "Skipped block: attachment")]
 
     if _has_block_child(el):
         return _process_children(el, title_h1)
@@ -232,7 +236,14 @@ def _process_children(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:
 def _is_block(el: Tag) -> bool:
     if el.name in _IGNORED_TAGS:
         return False
-    return el.name in _BLOCK_TAGS or _has_block_child(el)
+    return el.name in _BLOCK_TAGS or _is_attachment(el) or _has_block_child(el)
+
+
+def _is_attachment(el: Tag) -> bool:
+    """An Evernote attachment: an ``en-media`` or a resource card (not an ``<img>``)."""
+    if el.name == "en-media":
+        return True
+    return el.name != "img" and el.has_attr("data-resource-hash")
 
 
 def _has_block_child(el: Tag) -> bool:
@@ -390,6 +401,8 @@ def _render_inline(node: object, *, markdown: bool = True) -> str:  # noqa: PLR0
     if node.name in _IGNORED_TAGS:
         return ""
     if node.name == "br":
+        return " "
+    if _is_attachment(node):
         return " "
     if markdown and node.name == "code":
         return _code_span(_normalize(_render_inline(node, markdown=False)))

@@ -540,6 +540,57 @@ def test_image_becomes_placeholder_paragraph_in_position() -> None:
     ]
 
 
+def _attachment_card(name: str) -> str:
+    return (
+        '<div data-resource-hash="abc123"><div data-type="application/pdf">'
+        f'<svg><use href="#icon"></use></svg><div><div>{name}</div></div></div></div>'
+    )
+
+
+def test_attachment_card_becomes_placeholder_without_its_caption() -> None:
+    html = f"<p>Before</p>{_attachment_card('Untitled Attachment')}<p>After</p>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "Before"),
+        ParsedBlock("paragraph", "Skipped block: attachment"),
+        ParsedBlock("paragraph", "After"),
+    ]
+
+
+def test_note_with_only_an_attachment_gives_one_placeholder() -> None:
+    html = f'<en-note class="peso">{_attachment_card("paper.pdf")}</en-note>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "Skipped block: attachment")]
+
+
+def test_attachment_card_splits_surrounding_text() -> None:
+    html = f'<div class="para">see{_attachment_card("x.pdf")}here</div>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert [b.payload for b in parsed.blocks] == [
+        "see",
+        "Skipped block: attachment",
+        "here",
+    ]
+
+
+def test_en_media_becomes_attachment_placeholder() -> None:
+    html = '<p>a</p><en-media type="application/pdf" hash="abc"></en-media>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks[-1] == ParsedBlock("paragraph", "Skipped block: attachment")
+
+
+def test_image_with_resource_hash_stays_an_image_placeholder() -> None:
+    html = '<img data-resource-hash="abc" src="files/shot.png">'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "Skipped block: image")]
+
+
+def test_attachment_caption_inside_list_item_is_not_rendered() -> None:
+    html = f"<ul><li>item{_attachment_card('Untitled Attachment')}</li></ul>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- item")]
+
+
 # ---------------------------------------------------------------------------
 # Fallback paragraph handling
 # ---------------------------------------------------------------------------

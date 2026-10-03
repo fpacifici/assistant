@@ -55,8 +55,8 @@ notes-import path, not removed, deleted, or migrated in this iteration.
    internal structure and are easy to navigate.
 8. As the person running the import, I want links inside notes preserved, so
    that references to other pages or notes still work after import.
-9. As the person running the import, I want to know that tables and images are
-   not yet supported, and to see a clear placeholder marking where they were
+9. As the person running the import, I want to know that tables, images and
+   attachments are not yet supported, and to see a clear placeholder marking where they were
    skipped rather than either mangled garbage paragraphs or silently missing
    content, so that I get a clean, honest note instead of corrupted or
    unexplained gaps.
@@ -183,8 +183,13 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     `Skipped block: image`), so the note's structure and block count reflect
     the original content. Real table/image rendering remains a TODO for a
     future iteration (see Out of Scope).
+  - Attachments get the same treatment: an `en-media` element or an
+    Evernote resource card (an element with `data-resource-hash` other
+    than `<img>`) becomes `Skipped block: attachment`. The card's caption
+    (the file name, often `Untitled Attachment`) is not imported as text.
   - This placeholder treatment applies only to element types the parser
-    recognizes and deliberately does not render (currently: `table`, `img`).
+    recognizes and deliberately does not render (currently: `table`, `img`,
+    attachments).
     It does **not** apply to inline `style`/`class` attributes, which
     continue to be silently ignored throughout — a "skipped block"
     placeholder is about skipped *content*, not skipped *styling*.
@@ -291,7 +296,7 @@ convention. See Further Notes.
 1. Migrating the Evernote adapter to the notes-import pipeline (its content
    format, ENML vs. HTML-export, is a separate open design question).
 2. The UI zip-file upload import flow (Goal 5 in the original spec framing).
-3. Image support in the HTML parser (tracked as a TODO).
+3. Image and attachment support in the HTML parser (tracked as a TODO).
 4. Table support in the HTML parser (tracked as a TODO).
 5. Deletion propagation — deleting a `Note` because its source file was
    deleted or moved.
