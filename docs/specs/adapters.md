@@ -173,12 +173,13 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     with no handled descendants — collapses to a single `paragraph`.
   - When a container mixes loose text directly inside it alongside at
     least one block-level child element (e.g. `<div>Some text<p>Body</p>
-    </div>`), only the block-level children are emitted as blocks; the
-    loose sibling text is not separately captured as its own `paragraph`.
-    This matches real-world exports, where meaningful content is
-    consistently wrapped in its own element rather than left as bare text
-    beside a block sibling — bare stray text next to a block is treated as
-    incidental whitespace/formatting, not content to preserve.
+    </div>`), each run of consecutive loose text and inline elements becomes
+    its own `paragraph`, in document order around the block-level children.
+    Real exports do leave content beside block siblings (e.g. Evernote's
+    legacy `<div><input class="en-todo"/>Text</div>` checkboxes), so it is
+    never dropped.
+  - An element the parser does not recognise is inline unless it wraps a
+    block-level element, in which case it is recursed into like a container.
   - Everything else not explicitly handled → `paragraph`.
   - Inline styling (CSS) is ignored throughout.
 

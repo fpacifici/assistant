@@ -179,7 +179,62 @@ def test_first_h1_consumed_as_title_when_nested_in_container() -> None:
     assert parsed.blocks == [ParsedBlock("paragraph", "Body")]
 
 
-def test_loose_text_beside_block_child_in_container_is_not_preserved() -> None:
+# ---------------------------------------------------------------------------
+# Text next to block-level children is kept
+# ---------------------------------------------------------------------------
+
+
+def test_loose_text_beside_block_child_in_container_is_preserved() -> None:
     html = "<div>Leading text<p>Nested para</p></div>"
     parsed = parse_html_note(html, fallback_title="fallback")
-    assert parsed.blocks == [ParsedBlock("paragraph", "Nested para")]
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "Leading text"),
+        ParsedBlock("paragraph", "Nested para"),
+    ]
+
+
+def test_mixed_text_and_block_children_keep_their_order() -> None:
+    html = "<div>Before <u>under</u><p>Middle</p>after<div>Last</div></div>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    payloads = [b.payload for b in parsed.blocks]
+    assert payloads == ["Before under", "Middle", "after", "Last"]
+
+
+def test_top_level_loose_text_is_preserved() -> None:
+    html = "Loose text<p>Para</p>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert [b.payload for b in parsed.blocks] == ["Loose text", "Para"]
+
+
+def test_input_does_not_split_its_paragraph() -> None:
+    html = '<div class="para"><input type="checkbox" class="en-todo"/>Buy milk</div>'
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert len(parsed.blocks) == 1
+    assert "Buy milk" in parsed.blocks[0].payload
+
+
+def test_legacy_checkbox_note_keeps_every_paragraph() -> None:
+    checkbox = '<input type="checkbox" class="en-todo" checked="false"/>'
+    items = "".join(f'<div class="para">{checkbox}Item {i}</div>' for i in range(4))
+    html = f'<en-note class="peso">{items}</en-note>'
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert len(parsed.blocks) == 4
+    assert all(f"Item {i}" in b.payload for i, b in enumerate(parsed.blocks))
+
+
+def test_unknown_tag_without_block_children_is_inline() -> None:
+    html = "<p>Some <custom-tag>custom</custom-tag> text</p>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.blocks == [ParsedBlock("paragraph", "Some custom text")]
+
+
+def test_inline_tag_wrapping_blocks_keeps_paragraphs_separate() -> None:
+    html = "<span><div>One</div><div>Two</div></span>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert [b.payload for b in parsed.blocks] == ["One", "Two"]
+
+
+def test_html_comments_are_not_rendered() -> None:
+    html = "<div>Text<!-- a comment --><p>Para</p></div>"
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert [b.payload for b in parsed.blocks] == ["Text", "Para"]

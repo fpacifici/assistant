@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4.element import PreformattedString
 
 _HEADING_LEVELS = {"h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 
@@ -39,6 +40,55 @@ _INLINE_TAGS = {
     "time",
     "wbr",
     "br",
+    "input",
+}
+
+# Tags that always start a new block. Any other tag is a block only if it wraps
+# a block (e.g. a <span> around <div>s); otherwise its content is inline text.
+_BLOCK_TAGS = {
+    "html",
+    "body",
+    "en-note",
+    "div",
+    "p",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "main",
+    "aside",
+    "nav",
+    "center",
+    "address",
+    "form",
+    "fieldset",
+    "details",
+    "summary",
+    "figure",
+    "figcaption",
+    "blockquote",
+    "pre",
+    "hr",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "ul",
+    "ol",
+    "li",
+    "dl",
+    "dt",
+    "dd",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "td",
+    "th",
+    "img",
 }
 
 
@@ -76,10 +126,7 @@ def parse_html_note(html: str, *, fallback_title: str) -> ParsedNote:
     title_h1 = soup.find("h1")
     title = _resolve_title(soup, title_h1, fallback_title)
 
-    blocks: list[ParsedBlock] = []
-    for child in soup.find_all(recursive=False):
-        blocks.extend(_process_node(child, title_h1))
-
+    blocks = _process_children(soup, title_h1)
     return ParsedNote(title=title, blocks=blocks, skip=False)
 
 
@@ -113,18 +160,49 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
         # TODO: image support (see spec Out of Scope)
         return [ParsedBlock("paragraph", "Skipped block: image")]
 
-    child_tags = [c for c in el.children if isinstance(c, Tag)]
-    has_block_child = any(c.name not in _INLINE_TAGS for c in child_tags)
-    if has_block_child:
-        blocks: list[ParsedBlock] = []
-        for child in child_tags:
-            blocks.extend(_process_node(child, title_h1))
-        return blocks
+    if _has_block_child(el):
+        return _process_children(el, title_h1)
 
     text = _inline_text(el)
     if not text:
         return []
     return [ParsedBlock("paragraph", text)]
+
+
+def _process_children(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:
+    """Turn a container's children into blocks, keeping loose inline content.
+
+    Consecutive inline children (text nodes and inline tags) are collected into
+    one paragraph, flushed whenever a block child starts, so text sitting next
+    to block-level siblings is not lost and document order is preserved.
+    """
+    blocks: list[ParsedBlock] = []
+    run: list[object] = []
+
+    def flush() -> None:
+        text = _normalize("".join(_render_inline(n) for n in run))
+        run.clear()
+        if text:
+            blocks.append(ParsedBlock("paragraph", text))
+
+    for child in el.children:
+        if isinstance(child, Tag) and (child is title_h1 or _is_block(child)):
+            flush()
+            blocks.extend(_process_node(child, title_h1))
+        else:
+            run.append(child)
+    flush()
+    return blocks
+
+
+def _is_block(el: Tag) -> bool:
+    if el.name in _IGNORED_TAGS:
+        return False
+    return el.name in _BLOCK_TAGS or _has_block_child(el)
+
+
+def _has_block_child(el: Tag) -> bool:
+    return any(isinstance(c, Tag) and _is_block(c) for c in el.children)
 
 
 def _process_list(el: Tag, *, ordered: bool) -> list[ParsedBlock]:
@@ -154,7 +232,9 @@ def _inline_text(el: Tag) -> str:
     return _normalize(_render_inline(el))
 
 
-def _render_inline(node: object) -> str:
+def _render_inline(node: object) -> str:  # noqa: PLR0911
+    if isinstance(node, PreformattedString):  # comments, doctypes, CDATA...
+        return ""
     if isinstance(node, NavigableString):
         return str(node)
     if not isinstance(node, Tag):
