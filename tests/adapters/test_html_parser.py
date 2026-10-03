@@ -105,6 +105,79 @@ def test_inline_tags_inside_list_item_do_not_add_spaces() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Checklists
+# ---------------------------------------------------------------------------
+
+_BULLET_TODO = '<input type="checkbox" class="list-bullet-todo"/>'
+
+
+def _li(text: str, checked: str | None = None) -> str:
+    attr = f' data-checked="{checked}"' if checked is not None else ""
+    return (
+        f'<li{attr}><div class="list-bullet-todo-container">{_BULLET_TODO}</div>'
+        f'<div class="list-content"><div class="para">{text}</div></div></li>'
+    )
+
+
+def test_todo_list_items_keep_checked_state() -> None:
+    html = (
+        f'<ul class="en-todolist" role="list">'
+        f"{_li('done', 'true')}{_li('open', 'false')}</ul>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- [x] done"),
+        ParsedBlock("list_item", "- [ ] open"),
+    ]
+
+
+def test_plain_list_with_hidden_todo_input_has_no_checkbox() -> None:
+    html = f'<ul role="list">{_li("plain")}</ul>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- plain")]
+
+
+def test_plain_list_nested_in_todo_list_stays_plain() -> None:
+    html = (
+        f'<ul class="en-todolist" role="list">{_li("task", "false")}'
+        f'<ul role="list">{_li("detail")}</ul></ul>'
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    payloads = [b.payload for b in parsed.blocks]
+    assert payloads[0] == "- [ ] task"
+    assert "[ ]" not in "".join(payloads[1:])
+    assert "detail" in "".join(payloads[1:])
+
+
+@pytest.mark.parametrize(("checked", "box"), [("true", "[x]"), ("false", "[ ]")])
+def test_legacy_en_todo_paragraph_becomes_checklist_item(checked: str, box: str) -> None:
+    html = (
+        f'<div class="para"><input type="checkbox" class="en-todo" checked="{checked}"/>'
+        "Buy *milk*</div>"
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", f"- {box} Buy \\*milk\\*")]
+
+
+def test_legacy_en_todo_without_checked_attribute_is_unchecked() -> None:
+    html = '<div><input type="checkbox" class="en-todo"/>Task</div>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- [ ] Task")]
+
+
+def test_legacy_en_todo_run_becomes_consecutive_items() -> None:
+    html = "".join(
+        f'<div class="para"><input class="en-todo" checked="{c}"/>{t}</div>'
+        for c, t in [("true", "a"), ("false", "b")]
+    )
+    parsed = parse_html_note(f"<en-note>{html}</en-note>", fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("list_item", "- [x] a"),
+        ParsedBlock("list_item", "- [ ] b"),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Headings
 # ---------------------------------------------------------------------------
 

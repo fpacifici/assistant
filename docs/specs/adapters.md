@@ -150,6 +150,11 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   - `<ul>`/`<ol>` → `list_item` blocks (list style, ordered vs. unordered, is
     encoded in the block's markdown payload text, since the schema's
     `MarkdownBlockType` has no separate ordered/unordered type).
+  - Checklists → `list_item` blocks with a `- [x] ` / `- [ ] ` prefix: items
+    of a `ul.en-todolist` (state from `data-checked`), and Evernote's older
+    `<div><input class="en-todo" checked="true|false"/>…</div>` paragraphs.
+    The hidden `input.list-bullet-todo` Evernote puts in every list item is
+    ignored.
   - `<h2>`–`<h6>` → `heading` blocks.
   - Links are preserved inline within block text.
   - Inline formatting is preserved as Markdown: `b`/`strong` → `**…**`,

@@ -188,6 +188,11 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
     if _has_block_child(el):
         return _process_children(el, title_h1)
 
+    legacy_todo = _legacy_todo_input(el)
+    if legacy_todo is not None:
+        box = "[x]" if legacy_todo.get("checked") == "true" else "[ ]"
+        return [ParsedBlock("list_item", f"- {box} {_inline_text(el)}")]
+
     text = _inline_text(el)
     if not text:
         return []
@@ -238,10 +243,37 @@ def _process_list(el: Tag, *, ordered: bool) -> list[ParsedBlock]:
     for li in el.find_all("li"):
         text = _li_text(li)
         marker = f"{counter}. " if ordered else "- "
+        if _is_todo_list(li.parent):
+            marker += "[x] " if li.get("data-checked") == "true" else "[ ] "
         blocks.append(ParsedBlock("list_item", marker + text))
         if ordered:
             counter += 1
     return blocks
+
+
+def _is_todo_list(el: Tag | None) -> bool:
+    # Evernote puts a hidden input.list-bullet-todo in every <li>; only items
+    # directly in a ul.en-todolist are checklist items.
+    return el is not None and el.name == "ul" and "en-todolist" in (el.get("class") or [])
+
+
+def _legacy_todo_input(el: Tag) -> Tag | None:
+    """Return the ``input.en-todo`` starting ``el``, if any (older ENML checkbox).
+
+    Its ``checked`` attribute is ``"true"`` or ``"false"``, so presence alone
+    does not mean checked.
+    """
+    for child in el.children:
+        if isinstance(child, NavigableString) and not child.strip():
+            continue
+        if (
+            isinstance(child, Tag)
+            and child.name == "input"
+            and "en-todo" in (child.get("class") or [])
+        ):
+            return child
+        return None
+    return None
 
 
 def _li_text(li: Tag) -> str:

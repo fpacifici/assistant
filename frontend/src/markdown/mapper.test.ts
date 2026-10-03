@@ -151,6 +151,17 @@ describe('importer payload contract', () => {
   });
 
   it.each([
+    ['- [x] done', true],
+    ['- [ ] open', false],
+  ])('reads %s as a check list item', (payload, checked) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('checkListItem');
+    expect(blocks[0].props).toMatchObject({ checked });
+    expect(text(blocks[0])).toBe(payload.slice(6));
+  });
+
+  it.each([
     ['A\\[Ix, J\\] \\* B\\_c \\`d\\` \\~e\\~ a\\\\b', 'A[Ix, J] * B_c `d` ~e~ a\\b'],
     ['vector<\u200bint> a < b', 'vector<\u200bint> a < b'],
     ['\\# not a heading', '# not a heading'],
