@@ -220,6 +220,26 @@ describe('importer payload contract', () => {
   });
 
   it.each([
+    ['```\ndef f():\n    return *x*\n```', ''],
+    ['```python\na = 1\n```', 'python'],
+    ['````\n```\nx\n```\n````', ''],
+  ])('reads code block payload %j verbatim', (payload, language) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('codeBlock');
+    const lines = payload.split('\n');
+    expect(text(blocks[0])).toBe(lines.slice(1, -1).join('\n'));
+    if (language) expect(blocks[0].props).toMatchObject({ language });
+  });
+
+  it('reads a multi-paragraph quote payload as one quote', () => {
+    const blocks = load('> one **bold**\n>\n> two');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('quote');
+    expect(text(blocks[0])).toBe('one bold\ntwo');
+  });
+
+  it.each([
     ['- [x] done', true],
     ['- [ ] open', false],
   ])('reads %s as a check list item', (payload, checked) => {

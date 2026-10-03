@@ -36,6 +36,17 @@ def test_first_h1_consumed_as_title_not_duplicated() -> None:
     assert parsed.blocks == [ParsedBlock("heading", "## Sub")]
 
 
+def test_empty_heading_emits_nothing() -> None:
+    parsed = parse_html_note("<h1>Title</h1><h2> </h2><h3><br></h3>", fallback_title="t")
+    assert parsed.blocks == []
+
+
+def test_later_h1_becomes_level_one_heading() -> None:
+    parsed = parse_html_note("<h1>Title</h1><h1>Section</h1>", fallback_title="t")
+    assert parsed.title == "Title"
+    assert parsed.blocks == [ParsedBlock("heading", "# Section")]
+
+
 # ---------------------------------------------------------------------------
 # web.clip skip
 # ---------------------------------------------------------------------------
@@ -50,6 +61,24 @@ def test_web_clip_source_is_skipped() -> None:
     assert parsed.skip is True
     assert parsed.title == ""
     assert parsed.blocks == []
+
+
+def test_web_clip_is_parsed_when_included() -> None:
+    html = (
+        '<meta itemprop="source" content="web.clip">'
+        "<h1>Some clipped page</h1><p>content</p>"
+    )
+    parsed = parse_html_note(html, fallback_title="fallback", include_web_clips=True)
+    assert parsed.skip is False
+    assert parsed.web_clip is True
+    assert parsed.title == "Some clipped page"
+    assert parsed.blocks == [ParsedBlock("paragraph", "content")]
+
+
+def test_skipped_web_clip_is_flagged_as_web_clip() -> None:
+    html = '<meta itemprop="source" content="web.clip"><p>content</p>'
+    parsed = parse_html_note(html, fallback_title="fallback")
+    assert parsed.web_clip is True
 
 
 def test_non_web_clip_source_not_skipped() -> None:
@@ -509,6 +538,15 @@ def test_list_item_text_that_looks_like_a_list_is_escaped() -> None:
     assert parsed.blocks == [ParsedBlock("list_item", r"- \- dash")]
 
 
+def test_link_without_text_is_dropped() -> None:
+    html = (
+        '<ul><li><a href="http://share"><svg></svg></a></li>'
+        '<li>x <a href="u"> </a></li></ul>'
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("list_item", "- x")]
+
+
 def test_link_url_is_not_escaped() -> None:
     html = '<p><a href="http://x.com/a_b*c">a_b</a></p>'
     parsed = parse_html_note(html, fallback_title="t")
@@ -580,14 +618,18 @@ def test_cell_keeps_inline_formatting() -> None:
     assert parsed.blocks == [ParsedBlock("paragraph", payload)]
 
 
-def test_nested_table_is_flattened_into_its_cell() -> None:
+def test_table_holding_tables_is_layout_and_recursed_into() -> None:
     html = (
-        "<table><tr><td>outer</td><td>"
+        "<table><tr><td><p>intro</p>"
         "<table><tr><td>i1</td><td>i2</td></tr></table>"
-        "</td></tr></table>"
+        "</td><td>side</td></tr></table>"
     )
     parsed = parse_html_note(html, fallback_title="t")
-    assert parsed.blocks == [ParsedBlock("paragraph", "| outer | i1 i2 |\n| --- | --- |")]
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "intro"),
+        ParsedBlock("paragraph", "| i1 | i2 |\n| --- | --- |"),
+        ParsedBlock("paragraph", "side"),
+    ]
 
 
 def test_evernote_wrapped_table() -> None:
@@ -664,6 +706,96 @@ def test_attachment_caption_inside_list_item_is_not_rendered() -> None:
     html = f"<ul><li>item{_attachment_card('Untitled Attachment')}</li></ul>"
     parsed = parse_html_note(html, fallback_title="t")
     assert parsed.blocks == [ParsedBlock("list_item", "- item")]
+
+
+# ---------------------------------------------------------------------------
+# Code blocks, quotes, rules and media (common in web clips)
+# ---------------------------------------------------------------------------
+
+
+def test_pre_becomes_fenced_code_block_keeping_lines() -> None:
+    html = "<pre>def f():\n    return *x*\n</pre>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("code_block", "```\ndef f():\n    return *x*\n```"),
+    ]
+
+
+def test_pre_with_br_and_code_language() -> None:
+    html = '<pre><code class="language-python">a = 1<br>b = 2</code></pre>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("code_block", "```python\na = 1\nb = 2\n```")]
+
+
+def test_code_block_containing_a_fence_uses_a_longer_fence() -> None:
+    parsed = parse_html_note("<pre>```\nx\n```</pre>", fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("code_block", "````\n```\nx\n```\n````")]
+
+
+def test_empty_pre_emits_nothing() -> None:
+    parsed = parse_html_note("<pre>  \n</pre>", fallback_title="t")
+    assert parsed.blocks == []
+
+
+def test_evernote_codeblock_lines() -> None:
+    html = (
+        '<en-codeblock><div data-plaintext="true">first line</div>'
+        '<div data-plaintext="true"><br></div>'
+        '<div data-plaintext="true">  third &lt;line&gt;</div></en-codeblock>'
+    )
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("code_block", "```\nfirst line\n\n  third <line>\n```"),
+    ]
+
+
+def test_blockquote_becomes_quote_block() -> None:
+    html = "<blockquote>Quoted <b>text</b></blockquote>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("blockquote", "> Quoted **text**")]
+
+
+def test_blockquote_with_several_paragraphs_is_one_block() -> None:
+    html = "<blockquote><p>one</p><p>two</p></blockquote>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("blockquote", "> one\n>\n> two")]
+
+
+def test_hr_emits_nothing() -> None:
+    parsed = parse_html_note("<p>a</p><hr><p>b</p>", fallback_title="t")
+    assert [b.payload for b in parsed.blocks] == ["a", "b"]
+
+
+@pytest.mark.parametrize(
+    "media",
+    [
+        '<iframe src="https://example.com/embed"></iframe>',
+        '<video src="v.mp4">Your browser does not support video</video>',
+        '<picture><source srcset="a.webp"></picture>',
+        '<audio src="a.mp3"></audio>',
+    ],
+)
+def test_media_becomes_attachment_placeholder(media: str) -> None:
+    parsed = parse_html_note(f"<p>a</p>{media}", fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "a"),
+        ParsedBlock("paragraph", "Skipped block: attachment"),
+    ]
+
+
+def test_figure_keeps_its_caption() -> None:
+    html = '<figure><img src="x.png"><figcaption>A caption</figcaption></figure>'
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [
+        ParsedBlock("paragraph", "Skipped block: image"),
+        ParsedBlock("paragraph", "A caption"),
+    ]
+
+
+def test_svg_and_noscript_are_ignored() -> None:
+    html = "<p>a<svg><text>icon</text></svg></p><noscript>enable js</noscript>"
+    parsed = parse_html_note(html, fallback_title="t")
+    assert parsed.blocks == [ParsedBlock("paragraph", "a")]
 
 
 # ---------------------------------------------------------------------------

@@ -12,11 +12,13 @@ class HTMLFileImportSource(ImportSource):
     """Treats a root directory's immediate subdirectories as notebooks.
 
     Each `.html` file directly inside a subdirectory (one level only — deeper
-    nesting is ignored) is one note.
+    nesting is ignored) is one note. Web clippings are skipped unless
+    `include_web_clips` is set.
     """
 
-    def __init__(self, root_dir: Path) -> None:
+    def __init__(self, root_dir: Path, *, include_web_clips: bool = False) -> None:
         self._root_dir = root_dir
+        self.include_web_clips = include_web_clips
 
     def list_documents(self) -> list[str]:
         """Return one identifier per `.html` file directly inside each subdirectory.
@@ -39,5 +41,9 @@ class HTMLFileImportSource(ImportSource):
         html_path = self._root_dir / document_id
         notebook_name = Path(document_id).parts[0]
         html = html_path.read_text(encoding="utf-8")
-        parsed = parse_html_note(html, fallback_title=html_path.stem)
+        parsed = parse_html_note(
+            html,
+            fallback_title=html_path.stem,
+            include_web_clips=self.include_web_clips,
+        )
         return ImportedNote(notebook_name=notebook_name, parsed=parsed)

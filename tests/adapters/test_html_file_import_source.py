@@ -100,6 +100,30 @@ def test_get_note_is_a_thin_wrapper_around_parse_html_note(tmp_path: Path) -> No
     assert imported.parsed == expected
 
 
+_WEB_CLIP = '<meta itemprop="source" content="web.clip"><h1>Clip</h1><p>Body</p>'
+
+
+def test_get_note_skips_web_clips_by_default(tmp_path: Path) -> None:
+    (tmp_path / "Work").mkdir()
+    (tmp_path / "Work" / "clip.html").write_text(_WEB_CLIP)
+
+    imported = HTMLFileImportSource(tmp_path).get_note("Work/clip.html")
+
+    assert imported.parsed.skip is True
+
+
+def test_get_note_parses_web_clips_when_included(tmp_path: Path) -> None:
+    (tmp_path / "Work").mkdir()
+    (tmp_path / "Work" / "clip.html").write_text(_WEB_CLIP)
+
+    source = HTMLFileImportSource(tmp_path, include_web_clips=True)
+    imported = source.get_note("Work/clip.html")
+
+    assert imported.parsed.skip is False
+    assert imported.parsed.web_clip is True
+    assert imported.parsed.title == "Clip"
+
+
 def test_get_note_uses_file_stem_as_fallback_title(tmp_path: Path) -> None:
     work = tmp_path / "Work"
     work.mkdir()

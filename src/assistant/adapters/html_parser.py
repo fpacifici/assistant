@@ -8,14 +8,33 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from bs4.element import PreformattedString
 
-_HEADING_LEVELS = {"h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+# The first <h1> is the note title; any later <h1> is a level-1 heading.
+_HEADING_LEVELS = {"h1": 1, "h2": 2, "h3": 3, "h4": 4, "h5": 5, "h6": 6}
 
 # Tags that never render as content (structural/metadata-only).
-_IGNORED_TAGS = {"head", "meta", "link", "style", "script", "title"}
+_IGNORED_TAGS = {
+    "head",
+    "meta",
+    "link",
+    "style",
+    "script",
+    "title",
+    "svg",
+    "noscript",
+    "template",
+}
+
+# Embedded media, imported as an attachment placeholder like Evernote
+# resources.
+_MEDIA_TAGS = {"picture", "video", "audio", "iframe", "object", "embed", "canvas"}
 
 # Formatting/inline tags that fold into an ancestor block's text rather than
 # ever becoming a block of their own.
@@ -90,6 +109,7 @@ _BLOCK_TAGS = {
     "td",
     "th",
     "img",
+    "en-codeblock",
 }
 
 
@@ -138,28 +158,35 @@ class ParsedNote:
 
     title: str
     blocks: list[ParsedBlock] = field(default_factory=list)
-    skip: bool = False  # True => web.clip; caller must not persist anything
+    skip: bool = False  # True => skipped web.clip; caller must not persist anything
+    web_clip: bool = False  # the note is a web clipping (source=web.clip)
 
 
-def parse_html_note(html: str, *, fallback_title: str) -> ParsedNote:
+def parse_html_note(
+    html: str, *, fallback_title: str, include_web_clips: bool = False
+) -> ParsedNote:
     """Parse an exported HTML note into a title and ordered blocks.
 
     Args:
         html: The raw HTML document (or fragment) to parse.
         fallback_title: Title to use when neither an ``<h1>`` nor a
             ``meta itemprop=title`` tag is present.
+        include_web_clips: Parse web clippings (``meta itemprop=source`` =
+            ``web.clip``) like any other note instead of marking them
+            ``skip``.
     """
     soup = BeautifulSoup(html, "html.parser")
 
     source_meta = soup.find("meta", attrs={"itemprop": "source"})
-    if isinstance(source_meta, Tag) and source_meta.get("content") == "web.clip":
-        return ParsedNote(title="", blocks=[], skip=True)
+    web_clip = isinstance(source_meta, Tag) and source_meta.get("content") == "web.clip"
+    if web_clip and not include_web_clips:
+        return ParsedNote(title="", blocks=[], skip=True, web_clip=True)
 
     title_h1 = soup.find("h1")
     title = _resolve_title(soup, title_h1, fallback_title)
 
     blocks = _process_children(soup, title_h1)
-    return ParsedNote(title=title, blocks=blocks, skip=False)
+    return ParsedNote(title=title, blocks=blocks, skip=False, web_clip=web_clip)
 
 
 def _resolve_title(soup: BeautifulSoup, title_h1: Tag | None, fallback_title: str) -> str:
@@ -174,22 +201,13 @@ def _resolve_title(soup: BeautifulSoup, title_h1: Tag | None, fallback_title: st
 
 
 def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: PLR0911
-    if el is title_h1:
+    if el is title_h1 or el.name in _IGNORED_TAGS:
         return []
-
-    name = el.name
-    if name in _IGNORED_TAGS:
-        return []
-    if name in _HEADING_LEVELS:
-        level = _HEADING_LEVELS[name]
-        return [ParsedBlock("heading", f"{'#' * level} {_inline_text(el)}")]
-    if name in ("ul", "ol"):
-        return _process_list(el)
-    if name == "table":
+    handler = _BLOCK_HANDLERS.get(el.name)
+    if handler is not None:
+        return handler(el, title_h1)
+    if el.name == "table" and el.find("table") is None:
         return _process_table(el)
-    if name == "img":
-        # TODO: image support (see spec Out of Scope)
-        return [ParsedBlock("paragraph", "Skipped block: image")]
     if _is_attachment(el):
         # TODO: attachment support (see spec Out of Scope). The card's caption
         # (the file name) is not note content.
@@ -207,6 +225,18 @@ def _process_node(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:  # noqa: 
     if not text:
         return []
     return [ParsedBlock("paragraph", text)]
+
+
+def _process_heading(el: Tag, _title_h1: Tag | None) -> list[ParsedBlock]:
+    text = _inline_text(el)
+    if not text:
+        return []
+    return [ParsedBlock("heading", f"{'#' * _HEADING_LEVELS[el.name]} {text}")]
+
+
+def _process_image(_el: Tag, _title_h1: Tag | None) -> list[ParsedBlock]:
+    # TODO: image support (see spec Out of Scope)
+    return [ParsedBlock("paragraph", "Skipped block: image")]
 
 
 def _process_children(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:
@@ -242,8 +272,8 @@ def _is_block(el: Tag) -> bool:
 
 
 def _is_attachment(el: Tag) -> bool:
-    """An Evernote attachment: an ``en-media`` or a resource card (not an ``<img>``)."""
-    if el.name == "en-media":
+    """An attachment: embedded media, ``en-media`` or a resource card (not ``<img>``)."""
+    if el.name == "en-media" or el.name in _MEDIA_TAGS:
         return True
     return el.name != "img" and el.has_attr("data-resource-hash")
 
@@ -252,13 +282,71 @@ def _has_block_child(el: Tag) -> bool:
     return any(isinstance(c, Tag) and _is_block(c) for c in el.children)
 
 
+def _process_code_block(el: Tag, _title_h1: Tag | None = None) -> list[ParsedBlock]:
+    """Render ``<pre>`` or Evernote's ``<en-codeblock>`` as a fenced code block.
+
+    The text is kept verbatim (no Markdown escaping); ``<br>`` and block
+    children (one ``<div>`` per line in ``en-codeblock``) become line breaks.
+    """
+    text = _preformatted_text(el).strip("\n")
+    if not text.strip():
+        return []
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [ParsedBlock("code_block", f"{fence}{_code_language(el)}\n{text}\n{fence}")]
+
+
+def _preformatted_text(node: Tag) -> str:
+    parts: list[str] = []
+    for child in node.children:
+        if isinstance(child, PreformattedString):
+            continue
+        if isinstance(child, NavigableString):
+            parts.append(str(child))
+        elif isinstance(child, Tag) and child.name not in _IGNORED_TAGS:
+            if child.name == "br":
+                parts.append("\n")
+            elif child.name in _BLOCK_TAGS:
+                parts.append(_preformatted_text(child).rstrip("\n") + "\n")
+            else:
+                parts.append(_preformatted_text(child))
+    return "".join(parts)
+
+
+def _code_language(el: Tag) -> str:
+    """The ``language-xxx`` class of a code block or its ``<code>``, if any."""
+    for tag in (el, el.find("code")):
+        if isinstance(tag, Tag):
+            for cls in tag.get("class") or []:
+                if cls.startswith("language-") and re.fullmatch(r"[\w+#.-]+", cls[9:]):
+                    return cls[9:]
+    return ""
+
+
+def _process_blockquote(el: Tag, title_h1: Tag | None) -> list[ParsedBlock]:
+    """Render a ``<blockquote>`` as one quote block.
+
+    The editor's quote holds inline content only, so the inner blocks become
+    lines of the quote, separated by empty quote lines.
+    """
+    inner = _process_children(el, title_h1)
+    if not inner:
+        return []
+    paragraphs = [
+        "\n".join(f"> {line}".rstrip() for line in block.payload.split("\n"))
+        for block in inner
+    ]
+    return [ParsedBlock("blockquote", "\n>\n".join(paragraphs))]
+
+
 def _process_table(el: Tag) -> list[ParsedBlock]:
     """Render a table as one GFM pipe table in a ``paragraph`` block.
 
     The editor stores its own tables the same way. The first row is the
     header. GFM has no merged cells, so a ``colspan`` cell repeats its content
     and a ``rowspan`` leaves the cells below it empty: no text is lost.
-    A table nested in a cell is flattened into that cell's text.
+    Only tables without nested tables get here: a table holding tables is
+    page layout (common in web clips) and is recursed into like a container.
     """
     rows: list[list[str]] = []
     spanned: dict[int, int] = {}  # column -> rows still covered by a rowspan
@@ -310,7 +398,7 @@ class _ListItem:
         return f"{self.number}. " if self.number is not None else f"- {self.box}"
 
 
-def _process_list(el: Tag) -> list[ParsedBlock]:
+def _process_list(el: Tag, _title_h1: Tag | None = None) -> list[ParsedBlock]:
     """Emit one ``list_item`` block per top-level item of ``el``.
 
     Each block's payload is the item line followed by its sub-items as
@@ -455,7 +543,7 @@ def _render_inline(node: object, *, markdown: bool = True) -> str:  # noqa: PLR0
     marker = _FORMAT_MARKERS.get(node.name) if markdown else None
     if marker:
         return _wrap(marker, inner)
-    if markdown and node.name == "a" and node.get("href"):
+    if markdown and node.name == "a" and node.get("href") and inner.strip():
         return f"[{inner}]({node['href']})"
     if _is_block(node):
         # Block boundaries inside inline content (e.g. several div.para in one
@@ -518,3 +606,16 @@ def _code_span(text: str) -> str:
 
 def _normalize(text: str) -> str:
     return " ".join(text.split())
+
+
+# Elements with their own block rendering, by tag name.
+_BLOCK_HANDLERS: dict[str, Callable[[Tag, Tag | None], list[ParsedBlock]]] = {
+    **dict.fromkeys(_HEADING_LEVELS, _process_heading),
+    "ul": _process_list,
+    "ol": _process_list,
+    "pre": _process_code_block,
+    "en-codeblock": _process_code_block,
+    "blockquote": _process_blockquote,
+    "hr": lambda _el, _title_h1: [],
+    "img": _process_image,
+}

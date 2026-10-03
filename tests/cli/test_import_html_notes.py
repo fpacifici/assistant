@@ -181,6 +181,30 @@ def test_override_flag_defaults_false(tmp_path: Path) -> None:
     assert kwargs["override"] is False
 
 
+@pytest.mark.parametrize(
+    ("extra", "expected"), [((), False), (("--include-web-clips",), True)]
+)
+def test_include_web_clips_flag_forwarded_to_import_source(
+    tmp_path: Path, extra: tuple[str, ...], expected: bool
+) -> None:
+    _mock_session, mock_factory = _mock_session_factory()
+    user = _mock_user()
+
+    with (
+        patch(
+            "assistant.cli.import_html_notes.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("assistant.cli.import_html_notes.authenticate_user", return_value=user),
+        patch("assistant.cli.import_html_notes.run_import") as mock_run_import,
+        patch("sys.argv", _argv(tmp_path, "--password", "pw", *extra)),
+    ):
+        main()
+
+    args, _kwargs = mock_run_import.call_args
+    assert args[1].include_web_clips is expected
+
+
 def test_authenticated_user_forwarded_to_run_import(tmp_path: Path) -> None:
     _mock_session, mock_factory = _mock_session_factory()
     user = _mock_user()

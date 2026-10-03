@@ -45,13 +45,14 @@ notes-import path, not removed, deleted, or migrated in this iteration.
    as a fallback title when there's no `<h1>`, so that notes without a visible
    heading still get a sensible name instead of an empty title.
 5. As the person running the import, I want notes marked `meta
-   itemprop=source` = `web.clip` skipped entirely, so that web clippings (which
-   aren't really "my notes") don't clutter my notebooks.
+   itemprop=source` = `web.clip` skipped by default, so that web clippings
+   (which aren't really "my notes") don't clutter my notebooks, and I want an
+   `--include-web-clips` option to import them too when I do want them.
 6. As the person running the import, I want bulleted and numbered lists
    preserved as lists, including their nesting, so that imported notes keep
    their original structure instead of collapsing into flat paragraphs.
 7. As the person running the import, I want headings below the title (`<h2>`
-   through `<h6>`) preserved as headings, so that imported notes keep their
+   through `<h6>`, and any `<h1>` after the title) preserved as headings, so that imported notes keep their
    internal structure and are easy to navigate.
 8. As the person running the import, I want links inside notes preserved, so
    that references to other pages or notes still work after import.
@@ -145,7 +146,10 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   otherwise fall back to `meta itemprop=title`; otherwise fall back to the
   filename. The first `<h1>`, if used as the title, is consumed as the title
   marker and not also emitted as a heading block in the note body.
-- A note is skipped entirely if `meta itemprop=source` has content `web.clip`.
+- A note is skipped entirely if `meta itemprop=source` has content `web.clip`,
+  unless the import runs with `--include-web-clips`; then it is parsed like
+  any other note. `ImportStats` counts skipped web clips
+  (`notes_skipped_web_clip`) and imported ones (`notes_imported_web_clip`).
 - Block mapping:
   - `<ul>`/`<ol>` → `list_item` blocks (list style, ordered vs. unordered, is
     encoded in the block's markdown payload text, since the schema's
@@ -168,8 +172,18 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     `<div><input class="en-todo" checked="true|false"/>…</div>` paragraphs.
     The hidden `input.list-bullet-todo` Evernote puts in every list item is
     ignored.
-  - `<h2>`–`<h6>` → `heading` blocks.
-  - Links are preserved inline within block text.
+  - `<h2>`–`<h6>`, and any `<h1>` after the title, → `heading` blocks. Empty
+    headings are dropped.
+  - `<pre>` and Evernote's `<en-codeblock>` → `code_block` blocks holding a
+    fenced code block with the text verbatim (`<br>` and per-line `<div>`s
+    become line breaks; a `language-xxx` class becomes the fence's info
+    string).
+  - `<blockquote>` → one `blockquote` block; its inner blocks become lines
+    of the quote, separated by empty quote lines, because the editor's quote
+    holds inline content only.
+  - `<hr>` → nothing. `svg`, `noscript` and `template` are ignored.
+  - Links are preserved inline within block text; a link with no text
+    (e.g. an icon-only share button) is dropped.
   - Inline formatting is preserved as Markdown: `b`/`strong` → `**…**`,
     `i`/`em` → `*…*`, `s`/`strike`/`del` → `~~…~~`, `code` → a code span.
     A paragraph that is only bold (Evernote's section headers) stays a
@@ -181,15 +195,18 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     rows are padded. GFM has no merged cells, so a `colspan` cell repeats
     its content and a `rowspan` leaves the cells below it empty. Cells keep
     inline formatting, `|` is escaped, and a table nested in a cell is
-    flattened into that cell's text.
+    flattened into that cell's text. A table that contains tables is page
+    layout (common in web clips): it is recursed into like a container and
+    only its innermost tables become pipe tables.
   - Images are not rendered, but they are **not silently dropped** either:
     each produces a single placeholder `paragraph` block, in its original
     position, reading `Skipped block: image`, so the note's structure and
     block count reflect the original content. Real image rendering remains
     a TODO for a future iteration (see Out of Scope).
-  - Attachments get the same treatment: an `en-media` element or an
+  - Attachments get the same treatment: an `en-media` element, an
     Evernote resource card (an element with `data-resource-hash` other
-    than `<img>`) becomes `Skipped block: attachment`. The card's caption
+    than `<img>`), or embedded media (`iframe`, `video`, `audio`, `picture`,
+    `object`, `embed`, `canvas`) becomes `Skipped block: attachment`. The card's caption
     (the file name, often `Untitled Attachment`) is not imported as text.
   - This placeholder treatment applies only to element types the parser
     recognizes and deliberately does not render (currently: `img` and
