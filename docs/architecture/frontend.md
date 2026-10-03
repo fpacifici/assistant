@@ -118,6 +118,10 @@ The same SPA serves desktop, tablets and phones
 - **Mobile editor**: Save in the top bar, status line under it, Share/Debug
   in the `⋯` menu, debug view full screen, sticky horizontally scrolling
   formatting toolbar.
+- **Editor scrolling**: on desktop the note editor fills `.main` and the
+  BlockNote container (`.editor-content > .bn-container`) is the scroll
+  area, so the formatting toolbar and Save bar stay visible. On mobile the
+  editor grows with its content and `.main` scrolls instead.
 - **Dialogs**: `.modal` (share dialog, confirmations) is full screen on
   mobile. Auth pages and `InvitesPage` are responsive CSS only;
   `InvitesPage` renders `MobileTopBar` on mobile.

@@ -586,6 +586,13 @@ ul {
   overflow: hidden;
 }
 
+/* Desktop: the editor scrolls inside the box, keeping both toolbars in view */
+.editor-content > .bn-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .editor-content.with-debug {
   flex-direction: row;
   gap: 0;
@@ -907,7 +914,8 @@ ul {
 
 [data-layout="mobile"] .markdown-toolbar {
   position: sticky;
-  top: 0;
+  /* Stick to the scrollport edge, not inside .main's 12px padding */
+  top: -12px;
   z-index: 10;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -928,9 +936,15 @@ ul {
   font-size: 15px;
 }
 
+/* Mobile: the editor grows with its content and .main scrolls the page */
 [data-layout="mobile"] .editor-content {
   flex: none;
   min-height: 50vh;
+  overflow: visible;
+}
+
+[data-layout="mobile"] .editor-content > .bn-container {
+  flex: none;
   overflow: visible;
 }
 
