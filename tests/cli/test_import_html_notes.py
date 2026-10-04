@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from assistant.adapters.notes_import import (
+    DuplicateNote,
+    FailedNote,
+    FailedNotebook,
+    ImportReport,
+    KeptNote,
+)
 from assistant.adapters.plugins.html_file import HTMLFileImportSource
 from assistant.auth.service import AuthError
 from assistant.cli.import_html_notes import main
@@ -269,3 +278,51 @@ def test_auth_error_returns_one(tmp_path: Path) -> None:
 
     assert result == 1
     mock_run_import.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Report output
+# ---------------------------------------------------------------------------
+
+
+def test_report_is_logged_with_notes_needing_review(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _mock_session, mock_factory = _mock_session_factory()
+    user = _mock_user()
+    now = datetime.now(UTC)
+    report = ImportReport(
+        created=2,
+        kept_modified=[
+            KeptNote(
+                note_id=uuid.uuid4(),
+                notebook_id=uuid.uuid4(),
+                title="Edited",
+                notebook="NB",
+                source_path="NB/edited.html",
+                imported_at=now,
+                modified_at=now,
+            ),
+        ],
+        duplicate_title=[DuplicateNote("Dup", "NB", "NB/dup (1).html")],
+        notebooks_failed=[FailedNotebook("Theirs", "owned by another user", 3)],
+        failed=[FailedNote("NB/bad.html", "boom")],
+    )
+
+    with (
+        patch(
+            "assistant.cli.import_html_notes.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("assistant.cli.import_html_notes.authenticate_user", return_value=user),
+        patch("assistant.cli.import_html_notes.run_import", return_value=report),
+        patch("sys.argv", _argv(tmp_path, "--password", "pw")),
+        caplog.at_level(logging.INFO),
+    ):
+        assert main() == 0
+
+    assert "2 created" in caplog.text
+    assert "NB/edited.html" in caplog.text
+    assert "NB/dup (1).html" in caplog.text
+    assert "Theirs" in caplog.text
+    assert "NB/bad.html" in caplog.text
