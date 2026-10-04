@@ -28,6 +28,11 @@ export interface Notebook {
   permissions: string[];
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+}
+
 export interface Note {
   id: string;
   notebook_id: string;
@@ -36,6 +41,8 @@ export interface Note {
   creation_timestamp: string;
   update_timestamp: string;
   permissions: string[];
+  /** The caller's own tags on this note. */
+  tags: Tag[];
 }
 
 export interface Entitlement {
