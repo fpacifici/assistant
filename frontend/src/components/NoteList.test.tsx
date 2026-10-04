@@ -50,8 +50,8 @@ describe('NoteList', () => {
 
   it('renders notes list', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'First Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'] },
-      { id: 'note-2', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Second Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'First Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
+      { id: 'note-2', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Second Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
     ]);
     renderNoteList();
 
@@ -59,6 +59,21 @@ describe('NoteList', () => {
       expect(screen.getByText('First Note')).toBeInTheDocument();
     });
     expect(screen.getByText('Second Note')).toBeInTheDocument();
+  });
+
+  it('renders tag chips under each note with a +N overflow', async () => {
+    const tags = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ id: `t-${name}`, name }));
+    mockFetchNotes.mockResolvedValue([
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Tagged', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags },
+    ]);
+    renderNoteList();
+
+    await waitFor(() => expect(screen.getByText('Tagged')).toBeInTheDocument());
+    const row = screen.getByText('Tagged').closest('li')!;
+    expect(within(row).getByText('a')).toBeInTheDocument();
+    expect(within(row).getByText('c')).toBeInTheDocument();
+    expect(within(row).queryByText('d')).not.toBeInTheDocument();
+    expect(within(row).getByText('+2')).toHaveAttribute('title', 'd, e');
   });
 
   it('shows empty state', async () => {
@@ -76,7 +91,7 @@ describe('NoteList', () => {
     mockCreateNote.mockResolvedValue({
       id: 'note-new', notebook_id: 'nb-1', owner_id: 'test-user',
       title: 'My Note', creation_timestamp: '', update_timestamp: '',
-      permissions: ['view_note'],
+      permissions: ['view_note'], tags: [],
     });
 
     renderNoteList();
@@ -95,7 +110,7 @@ describe('NoteList', () => {
   it('asks for confirmation and deletes on confirm', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Delete Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Delete Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
     ]);
     mockDeleteNote.mockResolvedValue(undefined);
 
@@ -120,7 +135,7 @@ describe('NoteList', () => {
   it('does not delete when the confirmation is cancelled', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Keep Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Keep Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
     ]);
 
     renderNoteList();
@@ -136,7 +151,7 @@ describe('NoteList', () => {
   it('confirms deletion in mobile mode too', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Phone Note', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Phone Note', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
     ]);
 
     renderWithProviders(
@@ -160,7 +175,7 @@ describe('NoteList permission gating', () => {
 
   it('hides share and delete buttons when permissions lack them', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Read Only', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Read Only', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
     ]);
     renderNoteList();
 
@@ -173,7 +188,7 @@ describe('NoteList permission gating', () => {
 
   it('shows share button when share_note permission is present', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Shared', creation_timestamp: '', update_timestamp: '', permissions: ['view_note', 'share_note'] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Shared', creation_timestamp: '', update_timestamp: '', permissions: ['view_note', 'share_note'], tags: [] },
     ]);
     renderNoteList();
 

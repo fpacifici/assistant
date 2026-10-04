@@ -193,6 +193,8 @@ It also opens `ImportDialog` (an "Import" button in its header on desktop, an "I
 
 Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD pattern as NotebookList. Returns `null` when no notebook is selected.
 
+Each row shows the caller's tags on the note as read-only chips under the title (at most three, then a `+N` chip whose tooltip lists the rest), from `Note.tags` in the list response.
+
 Both lists gate share/delete actions on the item's `permissions`, open `ShareDialog` to manage entitlements, and ask for confirmation (`ConfirmDialog`) before deleting.
 
 ### NoteEditor
@@ -203,7 +205,8 @@ The main editing surface (`components/NoteEditor.tsx`). Uses BlockNote (`useCrea
 2. **Edit**: The `BlockNoteView` component provides a rich WYSIWYG editing experience with a built-in formatting toolbar (bold, italic, headings, lists, code, tables, text colors, etc.). Changes are tracked via `editor.onChange()` to set the dirty flag.
 3. **Save**: Calls `executeSave()` to reconcile the current document against the server. Updates the snapshot on success. Handles 409 conflicts.
 4. **Toolbar and attachments**: `MarkdownToolbar` applies block types/styles, indents/unindents list items (`nestBlock`/`unnestBlock`, same as Tab/Shift+Tab; the nested item is saved inside its parent block's markdown) and uploads files as attachment nodes, listed by `AttachmentList` below the body.
-5. **Unsaved-changes guard**: `useUnsavedChangesGuard(isDirty)` (`hooks/`) uses `useBlocker` to intercept pathname-changing navigations (links, the mobile back arrow, browser back/swipe) with a "Discard unsaved changes?" dialog, and registers a `beforeunload` prompt while dirty. Query-string-only changes (e.g. `?layout=`) are not blocked.
+5. **Tags**: `TagEditor` (between the toolbar and the body, both layouts) shows the caller's tags on the note as removable chips and an "Add tag" combobox. Suggestions come from `GET /tag` (query key `['tags']`), filtered case-insensitively and excluding tags already on the note; an unmatched name offers `Create "<name>"`, which tags the note by name so the backend creates the tag. Arrow keys/Enter/Escape drive the list. Tagging needs only `view_note`, so it works on read-only notes. On success it writes the returned tags into the `['note', nb, note]` cache and invalidates `['notes', nb]` (and `['tags']` after a create). Tags are saved immediately, independent of the Save button.
+6. **Unsaved-changes guard**: `useUnsavedChangesGuard(isDirty)` (`hooks/`) uses `useBlocker` to intercept pathname-changing navigations (links, the mobile back arrow, browser back/swipe) with a "Discard unsaved changes?" dialog, and registers a `beforeunload` prompt while dirty. Query-string-only changes (e.g. `?layout=`) are not blocked.
 
 Holds a `ServerRegistry` and a block snapshot in refs that persist across renders. All save state (`isDirty`, `saving`, `status`) lives here; only where the controls render differs between layouts.
 
@@ -249,7 +252,7 @@ All API modules live in `src/api/` and use a shared `apiFetch()` wrapper (`api/c
 - Sets `Content-Type: application/json` when there is a body and sends cookies (`credentials: 'include'`)
 - Throws `ApiError` (with HTTP status) on non-OK responses
 
-Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`.
+Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`, `tags.ts`.
 
 ## Data Flow Summary
 

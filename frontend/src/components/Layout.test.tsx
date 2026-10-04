@@ -45,7 +45,13 @@ vi.mock('../api/notes', () => ({
     creation_timestamp: '',
     update_timestamp: '',
     permissions: [],
+    tags: [],
   }),
+}));
+vi.mock('../api/tags', () => ({
+  fetchTags: vi.fn().mockResolvedValue([]),
+  addNoteTag: vi.fn(),
+  removeNoteTag: vi.fn(),
 }));
 
 vi.mock('./NotebookList', () => ({

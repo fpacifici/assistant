@@ -11,6 +11,7 @@ import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
 import MarkdownToolbar from './MarkdownToolbar';
 import AttachmentList from './AttachmentList';
+import TagEditor from './TagEditor';
 import DebugBlockView from './DebugBlockView';
 import ShareDialog from './ShareDialog';
 import { TopBarActions } from './TopBarSlot';
@@ -170,6 +171,7 @@ export default function NoteEditor() {
         noteId={noteId}
         onAttached={handleAttached}
       />
+      {note && <TagEditor notebookId={notebookId} noteId={noteId} tags={note.tags} />}
       <div className={`editor-content${debugOpen && !isMobile ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}

@@ -20,6 +20,12 @@ vi.mock('../api/nodes', async (importOriginal) => ({
 
 let onChangeCallback: (() => void) | undefined;
 
+vi.mock('../api/tags', () => ({
+  fetchTags: vi.fn().mockResolvedValue([]),
+  addNoteTag: vi.fn(),
+  removeNoteTag: vi.fn(),
+}));
+
 vi.mock('../markdown/reconcile', () => ({
   executeSave: vi.fn(),
 }));
@@ -73,6 +79,7 @@ function makeNote(permissions: string[]): Note {
     creation_timestamp: '',
     update_timestamp: '',
     permissions,
+    tags: [],
   };
 }
 
