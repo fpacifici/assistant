@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import uuid
+
 
 class GoogleAuthFlowError(Exception):
     """Base exception for the google_auth module."""
@@ -29,3 +34,24 @@ class GoogleAccountCollisionError(GoogleAuthFlowError):
     def __init__(self, email: str) -> None:
         self.email = email
         super().__init__(f"{email} is already registered with a different provider")
+
+
+class GooglePasswordAccountExistsError(GoogleAccountCollisionError):
+    """This email belongs to a password account, which can be swapped to Google.
+
+    Carries the account and the verified Google identity so the caller
+    can offer the swap without re-running the OAuth flow.
+    """
+
+    def __init__(self, email: str, *, user_id: uuid.UUID, sub: str) -> None:
+        super().__init__(email)
+        self.user_id = user_id
+        self.sub = sub
+
+
+class GoogleReauthMismatchError(GoogleAuthFlowError):
+    """A re-authentication returned a Google identity of a different user."""
+
+
+class GoogleHandoffTokenInvalidError(GoogleAuthFlowError):
+    """A swap/reauth handoff token is missing, malformed, or expired."""

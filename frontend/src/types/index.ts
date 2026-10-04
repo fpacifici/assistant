@@ -4,6 +4,7 @@ export interface User {
   firstname: string;
   lastname: string;
   invite_quota_remaining: number;
+  auth_provider: 'password' | 'google';
 }
 
 export interface Invite {

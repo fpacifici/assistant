@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
@@ -45,5 +46,30 @@ class UserResponse(BaseModel):
     firstname: str
     lastname: str
     invite_quota_remaining: int
+    auth_provider: Literal["password", "google"] = "password"
 
     model_config = {"from_attributes": True}
+
+
+class GoogleSwapInfo(BaseModel):
+    """Returned by GET /auth/google/swap — the account a pending swap converts."""
+
+    email: str
+
+
+class GoogleSwapRequest(BaseModel):
+    """Request body for POST /auth/google/swap."""
+
+    password: str
+
+
+class GoogleReauthStart(BaseModel):
+    """Returned by POST /auth/google/reauth — where to send the browser."""
+
+    authorization_url: str
+
+
+class SetPasswordRequest(BaseModel):
+    """Request body for POST /auth/credentials/password."""
+
+    password: str = Field(min_length=8)

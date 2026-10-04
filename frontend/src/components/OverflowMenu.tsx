@@ -1,4 +1,4 @@
-/** Mobile `⋯` menu: account details, Invites, Logout, plus view-specific entries. */
+/** Mobile `⋯` menu: account details, Invites, Settings, Logout, plus view-specific entries. */
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -67,6 +67,7 @@ export default function OverflowMenu({ children }: { children?: React.ReactNode 
           {invitesConfig?.invites_enabled && (
             <Link role="menuitem" to="/invites">Invites</Link>
           )}
+          <Link role="menuitem" to="/settings">Settings</Link>
           <button role="menuitem" onClick={logout}>Logout</button>
         </div>
       )}

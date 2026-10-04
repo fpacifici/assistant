@@ -34,3 +34,12 @@ class ConfirmationCooldownError(Exception):
 
 class ConfirmationLimitExceededError(Exception):
     """This registration has already used all MAX_CONFIRMATION_SENDS attempts."""
+
+
+class CredentialSwapError(Exception):
+    """The user's current credential doesn't allow the requested swap.
+
+    E.g. switching to password for a user who already signs in with a
+    password, or switching to Google for a user without a password
+    credential.
+    """

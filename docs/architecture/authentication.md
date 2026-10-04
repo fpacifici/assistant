@@ -94,20 +94,72 @@ invite-acceptance path) which invite is being redeemed — signed with the
 same HS256 secret as access tokens, since this backend keeps no
 server-side session to stash that data in otherwise.
 
-See `Provider collisions` below for what happens when the Google email
-already belongs to a different provider.
+See `Credential swap` below for what happens when the Google email
+already belongs to a password account.
 
-## Provider collisions
+## Credential swap
 
-There is no cross-provider account linking today. Each user has exactly
-one authentication mechanism. If a Google sign-in's email already
-belongs to a *different* provider's credential (a password account,
-currently the only other kind), the attempt is rejected with an
-actionable error rather than silently linking or overwriting anything.
+There is no cross-provider account linking: each user has exactly one
+credential (one authentication mechanism). A user can instead *swap*
+it, replacing one credential with the other. Both directions are
+implemented in `assistant.auth.credentials` and, in one transaction:
 
-A "switch/link mechanism" (e.g. verify your password, then attach a
-Google identity to the same account) is deliberately out of scope here
-and left as future work.
+- delete the old credential row and insert the new one;
+- delete **all** of the user's refresh tokens, ending every session
+  opened with the old credential; the browser that performed the swap
+  gets fresh tokens.
+
+Both directions require proving ownership of the account through the
+credential being removed *and* the one being added.
+
+### Password → Google (from the login page)
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as API
+    participant G as Google
+    B->>A: GET /auth/google
+    A->>G: redirect (consent)
+    G->>A: GET /auth/google/callback
+    Note over A: email belongs to a password account
+    A->>B: Set-Cookie google_swap, redirect /login/switch-to-google
+    B->>A: GET /auth/google/swap
+    A->>B: {email}
+    B->>A: POST /auth/google/swap {password}
+    Note over A: verify password, swap credential
+    A->>B: auth cookies
+```
+
+When a Google sign-in's email belongs to a password account, the callback
+doesn't fail. It stores the verified Google identity (`user_id`, `email`,
+`sub`) in a signed `google_swap` cookie (HttpOnly, 10 minutes, scoped to
+`/auth/google/swap`) and sends the browser to the confirmation page. The
+user confirms with their **current password**: Google proves control of
+the email, the password proves ownership of the account. A still-PENDING
+password account becomes ACTIVE, since Google verified the email.
+
+If the email belongs to a user whose Google credential has a different
+`sub`, the sign-in is still rejected with `?google_error=collision`.
+
+### Google → password (from the settings page)
+
+A Google user must first **re-authenticate with Google**:
+`POST /auth/google/reauth` returns a Google authorization URL whose signed
+`state` carries `reauth_user_id`. The callback checks that the returned
+Google identity is the current user's credential (otherwise
+`/settings?google_error=reauth_mismatch`), sets a signed `google_reauth`
+cookie (HttpOnly, 5 minutes, scoped to `/auth/credentials`), and
+redirects to `/settings?reauth=ok`. The settings page then submits the new
+password to `POST /auth/credentials/password`, which requires both a
+valid access token and a reauth cookie issued for the same user.
+
+### Handoff tokens
+
+`google_swap`, `google_reauth`, the OAuth `state` and access tokens are
+all HS256 JWTs signed with `JWT_SECRET`. The handoff tokens carry a
+`purpose` claim (`google_swap` / `google_reauth`) so none of them is
+accepted in place of another (`assistant.google_auth.handoff`).
 
 ## Data Model
 
@@ -216,8 +268,32 @@ invite-flow attempt, to `/invite/:inviteId`) with a machine-readable
 `?google_error=<code>` the frontend maps to a message. Neither route
 ever returns JSON.
 
-No `POST /auth/link` or other provider-linking endpoint exists — see
-"Provider collisions" above.
+A callback whose `state` carries `reauth_user_id` is a re-authentication,
+not a login: see "Credential swap" above.
+
+### Credential swap
+
+`GET /auth/google/swap` — Returns `{email}` of the pending password →
+Google switch held in the `google_swap` cookie; 401 if there is none.
+
+`POST /auth/google/swap` — Body `{password}`. Completes the switch: 401
+on a wrong password (the pending switch stays usable), 409 if the
+account can no longer be switched. On success sets the auth cookies and
+returns the user.
+
+`DELETE /auth/google/swap` — Abandons the pending switch (204).
+
+`POST /auth/google/reauth` — Authenticated, Google users only (409
+otherwise). Returns `{authorization_url}` to start a re-authentication.
+
+`POST /auth/credentials/password` — Authenticated, plus the
+`google_reauth` cookie of the same user (403 otherwise). Body
+`{password}` (min 8 characters). Replaces the Google credential with a
+password; 409 if the user already uses a password. Sets fresh auth
+cookies and returns the user.
+
+`GET /auth/me` (and the other endpoints returning the user) include
+`auth_provider`: `"password"` or `"google"`.
 
 ## Middleware
 

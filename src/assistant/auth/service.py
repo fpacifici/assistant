@@ -56,6 +56,19 @@ def jwt_secret() -> str:
     return secret
 
 
+def hash_password(password: str) -> str:
+    """Return the argon2 hash stored in a password Credential."""
+    return _ph.hash(password)
+
+
+def verify_password(credential_hash: str, password: str) -> bool:
+    """Return whether password matches an argon2 credential hash."""
+    try:
+        return _ph.verify(credential_hash, password)
+    except VerifyMismatchError:
+        return False
+
+
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -256,7 +269,7 @@ def register_user(  # noqa: PLR0913
     credential = Credential(
         user_id=user.uid,
         provider="password",
-        credential_hash=_ph.hash(password),
+        credential_hash=hash_password(password),
     )
     session.add(credential)
     session.flush()
@@ -296,10 +309,8 @@ def authenticate_user(session: Session, *, email: str, password: str) -> User:
     if credential is None or credential.credential_hash is None:
         raise AuthError("Invalid credentials")  # noqa: TRY003
 
-    try:
-        _ph.verify(credential.credential_hash, password)
-    except VerifyMismatchError as exc:
-        raise AuthError("Invalid credentials") from exc  # noqa: TRY003
+    if not verify_password(credential.credential_hash, password):
+        raise AuthError("Invalid credentials")  # noqa: TRY003
 
     if user.status != UserStatus.ACTIVE.value:
         raise AccountNotConfirmedError
@@ -358,3 +369,8 @@ def logout_user(session: Session, raw_token: str) -> None:
     if rt is None:
         return
     session.execute(delete(RefreshToken).where(RefreshToken.family_id == rt.family_id))
+
+
+def revoke_all_refresh_tokens(session: Session, user_id: uuid_module.UUID) -> None:
+    """Delete every refresh token of the user, logging out all their sessions."""
+    session.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))

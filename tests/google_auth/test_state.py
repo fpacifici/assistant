@@ -35,6 +35,15 @@ def test_sign_verify_round_trip_without_invite_id() -> None:
     assert claims == GoogleStateClaims(nonce="abc123", invite_id=None)
 
 
+def test_sign_verify_round_trip_with_reauth_user_id() -> None:
+    user_id = uuid.uuid4()
+    state = sign_state(nonce="abc123", invite_id=None, reauth_user_id=user_id)
+    claims = verify_state(state)
+    assert claims == GoogleStateClaims(
+        nonce="abc123", invite_id=None, reauth_user_id=user_id
+    )
+
+
 # --- Invalid state ---
 
 
