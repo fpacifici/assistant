@@ -92,6 +92,7 @@ from assistant.models.schema import (
     NodeType,
     Note,
     Notebook,
+    NoteImport,
     PermissionName,
     RoleName,
     User,
@@ -471,6 +472,61 @@ def get_note_by_external_id(
             Note.external_id == external_id,
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Import tracking
+# ---------------------------------------------------------------------------
+# No permission checks here: these are bookkeeping for the notes importer,
+# which already went through permission-checked functions to write the note.
+
+
+def get_note_update_timestamp(session: Session, note_id: uuid.UUID) -> datetime:
+    """Read a note's `update_timestamp` straight from the database.
+
+    `_touch_note` updates the column with a bulk UPDATE, so a loaded `Note`
+    object can hold a value that differs from the stored one (e.g. in time
+    zone handling). Comparisons against `NoteImport.imported_at` must use
+    the stored value on both sides.
+    """
+    session.flush()
+    timestamp = session.scalar(select(Note.update_timestamp).where(Note.id == note_id))
+    if timestamp is None:
+        raise NoteNotFoundError(str(note_id))
+    return timestamp
+
+
+def get_note_import(session: Session, note_id: uuid.UUID) -> NoteImport | None:
+    """Return the note's import record, or None if the importer never wrote it."""
+    return session.get(NoteImport, note_id)
+
+
+def record_note_import(
+    session: Session,
+    note_id: uuid.UUID,
+    source_path: str,
+) -> NoteImport:
+    """Mark a note as written by the importer, as of its current timestamp.
+
+    Call this after the importer's last write to the note, in the same
+    transaction. `imported_at` is copied from the note's `update_timestamp`
+    rather than taken from a fresh clock reading, so the importer's own
+    writes never make the note look edited.
+    """
+    imported_at = get_note_update_timestamp(session, note_id)
+    record = session.get(NoteImport, note_id)
+    if record is None:
+        record = NoteImport(
+            note_id=note_id,
+            imported_at=imported_at,
+            source_path=source_path,
+        )
+        session.add(record)
+    else:
+        record.imported_at = imported_at
+        record.source_path = source_path
+    session.flush()
+    return record
 
 
 # ---------------------------------------------------------------------------

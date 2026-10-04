@@ -411,11 +411,41 @@ class Note(Base):
         back_populates="note",
         cascade="all, delete-orphan",
     )
+    import_record: Mapped[NoteImport | None] = relationship(
+        "NoteImport",
+        back_populates="note",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     tag_links: Mapped[list[NoteTag]] = relationship(
         "NoteTag",
         back_populates="note",
         cascade="all, delete-orphan",
     )
+
+
+class NoteImport(Base):
+    """Marks a Note as created by the notes importer, and when it last wrote it.
+
+    One row per imported note — note_id IS the primary key. `imported_at` is
+    copied from the note's own `update_timestamp` right after the importer's
+    last write, so `note.update_timestamp > imported_at` means a user edited
+    the note after the import (see `adapters/notes_import.py`). Notes created
+    any other way have no row.
+    """
+
+    __tablename__ = "note_imports"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+    note: Mapped[Note] = relationship("Note", back_populates="import_record")
 
 
 class Tag(Base):

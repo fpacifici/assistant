@@ -85,6 +85,13 @@ erDiagram
         DATETIME created_at
     }
 
+    NoteImport {
+        UUID note_id PK, FK
+        DATETIME imported_at
+        STRING source_path
+    }
+
+    Note ||--o| NoteImport : "imported as"
     User ||--o{ Entitlement : "has"
     Entitlement ||--o| Note : "directs"
     Entitlement ||--o| Notebook : "directs"
@@ -101,6 +108,10 @@ erDiagram
 - Notes, Nodes and Notebooks have an owner.
 - There is an RBAC system to manage access to Notes and Notebooks — see
   Access Control below.
+- `NoteImport` marks a Note created by the notes importer. `imported_at` is
+  the note's `update_timestamp` right after the importer last wrote it, so
+  `update_timestamp > imported_at` means a user edited the note since. It is
+  deleted with its Note. See `docs/specs/adapters.md`.
 
 ## Structure of a Note.
 

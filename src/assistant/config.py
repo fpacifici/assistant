@@ -95,6 +95,8 @@ class AssistantConfig(TypedDict, total=False):
     database: DatabaseConfig
     document_storage_path: str
     file_storage_path: str
+    import_storage_path: str
+    import_max_upload_bytes: int
     external_sources: ExternalSourcesConfig
     domain: str
     port: int
@@ -335,6 +337,27 @@ class Config:
         """
         storage_path = self.get("file_storage_path", "data/files")
         return Path(storage_path).expanduser().resolve()
+
+    def get_import_storage_path(self) -> Path:
+        """Get the path where uploaded note-import zips are stored and extracted.
+
+        Env var override: `import_storage_path` -> `IMPORT_STORAGE_PATH`.
+
+        Returns:
+            Path to import storage directory.
+        """
+        storage_path = self.get("import_storage_path", "data/imports")
+        return Path(storage_path).expanduser().resolve()
+
+    def get_import_max_upload_bytes(self) -> int:
+        """Get the largest note-import zip accepted for upload, in bytes.
+
+        Env var override: `import_max_upload_bytes` -> `IMPORT_MAX_UPLOAD_BYTES`.
+
+        Returns:
+            The limit, defaulting to 500 MB.
+        """
+        return int(self.get("import_max_upload_bytes", 500 * 1024 * 1024))
 
     def get_external_source_config(self, provider: str) -> dict[str, object]:
         """Get configuration for a specific external source provider.

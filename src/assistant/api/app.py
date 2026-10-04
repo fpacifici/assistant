@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from assistant.api.dependencies import ImportSettings
 from assistant.api.exceptions import register_exception_handlers
 from assistant.api.routes.auth import router as auth_router
 from assistant.api.routes.files import router as files_router
+from assistant.api.routes.imports import router as imports_router
 from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
@@ -30,6 +32,7 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     file_storage: FileStorage | None = None,
     file_storage_path: Path | None = None,
+    import_settings: ImportSettings | None = None,
 ) -> FastAPI:
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
@@ -48,6 +51,14 @@ def create_app(
         storage_path.mkdir(parents=True, exist_ok=True)
         file_storage = LocalFileStorage(storage_path)
     app.state.file_storage = file_storage
+
+    if import_settings is None:
+        config = Config()
+        import_settings = ImportSettings(
+            storage_root=config.get_import_storage_path(),
+            max_upload_bytes=config.get_import_max_upload_bytes(),
+        )
+    app.state.import_settings = import_settings
 
     # Behind the nginx-fronted deployment, the frontend and API share an origin and
     # this middleware never runs for browser traffic; it only matters for local dev
@@ -75,6 +86,7 @@ def create_app(
     app.include_router(notes_router, prefix="/notebook", tags=["notes"])
     app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
     app.include_router(files_router, tags=["files"])
+    app.include_router(imports_router, prefix="/imports", tags=["imports"])
     app.include_router(tags_router, prefix="/tag", tags=["tags"])
 
     return app
