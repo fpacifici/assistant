@@ -78,6 +78,7 @@ class GoogleConfig(TypedDict):
     client_id: str
     client_secret: str
     redirect_path: str
+    require_auth_time: bool
 
 
 class SentryConfig(TypedDict):
@@ -580,12 +581,18 @@ class Config:
             - `google.client_id`     -> `GOOGLE_CLIENT_ID`
             - `google.client_secret` -> `GOOGLE_CLIENT_SECRET`
             - `google.redirect_path` -> `GOOGLE_REDIRECT_PATH`
+            - `google.require_auth_time` -> `GOOGLE_REQUIRE_AUTH_TIME`
 
         `redirect_path` is not a full URL — it's appended to
         `public_origin()` (this app's existing top-level config, already
         used the same way by assistant.urls' link builders) to form
         the URI registered with Google. Defaults to
         `/auth/google/callback`, matching this plan's own route.
+
+        `require_auth_time` (default false) makes a Google re-authentication
+        fail unless the ID token carries a recent `auth_time`. Google only
+        returns that claim for a verified app with "Session age claims"
+        enabled, so turn it on once the Cloud Console is set up.
 
         Raises:
             ValueError: if `client_id` or `client_secret` is missing from
@@ -596,6 +603,7 @@ class Config:
             key="google.client_secret", expected_type=str
         )
         redirect_path = self.get("google.redirect_path", "/auth/google/callback")
+        require_auth_time = bool(self.get("google.require_auth_time", False))
 
         missing_keys: list[str] = []
         if not client_id:
@@ -612,6 +620,7 @@ class Config:
             "client_id": client_id,
             "client_secret": client_secret,
             "redirect_path": redirect_path,
+            "require_auth_time": require_auth_time,
         }
 
     def get_sentry_config(self) -> SentryConfig:

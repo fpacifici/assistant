@@ -24,6 +24,7 @@ from assistant.api.schemas.auth import (
 )
 from assistant.auth.credentials import (
     get_auth_provider,
+    google_swap_requires_password,
     swap_to_google,
     swap_to_password,
 )
@@ -48,6 +49,7 @@ from assistant.google_auth.exceptions import (
     GoogleHandoffTokenInvalidError,
     GooglePasswordAccountExistsError,
     GoogleReauthMismatchError,
+    GoogleReauthStaleError,
     GoogleStateInvalidError,
     GoogleTokenExchangeError,
     GoogleTokenInvalidError,
@@ -275,9 +277,16 @@ def _finish_google_reauth(
 ) -> RedirectResponse:
     """Hand a successful re-authentication to the settings page."""
     try:
-        verify_reauth(session, claims=claims, user_id=user_id)
+        verify_reauth(
+            session,
+            claims=claims,
+            user_id=user_id,
+            require_auth_time=config.get_google_config()["require_auth_time"],
+        )
     except GoogleReauthMismatchError:
         return _google_fail(config, "/settings", "reauth_mismatch")
+    except GoogleReauthStaleError:
+        return _google_fail(config, "/settings", "reauth_stale")
     redirect = _google_redirect(config, "/settings?reauth=ok")
     _set_handoff_cookie(
         request,
@@ -386,9 +395,14 @@ def _swap_claims_or_401(google_swap: str | None) -> SwapClaims:
 
 
 @router.get("/google/swap", response_model=GoogleSwapInfo)
-def google_swap_info(google_swap: str | None = Cookie(default=None)) -> GoogleSwapInfo:
+def google_swap_info(
+    session: SessionDep, google_swap: str | None = Cookie(default=None)
+) -> GoogleSwapInfo:
     claims = _swap_claims_or_401(google_swap)
-    return GoogleSwapInfo(email=claims.email)
+    return GoogleSwapInfo(
+        email=claims.email,
+        password_required=google_swap_requires_password(session, claims.user_id),
+    )
 
 
 @router.post("/google/swap", response_model=UserResponse)
@@ -440,7 +454,9 @@ def google_reauth_start(session: SessionDep, user_id: CurrentUserId) -> GoogleRe
     nonce = secrets.token_urlsafe(16)
     state = sign_state(nonce=nonce, invite_id=None, reauth_user_id=user_id)
     return GoogleReauthStart(
-        authorization_url=build_authorization_url(state=state, nonce=nonce)
+        authorization_url=build_authorization_url(
+            state=state, nonce=nonce, request_auth_time=True
+        )
     )
 
 

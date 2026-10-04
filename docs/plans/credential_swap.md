@@ -246,6 +246,22 @@ was built.
    a user with a *different* Google identity (a different `sub`), the
    sign-in is still rejected with `?google_error=collision`.
 
+Follow-ups from the security review:
+
+6. **Re-authentication checks `auth_time`.** Google can't be forced to
+   ask for the password again, so the reauth URL requests `auth_time`
+   and the callback rejects a sign-in older than 5 minutes
+   (`reauth_stale`). Google only returns the claim for a verified app
+   with session-age claims enabled; `google.require_auth_time` makes it
+   mandatory once that is set up.
+7. **Every swap emails the account owner**, in both directions.
+8. **An unconfirmed (PENDING) password account switches to Google
+   without its password.** This overrides decision 1 for that case: the
+   account never proved it owns the email, and requiring its password
+   would let anyone who registers an email first lock its owner out.
+9. **Access tokens carry `typ: "access"`**, and nothing else is accepted
+   as one, instead of relying on other tokens lacking a `sub` claim.
+
 ## Out of scope
 
 - Having both credentials at once (true account linking).

@@ -32,9 +32,10 @@ integrations for now.
 
 - **Lifetime:** 5 minutes
 - **Format:** Signed JWT
-- **Claims:** `sub` (user UUID), `exp`, `iat`
-- **Validation:** Stateless — signature and expiry check only. No DB
-  round-trip per request.
+- **Claims:** `sub` (user UUID), `typ` (`"access"`), `exp`, `iat`
+- **Validation:** Stateless — signature, expiry and `typ` check only. No
+  DB round-trip per request. `typ` is what rejects the other JWTs signed
+  with the same secret (see "Handoff tokens").
 
 ### Refresh Token
 
@@ -107,10 +108,15 @@ implemented in `assistant.auth.credentials` and, in one transaction:
 - delete the old credential row and insert the new one;
 - delete **all** of the user's refresh tokens, ending every session
   opened with the old credential; the browser that performed the swap
-  gets fresh tokens.
+  gets fresh tokens. Access tokens already issued elsewhere stay valid
+  until they expire.
+
+Both directions then email the account owner that the sign-in method
+changed (best effort), so a swap they didn't make doesn't go unnoticed.
 
 Both directions require proving ownership of the account through the
-credential being removed *and* the one being added.
+credential being removed *and* the one being added. The one exception
+is an unconfirmed (PENDING) password account, see below.
 
 ### Password → Google (from the login page)
 
@@ -125,7 +131,7 @@ sequenceDiagram
     Note over A: email belongs to a password account
     A->>B: Set-Cookie google_swap, redirect /login/switch-to-google
     B->>A: GET /auth/google/swap
-    A->>B: {email}
+    A->>B: {email, password_required}
     B->>A: POST /auth/google/swap {password}
     Note over A: verify password, swap credential
     A->>B: auth cookies
@@ -136,8 +142,12 @@ doesn't fail. It stores the verified Google identity (`user_id`, `email`,
 `sub`) in a signed `google_swap` cookie (HttpOnly, 10 minutes, scoped to
 `/auth/google/swap`) and sends the browser to the confirmation page. The
 user confirms with their **current password**: Google proves control of
-the email, the password proves ownership of the account. A still-PENDING
-password account becomes ACTIVE, since Google verified the email.
+the email, the password proves ownership of the account.
+
+A still-PENDING password account needs **no password**: it never proved
+it controls the email, and Google just did. It becomes ACTIVE. Otherwise
+anyone could register the email first and lock its real owner out of
+both sign-in methods.
 
 If the email belongs to a user whose Google credential has a different
 `sub`, the sign-in is still rejected with `?google_error=collision`.
@@ -154,12 +164,30 @@ redirects to `/settings?reauth=ok`. The settings page then submits the new
 password to `POST /auth/credentials/password`, which requires both a
 valid access token and a reauth cookie issued for the same user.
 
+Google can't be made to ask for the password again: it supports neither
+`prompt=login` nor `max_age`, so with a live Google session the account
+chooser alone completes the re-authentication. The reauth URL therefore
+requests the `auth_time` claim (`claims={"id_token":{"auth_time":…}}`):
+
+- if Google returns it and it is older than 5 minutes, the callback
+  redirects to `/settings?google_error=reauth_stale`;
+- if Google doesn't return it, the re-authentication passes, unless
+  `google.require_auth_time` (env `GOOGLE_REQUIRE_AUTH_TIME`) is set.
+
+Google returns `auth_time` only for a verified, in-production app with
+"Session age claims" enabled (Cloud Console → Google Auth Platform →
+Settings → Advanced). Turn `require_auth_time` on once that is done.
+Until then the notification email is the safeguard against someone who
+reaches a signed-in browser.
+
 ### Handoff tokens
 
 `google_swap`, `google_reauth`, the OAuth `state` and access tokens are
 all HS256 JWTs signed with `JWT_SECRET`. The handoff tokens carry a
-`purpose` claim (`google_swap` / `google_reauth`) so none of them is
-accepted in place of another (`assistant.google_auth.handoff`).
+`purpose` claim (`google_swap` / `google_reauth`) so neither is accepted
+in place of the other (`assistant.google_auth.handoff`). Access tokens
+carry `typ: "access"`, which no other token has, and the OAuth `state`
+must carry a `nonce`.
 
 ## Data Model
 
@@ -273,11 +301,13 @@ not a login: see "Credential swap" above.
 
 ### Credential swap
 
-`GET /auth/google/swap` — Returns `{email}` of the pending password →
-Google switch held in the `google_swap` cookie; 401 if there is none.
+`GET /auth/google/swap` — Returns `{email, password_required}` of the
+pending password → Google switch held in the `google_swap` cookie; 401 if
+there is none. `password_required` is false for a PENDING account.
 
-`POST /auth/google/swap` — Body `{password}`. Completes the switch: 401
-on a wrong password (the pending switch stays usable), 409 if the
+`POST /auth/google/swap` — Body `{password}` (may be omitted or null when
+`password_required` is false). Completes the switch: 401 on a missing or
+wrong password (the pending switch stays usable), 409 if the
 account can no longer be switched. On success sets the auth cookies and
 returns the user.
 
@@ -302,7 +332,7 @@ A single FastAPI dependency resolves the current user from the request:
 1. Check for `Authorization: Bearer` header and for auth cookie.
 2. If both are present, reject with 401.
 3. If neither is present, reject with 401.
-4. Validate the JWT (signature, expiry).
+4. Validate the JWT (signature, expiry, `typ == "access"`).
 5. Extract `sub` claim as the user ID.
 
 This dependency replaces the current `X-User-Id` header mechanism. The

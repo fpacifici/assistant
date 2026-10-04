@@ -54,6 +54,8 @@ export function getMe(): Promise<User> {
 
 export interface GoogleSwapInfo {
   email: string;
+  /** False for an unconfirmed account: the Google sign-in alone claims it. */
+  password_required: boolean;
 }
 
 /** The account a pending password → Google switch would convert (401 if none). */
@@ -61,7 +63,7 @@ export function getGoogleSwap(): Promise<GoogleSwapInfo> {
   return apiFetch<GoogleSwapInfo>('/auth/google/swap');
 }
 
-export function confirmGoogleSwap(password: string): Promise<User> {
+export function confirmGoogleSwap(password: string | null): Promise<User> {
   return apiFetch<User>('/auth/google/swap', {
     method: 'POST',
     body: JSON.stringify({ password }),

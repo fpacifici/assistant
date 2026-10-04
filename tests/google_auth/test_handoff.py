@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 import jwt
 import pytest
 
-from assistant.auth.service import create_access_token
+from assistant.auth.exceptions import AuthError
+from assistant.auth.service import create_access_token, decode_access_token
 from assistant.google_auth.exceptions import GoogleHandoffTokenInvalidError
 from assistant.google_auth.handoff import (
     SwapClaims,
@@ -79,3 +80,24 @@ def test_tokens_are_not_interchangeable() -> None:
             verify_swap_token(token)
     with pytest.raises(GoogleHandoffTokenInvalidError):
         verify_reauth_token(swap)
+
+
+def test_handoff_tokens_are_not_access_tokens() -> None:
+    user_id = uuid.uuid4()
+    # Even a same-secret token with a valid `sub` is refused unless it was
+    # minted as an access token.
+    sub_only = jwt.encode(
+        {"sub": str(user_id), "exp": datetime.now(UTC) + timedelta(minutes=5)},
+        _JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    for token in (
+        sign_swap_token(user_id=user_id, email="a@example.com", sub="sub-1"),
+        sign_reauth_token(user_id=user_id),
+        sign_state(nonce="n", invite_id=None, reauth_user_id=user_id),
+        sub_only,
+    ):
+        with pytest.raises(AuthError):
+            decode_access_token(token)
+    assert decode_access_token(create_access_token(user_id)) == user_id

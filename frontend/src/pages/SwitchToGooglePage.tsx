@@ -25,7 +25,7 @@ export default function SwitchToGooglePage() {
     setError('');
     setSubmitting(true);
     try {
-      await confirmGoogleSwap(password);
+      await confirmGoogleSwap(swap?.password_required ? password : null);
       queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       navigate('/notebooks');
     } catch (err) {
@@ -61,23 +61,33 @@ export default function SwitchToGooglePage() {
           </>
         ) : (
           <>
-            <p>
-              <strong>{swap.email}</strong> already has an account that signs in with a
-              password. Switch it to Google sign-in? Your password will be removed and
-              you will sign in with Google from now on.
-            </p>
+            {swap.password_required ? (
+              <p>
+                <strong>{swap.email}</strong> already has an account that signs in with a
+                password. Switch it to Google sign-in? Your password will be removed and
+                you will sign in with Google from now on.
+              </p>
+            ) : (
+              <p>
+                <strong>{swap.email}</strong> has an unconfirmed account that signs in
+                with a password. Google has verified this email, so you can claim the
+                account and sign in with Google from now on.
+              </p>
+            )}
             <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label htmlFor="password">Current password</label>
-                <input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </div>
+              {swap.password_required && (
+                <div className="form-group">
+                  <label htmlFor="password">Current password</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+              )}
               {error && <p className="auth-error">{error}</p>}
               <button type="submit" disabled={submitting} className="btn-primary">
                 {submitting ? 'Switching…' : 'Switch to Google'}

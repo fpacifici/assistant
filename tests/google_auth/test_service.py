@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from assistant.google_auth.exceptions import (
     GoogleEmailNotVerifiedError,
     GooglePasswordAccountExistsError,
     GoogleReauthMismatchError,
+    GoogleReauthStaleError,
 )
 from assistant.google_auth.oauth import GoogleIdTokenClaims
 from assistant.google_auth.service import handle_google_callback, verify_reauth
@@ -147,7 +149,7 @@ def test_email_with_other_google_identity_collides(db_session: Session) -> None:
 def test_verify_reauth_accepts_own_identity(db_session: Session) -> None:
     user = handle_google_callback(db_session, claims=_claims(), invite_id=None)
 
-    verify_reauth(db_session, claims=_claims(), user_id=user.uid)
+    verify_reauth(db_session, claims=_claims(), user_id=user.uid, require_auth_time=False)
 
 
 def test_verify_reauth_rejects_other_identity(db_session: Session) -> None:
@@ -158,10 +160,55 @@ def test_verify_reauth_rejects_other_identity(db_session: Session) -> None:
         invite_id=None,
     )
 
-    with pytest.raises(GoogleReauthMismatchError):
-        verify_reauth(db_session, claims=_claims(sub="other-sub"), user_id=user.uid)
-    with pytest.raises(GoogleReauthMismatchError):
-        verify_reauth(db_session, claims=_claims(sub="unknown-sub"), user_id=user.uid)
+    for sub in ("other-sub", "unknown-sub"):
+        with pytest.raises(GoogleReauthMismatchError):
+            verify_reauth(
+                db_session,
+                claims=_claims(sub=sub),
+                user_id=user.uid,
+                require_auth_time=False,
+            )
+
+
+def _seconds_ago(seconds: int) -> int:
+    return int(time.time()) - seconds
+
+
+def test_verify_reauth_accepts_recent_auth_time(db_session: Session) -> None:
+    user = handle_google_callback(db_session, claims=_claims(), invite_id=None)
+
+    verify_reauth(
+        db_session,
+        claims=_claims(auth_time=_seconds_ago(30)),
+        user_id=user.uid,
+        require_auth_time=True,
+    )
+
+
+@pytest.mark.parametrize("require_auth_time", [True, False])
+def test_verify_reauth_rejects_stale_auth_time(
+    db_session: Session, require_auth_time: bool
+) -> None:
+    # An old auth_time means the account chooser reused an existing
+    # Google session: it proves nothing, whether or not it is required.
+    user = handle_google_callback(db_session, claims=_claims(), invite_id=None)
+
+    with pytest.raises(GoogleReauthStaleError):
+        verify_reauth(
+            db_session,
+            claims=_claims(auth_time=_seconds_ago(3600)),
+            user_id=user.uid,
+            require_auth_time=require_auth_time,
+        )
+
+
+def test_verify_reauth_requires_auth_time_when_configured(db_session: Session) -> None:
+    user = handle_google_callback(db_session, claims=_claims(), invite_id=None)
+
+    with pytest.raises(GoogleReauthStaleError):
+        verify_reauth(
+            db_session, claims=_claims(), user_id=user.uid, require_auth_time=True
+        )
 
 
 # --- Registration gating ---

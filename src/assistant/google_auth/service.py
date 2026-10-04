@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -11,6 +12,7 @@ from assistant.google_auth.exceptions import (
     GoogleEmailNotVerifiedError,
     GooglePasswordAccountExistsError,
     GoogleReauthMismatchError,
+    GoogleReauthStaleError,
 )
 from assistant.invites.service import create_gated_user
 from assistant.models.schema import Credential, User
@@ -22,6 +24,9 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from assistant.google_auth.oauth import GoogleIdTokenClaims
+
+# How recent a Google sign-in must be to count as a re-authentication.
+REAUTH_MAX_AGE = timedelta(minutes=5)
 
 
 def handle_google_callback(
@@ -86,12 +91,18 @@ def handle_google_callback(
 
 
 def verify_reauth(
-    session: Session, *, claims: GoogleIdTokenClaims, user_id: uuid.UUID
+    session: Session,
+    *,
+    claims: GoogleIdTokenClaims,
+    user_id: uuid.UUID,
+    require_auth_time: bool,
 ) -> None:
-    """Check a re-authentication returned the Google identity of user_id.
+    """Check a re-authentication returned a recent sign-in of user_id.
 
-    Raises GoogleReauthMismatchError otherwise — including when the user
-    has no Google credential at all.
+    Raises GoogleReauthMismatchError if the Google identity isn't user_id's
+    credential — including when the user has no Google credential at all.
+    Raises GoogleReauthStaleError if `auth_time` is older than
+    REAUTH_MAX_AGE, or missing while require_auth_time is set.
     """
     credential = session.scalar(
         select(Credential).where(
@@ -101,3 +112,11 @@ def verify_reauth(
     )
     if credential is None or credential.user_id != user_id:
         raise GoogleReauthMismatchError
+
+    if claims.auth_time is None:
+        if require_auth_time:
+            raise GoogleReauthStaleError
+        return
+    signed_in_at = datetime.fromtimestamp(claims.auth_time, UTC)
+    if datetime.now(UTC) - signed_in_at > REAUTH_MAX_AGE:
+        raise GoogleReauthStaleError

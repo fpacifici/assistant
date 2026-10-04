@@ -8,6 +8,8 @@ const GOOGLE_AUTH_ERROR_MESSAGES: Record<string, string> = {
   collision: 'This email is already linked to a different Google account.',
   reauth_mismatch:
     'You signed in with a different Google account. Use the one linked to this account.',
+  reauth_stale:
+    "Google didn't confirm a recent sign-in. Sign out of Google, sign back in, then verify again.",
   invite_email_mismatch:
     'You signed in with a different Google account than the one this invite was sent to.',
   registration_closed: 'This invite is no longer valid, or registration is currently closed.',

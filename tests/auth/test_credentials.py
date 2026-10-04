@@ -5,11 +5,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from assistant.auth.credentials import (
     get_auth_provider,
+    google_swap_requires_password,
     swap_to_google,
     swap_to_password,
 )
@@ -25,7 +27,16 @@ from assistant.models.schema import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from sqlalchemy.orm import Session
+
+
+@pytest.fixture(autouse=True)
+def mock_send_email() -> Iterator[MagicMock]:
+    """Every swap sends a notification email; keep it off the network."""
+    with patch("assistant.email.service.send_email") as mock_send:
+        yield mock_send
 
 
 def _make_user(
@@ -117,7 +128,25 @@ def test_swap_to_google_wrong_password_changes_nothing(db_session: Session) -> N
     assert credential.provider == "password"
 
 
-def test_swap_to_google_activates_pending_user(db_session: Session) -> None:
+def test_swap_to_google_without_password_rejected(db_session: Session) -> None:
+    user = _make_user(db_session)
+
+    assert google_swap_requires_password(db_session, user.uid)
+    with pytest.raises(AuthError):
+        swap_to_google(
+            db_session,
+            user_id=user.uid,
+            email="user@example.com",
+            google_sub="google-sub",
+            password=None,
+        )
+
+
+def test_swap_to_google_claims_pending_user_without_password(
+    db_session: Session,
+) -> None:
+    # An unconfirmed registration never proved it owns the email; Google
+    # did, so the password (which the email's owner may not know) is moot.
     user = _make_user(db_session, status=UserStatus.PENDING.value)
     db_session.add(
         EmailConfirmation(
@@ -130,6 +159,26 @@ def test_swap_to_google_activates_pending_user(db_session: Session) -> None:
     )
     db_session.flush()
 
+    assert not google_swap_requires_password(db_session, user.uid)
+    swap_to_google(
+        db_session,
+        user_id=user.uid,
+        email="user@example.com",
+        google_sub="google-sub",
+        password=None,
+    )
+
+    assert user.status == UserStatus.ACTIVE.value
+    assert db_session.get(EmailConfirmation, user.uid) is None
+    [credential] = _credentials(db_session, user)
+    assert credential.provider == "google"
+
+
+def test_swap_to_google_notifies_owner(
+    db_session: Session, mock_send_email: MagicMock
+) -> None:
+    user = _make_user(db_session)
+
     swap_to_google(
         db_session,
         user_id=user.uid,
@@ -138,8 +187,9 @@ def test_swap_to_google_activates_pending_user(db_session: Session) -> None:
         password="secret123",
     )
 
-    assert user.status == UserStatus.ACTIVE.value
-    assert db_session.get(EmailConfirmation, user.uid) is None
+    [email] = [c.args[0] for c in mock_send_email.call_args_list]
+    assert email.recipient == "user@example.com"
+    assert email.values["method"] == "Google"
 
 
 def test_swap_to_google_rejects_email_mismatch(db_session: Session) -> None:
@@ -199,8 +249,23 @@ def test_swap_to_password_replaces_google_credential(db_session: Session) -> Non
     assert db_session.query(RefreshToken).filter_by(user_id=user.uid).count() == 0
 
 
-def test_swap_to_password_rejects_password_user(db_session: Session) -> None:
+def test_swap_to_password_rejects_password_user(
+    db_session: Session, mock_send_email: MagicMock
+) -> None:
     user = _make_user(db_session)
 
     with pytest.raises(CredentialSwapError):
         swap_to_password(db_session, user_id=user.uid, password="newsecret1")
+    mock_send_email.assert_not_called()
+
+
+def test_swap_to_password_notifies_owner(
+    db_session: Session, mock_send_email: MagicMock
+) -> None:
+    user = _make_user(db_session, email="g@example.com", provider="google")
+
+    swap_to_password(db_session, user_id=user.uid, password="newsecret1")
+
+    [email] = [c.args[0] for c in mock_send_email.call_args_list]
+    assert email.recipient == "g@example.com"
+    assert email.values["method"] == "your email and a password"

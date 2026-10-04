@@ -42,6 +42,7 @@ _ph = PasswordHasher()
 
 ACCESS_TOKEN_MINUTES = 15
 REFRESH_TOKEN_DAYS = 7
+_ACCESS_TOKEN_TYPE = "access"
 
 CONFIRMATION_TOKEN_TTL = timedelta(hours=24)
 CONFIRMATION_RESEND_COOLDOWN = timedelta(minutes=5)
@@ -81,6 +82,7 @@ def create_access_token(user_id: uuid_module.UUID) -> str:
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
+        "typ": _ACCESS_TOKEN_TYPE,
         "iat": now,
         "exp": now + timedelta(minutes=ACCESS_TOKEN_MINUTES),
     }
@@ -88,11 +90,20 @@ def create_access_token(user_id: uuid_module.UUID) -> str:
 
 
 def decode_access_token(token: str) -> uuid_module.UUID:
-    """Validate a JWT and return the user UUID from the sub claim."""
+    """Validate a JWT and return the user UUID from the sub claim.
+
+    The `typ` claim is what rejects the other tokens signed with the same
+    secret (OAuth state, Google handoff tokens), whatever their claims.
+    """
     try:
         payload = jwt.decode(token, jwt_secret(), algorithms=["HS256"])
+    except jwt.InvalidTokenError as exc:
+        raise AuthError("Invalid or expired access token") from exc  # noqa: TRY003
+    if payload.get("typ") != _ACCESS_TOKEN_TYPE:
+        raise AuthError("Invalid or expired access token")  # noqa: TRY003
+    try:
         return uuid_module.UUID(payload["sub"])
-    except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
+    except (KeyError, ValueError) as exc:
         raise AuthError("Invalid or expired access token") from exc  # noqa: TRY003
 
 

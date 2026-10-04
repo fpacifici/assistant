@@ -55,12 +55,15 @@ class GoogleSwapInfo(BaseModel):
     """Returned by GET /auth/google/swap — the account a pending swap converts."""
 
     email: str
+    # False for an unconfirmed (PENDING) account: Google's verified email
+    # is enough to claim it.
+    password_required: bool
 
 
 class GoogleSwapRequest(BaseModel):
     """Request body for POST /auth/google/swap."""
 
-    password: str
+    password: str | None = None
 
 
 class GoogleReauthStart(BaseModel):

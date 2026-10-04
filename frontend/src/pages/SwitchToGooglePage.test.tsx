@@ -25,7 +25,10 @@ vi.mock('react-router', async (importOriginal) => {
 describe('SwitchToGooglePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetGoogleSwap.mockResolvedValue({ email: 'user@example.com' });
+    mockGetGoogleSwap.mockResolvedValue({
+      email: 'user@example.com',
+      password_required: true,
+    });
   });
 
   it('shows the account being switched', async () => {
@@ -51,6 +54,29 @@ describe('SwitchToGooglePage', () => {
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/notebooks'));
     expect(mockConfirmGoogleSwap).toHaveBeenCalledWith('secret123');
+  });
+
+  it('claims an unconfirmed account without a password', async () => {
+    const user = userEvent.setup();
+    mockGetGoogleSwap.mockResolvedValueOnce({
+      email: 'user@example.com',
+      password_required: false,
+    });
+    mockConfirmGoogleSwap.mockResolvedValueOnce({
+      uid: 'u1',
+      email: 'user@example.com',
+      firstname: 'A',
+      lastname: 'B',
+      invite_quota_remaining: 5,
+      auth_provider: 'google',
+    });
+    renderWithProviders(<SwitchToGooglePage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Switch to Google' }));
+
+    expect(screen.queryByLabelText('Current password')).not.toBeInTheDocument();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/notebooks'));
+    expect(mockConfirmGoogleSwap).toHaveBeenCalledWith(null);
   });
 
   it('shows an error for a wrong password', async () => {

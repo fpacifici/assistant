@@ -53,5 +53,13 @@ class GoogleReauthMismatchError(GoogleAuthFlowError):
     """A re-authentication returned a Google identity of a different user."""
 
 
+class GoogleReauthStaleError(GoogleAuthFlowError):
+    """A re-authentication didn't prove a recent Google sign-in.
+
+    Either Google's `auth_time` is too old (the account chooser reused an
+    existing Google session), or it is missing while it is required.
+    """
+
+
 class GoogleHandoffTokenInvalidError(GoogleAuthFlowError):
     """A swap/reauth handoff token is missing, malformed, or expired."""

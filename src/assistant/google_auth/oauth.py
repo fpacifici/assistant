@@ -3,6 +3,7 @@ here — nothing else in the codebase talks to Google."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
@@ -25,6 +26,10 @@ class GoogleIdTokenClaims:
     email_verified: bool
     given_name: str | None
     family_name: str | None
+    # When the user last actively signed in to Google (Unix seconds). Only
+    # present if requested and enabled for the app (see
+    # build_authorization_url's request_auth_time).
+    auth_time: int | None = None
 
 
 def redirect_uri(config: Config) -> str:
@@ -38,12 +43,20 @@ def redirect_uri(config: Config) -> str:
     return f"{config.public_origin()}{config.get_google_config()['redirect_path']}"
 
 
-def build_authorization_url(*, state: str, nonce: str) -> str:
+def build_authorization_url(
+    *, state: str, nonce: str, request_auth_time: bool = False
+) -> str:
     """The URL to redirect the browser to for the consent screen.
 
     `prompt=select_account` forces the Google account chooser every time,
     so a shared/public machine with an existing Google session doesn't
     silently authenticate as the wrong person.
+
+    Google can't be made to ask for the password again (it supports
+    neither `prompt=login` nor `max_age`). `request_auth_time` asks for
+    the `auth_time` claim instead, so a re-authentication can tell how
+    long ago the user really signed in to Google. Google returns it only
+    for a verified app with "Session age claims" enabled.
     """
     config = Config()
     google_config = config.get_google_config()
@@ -56,6 +69,8 @@ def build_authorization_url(*, state: str, nonce: str) -> str:
         "nonce": nonce,
         "prompt": "select_account",
     }
+    if request_auth_time:
+        params["claims"] = json.dumps({"id_token": {"auth_time": {"essential": True}}})
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
 
@@ -115,4 +130,5 @@ def verify_id_token(raw_id_token: str, *, expected_nonce: str) -> GoogleIdTokenC
         email_verified=bool(claims.get("email_verified", False)),
         given_name=claims.get("given_name"),
         family_name=claims.get("family_name"),
+        auth_time=claims.get("auth_time"),
     )
