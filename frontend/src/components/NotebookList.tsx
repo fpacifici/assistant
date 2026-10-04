@@ -1,12 +1,18 @@
-/** Sidebar list of notebooks with create/delete. Navigates to the selected notebook's notes. */
+/**
+ * Sidebar list of notebooks with create/delete/import. Navigates to the
+ * selected notebook's notes. Import is a header button on desktop and a `⋯`
+ * menu entry on mobile.
+ */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
 import type { Notebook } from '../types';
 import ShareDialog from './ShareDialog';
 import ConfirmDialog from './ConfirmDialog';
+import ImportDialog from './ImportDialog';
+import { useTopBarMenuItems } from './TopBarMenuContext';
 
 const NOTEBOOK_ROLE_OPTIONS = ['notebook_viewer', 'notebook_editor', 'notebook_owner'];
 
@@ -17,6 +23,15 @@ export default function NotebookList() {
   const [newName, setNewName] = useState('');
   const [sharingNotebookId, setSharingNotebookId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Notebook | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const menuItems = useMemo(
+    () => [
+      { id: 'import-evernote', label: 'Import from Evernote', onSelect: () => setImporting(true) },
+    ],
+    [],
+  );
+  useTopBarMenuItems(menuItems);
 
   const { data: notebooks = [], isLoading } = useQuery({
     queryKey: ['notebooks'],
@@ -48,7 +63,12 @@ export default function NotebookList() {
 
   return (
     <div className="notebook-list">
-      <h2>Notebooks</h2>
+      <div className="notebook-list-header">
+        <h2>Notebooks</h2>
+        <button className="import-btn" onClick={() => setImporting(true)}>
+          Import
+        </button>
+      </div>
       <form onSubmit={handleCreate} className="create-form">
         <input
           type="text"
@@ -111,6 +131,7 @@ export default function NotebookList() {
           onCancel={() => setPendingDelete(null)}
         />
       )}
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {sharingNotebookId && (
         <ShareDialog
           subjectType="notebook"
