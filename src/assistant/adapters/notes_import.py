@@ -38,6 +38,7 @@ class ImportStats:
     notes_skipped_existing: int
     notes_skipped_web_clip: int
     notes_overridden: int
+    notes_imported_web_clip: int = 0  # web clips created or overridden
 
 
 def compute_external_id(title: str) -> str:
@@ -83,6 +84,7 @@ def run_import(
     notes_skipped_existing = 0
     notes_skipped_web_clip = 0
     notes_overridden = 0
+    notes_imported_web_clip = 0
 
     for document_id in import_source.list_documents():
         try:
@@ -111,10 +113,12 @@ def run_import(
                     add_markdown_node(session, note.id, owner, payload, block_type)
                 session.commit()
                 notes_created += 1
+                notes_imported_web_clip += imported.parsed.web_clip
             elif override:
                 replace_markdown_nodes(session, existing.id, owner, blocks)
                 session.commit()
                 notes_overridden += 1
+                notes_imported_web_clip += imported.parsed.web_clip
             else:
                 notes_skipped_existing += 1
         except Exception:
@@ -126,4 +130,5 @@ def run_import(
         notes_skipped_existing=notes_skipped_existing,
         notes_skipped_web_clip=notes_skipped_web_clip,
         notes_overridden=notes_overridden,
+        notes_imported_web_clip=notes_imported_web_clip,
     )

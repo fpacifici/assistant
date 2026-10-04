@@ -65,6 +65,11 @@ def main() -> int:
         action="store_true",
         help="Replace already-imported notes with freshly parsed content",
     )
+    parser.add_argument(
+        "--include-web-clips",
+        action="store_true",
+        help="Also import web clippings (skipped by default)",
+    )
     args = parser.parse_args()
 
     try:
@@ -81,7 +86,9 @@ def main() -> int:
             logger.exception("Authentication failed")
             return 1
 
-        import_source = HTMLFileImportSource(args.root_dir)
+        import_source = HTMLFileImportSource(
+            args.root_dir, include_web_clips=args.include_web_clips
+        )
         stats = run_import(session, import_source, user, override=args.override)
         logger.info("Import complete: %s", stats)
 

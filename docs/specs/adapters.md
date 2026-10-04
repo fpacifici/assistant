@@ -45,21 +45,22 @@ notes-import path, not removed, deleted, or migrated in this iteration.
    as a fallback title when there's no `<h1>`, so that notes without a visible
    heading still get a sensible name instead of an empty title.
 5. As the person running the import, I want notes marked `meta
-   itemprop=source` = `web.clip` skipped entirely, so that web clippings (which
-   aren't really "my notes") don't clutter my notebooks.
+   itemprop=source` = `web.clip` skipped by default, so that web clippings
+   (which aren't really "my notes") don't clutter my notebooks, and I want an
+   `--include-web-clips` option to import them too when I do want them.
 6. As the person running the import, I want bulleted and numbered lists
-   preserved as lists, so that imported notes keep their original structure
-   instead of collapsing into flat paragraphs.
+   preserved as lists, including their nesting, so that imported notes keep
+   their original structure instead of collapsing into flat paragraphs.
 7. As the person running the import, I want headings below the title (`<h2>`
-   through `<h6>`) preserved as headings, so that imported notes keep their
+   through `<h6>`, and any `<h1>` after the title) preserved as headings, so that imported notes keep their
    internal structure and are easy to navigate.
 8. As the person running the import, I want links inside notes preserved, so
    that references to other pages or notes still work after import.
-9. As the person running the import, I want to know that tables and images are
-   not yet supported, and to see a clear placeholder marking where they were
-   skipped rather than either mangled garbage paragraphs or silently missing
-   content, so that I get a clean, honest note instead of corrupted or
-   unexplained gaps.
+9. As the person running the import, I want to know that images and
+   attachments are not yet supported, and to see a clear placeholder marking
+   where they were skipped rather than either mangled garbage paragraphs or
+   silently missing content, so that I get a clean, honest note instead of
+   corrupted or unexplained gaps. Tables are imported as tables.
 10. As the person running the import, I want everything not explicitly handled
     to fall back to a plain paragraph, so that no content is silently lost even
     when the parser doesn't understand its original structure.
@@ -108,7 +109,7 @@ notes-import path, not removed, deleted, or migrated in this iteration.
     running the whole import pipeline against a fixture directory and a real
     test database, so that dedup/override/notebook-resolution behavior is
     verified end-to-end, not just in pieces.
-24. As a future contributor, I want image and table support tracked as
+24. As a future contributor, I want image and attachment support tracked as
     explicit TODOs rather than silently forgotten, so that the gap is visible
     and intentional, not an accidental oversight.
 25. As a future contributor, I want the UI zip-upload import flow (importing a
@@ -145,40 +146,90 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   otherwise fall back to `meta itemprop=title`; otherwise fall back to the
   filename. The first `<h1>`, if used as the title, is consumed as the title
   marker and not also emitted as a heading block in the note body.
-- A note is skipped entirely if `meta itemprop=source` has content `web.clip`.
+- A note is skipped entirely if `meta itemprop=source` has content `web.clip`,
+  unless the import runs with `--include-web-clips`; then it is parsed like
+  any other note. `ImportStats` counts skipped web clips
+  (`notes_skipped_web_clip`) and imported ones (`notes_imported_web_clip`).
 - Block mapping:
   - `<ul>`/`<ol>` → `list_item` blocks (list style, ordered vs. unordered, is
     encoded in the block's markdown payload text, since the schema's
     `MarkdownBlockType` has no separate ordered/unordered type).
-  - `<h2>`–`<h6>` → `heading` blocks.
-  - Links are preserved inline within block text.
-  - Tables and images are not rendered, but they are **not silently dropped**
-    either: each produces a single placeholder `paragraph` block, in its
-    original position, stating what kind of block was skipped (a table
-    becomes a paragraph reading `Skipped block: table`; an image becomes
-    `Skipped block: image`), so the note's structure and block count reflect
-    the original content. Real table/image rendering remains a TODO for a
-    future iteration (see Out of Scope).
+  - Nesting is preserved. There is one `list_item` block per **top-level**
+    item; its payload is the item line followed by its sub-items as indented
+    Markdown (2 spaces under `- ` and `- [ ] `, the marker width under
+    `N. `), which is how the editor stores a list block with children. A
+    nested `<ul>`/`<ol>` that is a sibling of an `<li>` (Evernote's markup)
+    belongs to the preceding `<li>`; one with no preceding `<li>` gets an
+    empty, unnumbered parent item.
+  - Empty list items (no text, no sub-items, e.g. Evernote's trailing
+    `<li><br></li>`) are dropped. An empty item with sub-items is kept as
+    their parent.
+  - Each `<ol>` numbers its own items from its `start` attribute (default
+    1), so nested ordered lists restart and nested bullet lists do not
+    advance the parent's numbering.
+  - Checklists → `list_item` blocks with a `- [x] ` / `- [ ] ` prefix: items
+    of a `ul.en-todolist` (state from `data-checked`), and Evernote's older
+    `<div><input class="en-todo" checked="true|false"/>…</div>` paragraphs.
+    The hidden `input.list-bullet-todo` Evernote puts in every list item is
+    ignored.
+  - `<h2>`–`<h6>`, and any `<h1>` after the title, → `heading` blocks. Empty
+    headings are dropped.
+  - `<pre>` and Evernote's `<en-codeblock>` → `code_block` blocks holding a
+    fenced code block with the text verbatim (`<br>` and per-line `<div>`s
+    become line breaks; a `language-xxx` class becomes the fence's info
+    string).
+  - `<blockquote>` → one `blockquote` block; its inner blocks become lines
+    of the quote, separated by empty quote lines, because the editor's quote
+    holds inline content only.
+  - `<hr>` → nothing. `svg`, `noscript` and `template` are ignored.
+  - Links are preserved inline within block text; a link with no text
+    (e.g. an icon-only share button) is dropped.
+  - Inline formatting is preserved as Markdown: `b`/`strong` → `**…**`,
+    `i`/`em` → `*…*`, `s`/`strike`/`del` → `~~…~~`, `code` → a code span.
+    A paragraph that is only bold (Evernote's section headers) stays a
+    paragraph. Text that would otherwise read as Markdown (`*`, `_`, `[`, a
+    leading `#` or `- `, …) is backslash-escaped so it loads literally. The
+    note title is plain text.
+  - `<table>` → one `paragraph` block holding a GFM pipe table, which is how
+    the editor stores its own tables. The first row is the header; short
+    rows are padded. GFM has no merged cells, so a `colspan` cell repeats
+    its content and a `rowspan` leaves the cells below it empty. Cells keep
+    inline formatting, `|` is escaped, and a table nested in a cell is
+    flattened into that cell's text. A table that contains tables is page
+    layout (common in web clips): it is recursed into like a container and
+    only its innermost tables become pipe tables.
+  - Images are not rendered, but they are **not silently dropped** either:
+    each produces a single placeholder `paragraph` block, in its original
+    position, reading `Skipped block: image`, so the note's structure and
+    block count reflect the original content. Real image rendering remains
+    a TODO for a future iteration (see Out of Scope).
+  - Attachments get the same treatment: an `en-media` element, an
+    Evernote resource card (an element with `data-resource-hash` other
+    than `<img>`), or embedded media (`iframe`, `video`, `audio`, `picture`,
+    `object`, `embed`, `canvas`) becomes `Skipped block: attachment`. The card's caption
+    (the file name, often `Untitled Attachment`) is not imported as text.
   - This placeholder treatment applies only to element types the parser
-    recognizes and deliberately does not render (currently: `table`, `img`).
+    recognizes and deliberately does not render (currently: `img` and
+    attachments).
     It does **not** apply to inline `style`/`class` attributes, which
     continue to be silently ignored throughout — a "skipped block"
     placeholder is about skipped *content*, not skipped *styling*.
   - Unhandled **container** elements (`div`, `article`, `section`, and the
     like) are recursed into rather than treated as opaque: their handled
     descendants still produce their normal structured blocks (headings,
-    list items, table/image placeholders) in document order, and the first
+    list items, tables, placeholders) in document order, and the first
     `<h1>` is consumed as the title wherever it sits in the tree, not only
     at the top level. Only genuinely unhandled *leaf* content — an element
     with no handled descendants — collapses to a single `paragraph`.
   - When a container mixes loose text directly inside it alongside at
     least one block-level child element (e.g. `<div>Some text<p>Body</p>
-    </div>`), only the block-level children are emitted as blocks; the
-    loose sibling text is not separately captured as its own `paragraph`.
-    This matches real-world exports, where meaningful content is
-    consistently wrapped in its own element rather than left as bare text
-    beside a block sibling — bare stray text next to a block is treated as
-    incidental whitespace/formatting, not content to preserve.
+    </div>`), each run of consecutive loose text and inline elements becomes
+    its own `paragraph`, in document order around the block-level children.
+    Real exports do leave content beside block siblings (e.g. Evernote's
+    legacy `<div><input class="en-todo"/>Text</div>` checkboxes), so it is
+    never dropped.
+  - An element the parser does not recognise is inline unless it wraps a
+    block-level element, in which case it is recursed into like a container.
   - Everything else not explicitly handled → `paragraph`.
   - Inline styling (CSS) is ignored throughout.
 
@@ -242,7 +293,7 @@ with this repo's existing adapter/notes tests.
 - **Secondary seam — pure HTML→MarkdownNode parser tests**: feed raw HTML
   strings directly into the parsing function and assert the returned node
   tree, to affordably cover the parsing-rule matrix (title precedence,
-  `ul`/`ol`, heading levels, link preservation, table/image skip, `web.clip`
+  `ul`/`ol`, heading levels, link preservation, tables, image skip, `web.clip`
   skip) without paying for a full DB round-trip per case.
 - **CLI seam — thin, matching existing convention**: mock the pipeline call
   itself; assert the CLI correctly resolves auth precedence (argument / env
@@ -266,15 +317,14 @@ convention. See Further Notes.
 1. Migrating the Evernote adapter to the notes-import pipeline (its content
    format, ENML vs. HTML-export, is a separate open design question).
 2. The UI zip-file upload import flow (Goal 5 in the original spec framing).
-3. Image support in the HTML parser (tracked as a TODO).
-4. Table support in the HTML parser (tracked as a TODO).
-5. Deletion propagation — deleting a `Note` because its source file was
+3. Image and attachment support in the HTML parser (tracked as a TODO).
+4. Deletion propagation — deleting a `Note` because its source file was
    deleted or moved.
-6. Per-owner scoping of notebook name uniqueness (currently global; flagged
+5. Per-owner scoping of notebook name uniqueness (currently global; flagged
    as a "for now" simplification).
-7. Selective/targeted override (only a run-wide `--override` flag exists;
+6. Selective/targeted override (only a run-wide `--override` flag exists;
    there's no mechanism to force-override a specific note by id).
-8. Handling of note renames as updates — a renamed source note currently
+7. Handling of note renames as updates — a renamed source note currently
    imports as a new note rather than updating the old one in place.
 
 ## Further Notes

@@ -79,6 +79,7 @@ def test_run_import_creates_notebooks_and_notes_from_fixtures(
 
     assert stats.notes_created == 3
     assert stats.notes_skipped_web_clip == 1
+    assert stats.notes_imported_web_clip == 0
     assert stats.notes_skipped_existing == 0
     assert stats.notes_overridden == 0
     assert stats.notebooks_touched == 2
@@ -284,6 +285,39 @@ def test_web_clip_note_is_skipped_with_no_db_writes(db_session: Session) -> None
     assert stats.notes_created == 0
     assert list(db_session.scalars(select(Notebook))) == []
     assert list(db_session.scalars(select(Note))) == []
+
+
+def test_included_web_clip_is_imported_and_counted(db_session: Session) -> None:
+    user = _make_user(db_session)
+    source = _FakeImportSource(
+        {
+            "doc1": ImportedNote(
+                notebook_name="NB",
+                parsed=ParsedNote(
+                    title="Clip",
+                    blocks=[ParsedBlock("paragraph", "clipped")],
+                    web_clip=True,
+                ),
+            ),
+        },
+    )
+
+    stats = run_import(db_session, source, user)
+
+    assert stats.notes_created == 1
+    assert stats.notes_imported_web_clip == 1
+    assert stats.notes_skipped_web_clip == 0
+
+
+def test_run_import_with_web_clips_included_from_fixtures(db_session: Session) -> None:
+    user = _make_user(db_session)
+    source = HTMLFileImportSource(FIXTURES_DIR, include_web_clips=True)
+
+    stats = run_import(db_session, source, user)
+
+    assert stats.notes_created == 4
+    assert stats.notes_skipped_web_clip == 0
+    assert stats.notes_imported_web_clip == 1
 
 
 # ---------------------------------------------------------------------------

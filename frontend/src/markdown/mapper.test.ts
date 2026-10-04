@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildBlocksFromNodes, buildSnapshot } from './mapper';
 import { ServerRegistry } from './serverRegistry';
 import type { NoteNode } from '../types';
+import { BlockNoteEditor as RealBlockNoteEditor } from '@blocknote/core';
 import type { Block, BlockNoteEditor } from '@blocknote/core';
 
 // Minimal Block factory
@@ -113,5 +114,154 @@ describe('buildSnapshot', () => {
   it('returns empty map for empty block list', () => {
     const editor = { blocksToMarkdownLossy: vi.fn(() => '') } as unknown as BlockNoteEditor;
     expect(buildSnapshot([], editor).size).toBe(0);
+  });
+});
+
+// Contract between the HTML notes importer (src/assistant/adapters/html_parser.py)
+// and the editor: each payload the importer writes must load, through the real
+// BlockNote parser, as the block tree the importer intended.
+describe('importer payload contract', () => {
+  const editor = RealBlockNoteEditor.create();
+
+  const load = (payload: string): Block[] =>
+    buildBlocksFromNodes([makeNode('n1', payload)], editor, new ServerRegistry());
+
+  const text = (block: Block): string =>
+    (block.content as { text: string }[]).map((c) => c.text).join('');
+
+  it('reads inline formatting as BlockNote styles', () => {
+    const [block] = load('**a** *b* ~~c~~ `d` ***e***');
+    const styled = (block.content as { text: string; styles: object }[]).filter(
+      (c) => c.text.trim(),
+    );
+    expect(styled.map((c) => [c.text, c.styles])).toEqual([
+      ['a', { bold: true }],
+      ['b', { italic: true }],
+      ['c', { strike: true }],
+      ['d', { code: true }],
+      ['e', { bold: true, italic: true }],
+    ]);
+  });
+
+  it('reads a bold-only paragraph as a bold paragraph', () => {
+    const blocks = load('**Section header**');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    expect(blocks[0].content).toMatchObject([{ text: 'Section header', styles: { bold: true } }]);
+  });
+
+  type Tree = [string, string, Tree[]];
+  const tree = (block: Block): Tree => [block.type, text(block), block.children.map(tree)];
+
+  it.each<[string, Tree]>([
+    [
+      '- a\n  - b\n    - c',
+      ['bulletListItem', 'a', [['bulletListItem', 'b', [['bulletListItem', 'c', []]]]]],
+    ],
+    [
+      '1. a\n   1. b\n   2. c',
+      ['numberedListItem', 'a', [['numberedListItem', 'b', []], ['numberedListItem', 'c', []]]],
+    ],
+    [
+      '10. a\n    - b',
+      ['numberedListItem', 'a', [['bulletListItem', 'b', []]]],
+    ],
+    [
+      '- a\n  1. x\n  2. y',
+      ['bulletListItem', 'a', [['numberedListItem', 'x', []], ['numberedListItem', 'y', []]]],
+    ],
+    [
+      '- [x] task\n  - [ ] sub\n  - note',
+      ['checkListItem', 'task', [['checkListItem', 'sub', []], ['bulletListItem', 'note', []]]],
+    ],
+    ['- \n  - orphan', ['bulletListItem', '', [['bulletListItem', 'orphan', []]]]],
+    ['2. \n   1. x', ['numberedListItem', '', [['numberedListItem', 'x', []]]]],
+    [
+      '- a\n  - \n    - b',
+      ['bulletListItem', 'a', [['bulletListItem', '', [['bulletListItem', 'b', []]]]]],
+    ],
+  ])('reads nested list payload %j as one block with children', (payload, expected) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(tree(blocks[0])).toEqual(expected);
+    // What the editor saves for this block reloads as the same tree.
+    const saved = editor.blocksToMarkdownLossy([blocks[0]]);
+    expect(load(saved).map(tree)).toEqual([expected]);
+  });
+
+  it('shows the written numbers for consecutive numbered items', () => {
+    const nodes = ['1. a', '2. b\n   1. b1', '3. c'].map((p, i) => makeNode(`n${i}`, p));
+    const blocks = buildBlocksFromNodes(nodes, editor, new ServerRegistry());
+    expect(blocks.map((b) => b.type)).toEqual(Array(3).fill('numberedListItem'));
+    // BlockNote shows `start` when set, else continues from the previous item.
+    // It drops `start` from an item with children, which then continues.
+    const shown: number[] = [];
+    blocks.forEach((b, i) => {
+      const start = (b.props as { start?: number }).start;
+      shown.push(start ?? (i > 0 ? shown[i - 1] + 1 : 1));
+    });
+    expect(shown).toEqual([1, 2, 3]);
+  });
+
+  it('reads a pipe table payload as a table block', () => {
+    const payload = '| a | **b** |\n| --- | --- |\n| x \\| y | |\n| 1 | 2 |';
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('table');
+    type Cell = { content: { text: string; styles: object }[] };
+    const rows = (blocks[0].content as unknown as { rows: { cells: Cell[] }[] }).rows;
+    const cellText = (c: Cell) => c.content.map((t) => t.text).join('');
+    expect(rows.map((r) => r.cells.map(cellText))).toEqual([
+      ['a', 'b'],
+      ['x | y', ''],
+      ['1', '2'],
+    ]);
+    expect(rows[0].cells[1].content[0].styles).toEqual({ bold: true });
+  });
+
+  it.each([
+    ['```\ndef f():\n    return *x*\n```', ''],
+    ['```python\na = 1\n```', 'python'],
+    ['````\n```\nx\n```\n````', ''],
+  ])('reads code block payload %j verbatim', (payload, language) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('codeBlock');
+    const lines = payload.split('\n');
+    expect(text(blocks[0])).toBe(lines.slice(1, -1).join('\n'));
+    if (language) expect(blocks[0].props).toMatchObject({ language });
+  });
+
+  it('reads a multi-paragraph quote payload as one quote', () => {
+    const blocks = load('> one **bold**\n>\n> two');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('quote');
+    expect(text(blocks[0])).toBe('one bold\ntwo');
+  });
+
+  it.each([
+    ['- [x] done', true],
+    ['- [ ] open', false],
+  ])('reads %s as a check list item', (payload, checked) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('checkListItem');
+    expect(blocks[0].props).toMatchObject({ checked });
+    expect(text(blocks[0])).toBe(payload.slice(6));
+  });
+
+  it.each([
+    ['A\\[Ix, J\\] \\* B\\_c \\`d\\` \\~e\\~ a\\\\b', 'A[Ix, J] * B_c `d` ~e~ a\\b'],
+    ['vector<\u200bint> a < b', 'vector<\u200bint> a < b'],
+    ['\\# not a heading', '# not a heading'],
+    ['\\- not a list', '- not a list'],
+    ['1\\. not a list', '1. not a list'],
+    ['\\> not a quote', '> not a quote'],
+    ['\\---', '---'],
+  ])('reads escaped text %s literally', (payload, expected) => {
+    const blocks = load(payload);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    expect(text(blocks[0])).toBe(expected);
   });
 });
