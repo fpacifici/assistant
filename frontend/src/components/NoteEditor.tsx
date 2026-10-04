@@ -16,6 +16,7 @@ import ShareDialog from './ShareDialog';
 import { TopBarActions } from './TopBarSlot';
 import { useTopBarMenuItems } from './TopBarMenuContext';
 import { useIsMobile } from '../layout/LayoutModeContext';
+import { useTheme } from '../theme/ThemeContext';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import type { NoteNode } from '../types';
 
@@ -24,6 +25,7 @@ const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
   const isMobile = useIsMobile();
+  const { theme } = useTheme();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -171,7 +173,7 @@ export default function NoteEditor() {
       <div className={`editor-content${debugOpen && !isMobile ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}
-          theme="light"
+          theme={theme}
           portalElements={{ default: null }}
         />
         {debugOpen && !isMobile && (

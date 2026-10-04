@@ -48,6 +48,7 @@ StrictMode
   QueryClientProvider        -- React Query cache (refetchOnWindowFocus: false)
     RouterProvider           -- React Router v7 data router
       RootProviders          -- root layout route (components/RouteLayouts.tsx)
+       ThemeProvider         -- resolves 'light' | 'dark' (see Theming)
         LayoutModeProvider   -- resolves 'mobile' | 'desktop' (see Responsive layout)
           Sentry.ErrorBoundary -- reports render errors, shows a reload fallback
             <public pages>
@@ -128,6 +129,32 @@ The same SPA serves desktop, tablets and phones
 - **Tests**: `renderWithProviders(ui, { layout })` forces a mode
   (default `'desktop'`; `'auto'` uses real detection), and
   `test/matchMedia.ts` provides `mockViewport` / `resizeViewport`.
+
+## Theming (light / dark)
+
+Both layouts support a light and a dark theme.
+
+- **Preference** (`theme/theme.ts`): `'system' | 'light' | 'dark'`, stored in
+  `localStorage` (`assistant.theme`; `'system'` clears the key). `'system'`
+  follows `(prefers-color-scheme: dark)`; an explicit choice wins.
+- **Resolution** (`theme/ThemeContext.tsx`): `ThemeProvider` (outermost in
+  `RootProviders`, so auth pages are themed too) subscribes to the OS color
+  scheme via `matchMedia`, exposes `useTheme()` → `{ theme, preference,
+  setPreference }` and mirrors the theme on `<html data-theme="…">`.
+- **No flash**: an inline script in `index.html` applies the same rule
+  before first paint; keep the two in sync.
+- **Styling**: every color in `index.css` is a CSS variable defined on
+  `:root` and overridden under `:root[data-theme="dark"]`, which also sets
+  `color-scheme`. New styles must use the tokens, not literal colors. The
+  header / mobile top bar stays dark in both themes.
+- **Editor**: `BlockNoteView` receives `theme={theme}`; its editor surface
+  colors are mapped to the app tokens.
+- **Controls**: `ThemeSwitcher.tsx` — a `<select aria-label="Theme">` in
+  `DesktopHeader`, and `menuitemradio` entries in the mobile `⋯` menu (they
+  keep the menu open).
+- **Tests**: `setPrefersDark(dark)` in `test/matchMedia.ts` simulates the OS
+  scheme. `test/setup.ts` installs an in-memory `localStorage` when the
+  runtime's is unusable (Node ≥ 25 shadows jsdom's).
 
 ## Component Tree
 
