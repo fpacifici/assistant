@@ -1,4 +1,5 @@
-/** Mobile `⋯` menu: account details, Invites, Settings, Logout, plus view-specific entries. */
+/** Mobile `⋯` menu: account details, Invites, Settings, theme, Logout, plus
+ * view-specific entries. */
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -6,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchInvitesConfig } from '../api/invites';
 import { useRegisteredMenuItems } from './TopBarMenuContext';
+import { ThemeMenuItems } from './ThemeSwitcher';
 
 export default function OverflowMenu({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -68,6 +70,7 @@ export default function OverflowMenu({ children }: { children?: React.ReactNode 
             <Link role="menuitem" to="/invites">Invites</Link>
           )}
           <Link role="menuitem" to="/settings">Settings</Link>
+          <ThemeMenuItems />
           <button role="menuitem" onClick={logout}>Logout</button>
         </div>
       )}

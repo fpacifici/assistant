@@ -171,6 +171,11 @@ class User(Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    tags: Mapped[list[Tag]] = relationship(
+        "Tag",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
 
 
 class Credential(Base):
@@ -406,6 +411,115 @@ class Note(Base):
         back_populates="note",
         cascade="all, delete-orphan",
     )
+    import_record: Mapped[NoteImport | None] = relationship(
+        "NoteImport",
+        back_populates="note",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    tag_links: Mapped[list[NoteTag]] = relationship(
+        "NoteTag",
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
+
+
+class NoteImport(Base):
+    """Marks a Note as created by the notes importer, and when it last wrote it.
+
+    One row per imported note — note_id IS the primary key. `imported_at` is
+    copied from the note's own `update_timestamp` right after the importer's
+    last write, so `note.update_timestamp > imported_at` means a user edited
+    the note after the import (see `adapters/notes_import.py`). Notes created
+    any other way have no row.
+    """
+
+    __tablename__ = "note_imports"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+
+    note: Mapped[Note] = relationship("Note", back_populates="import_record")
+
+
+class Tag(Base):
+    """A user's tag. Each user has their own tag vocabulary.
+
+    `name` is the trimmed display name, keeping the casing it was created
+    with. `normalized_name` (trimmed + casefolded) carries the per-owner
+    uniqueness so "Work" and " work" resolve to the same tag.
+    """
+
+    __tablename__ = "tags"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "normalized_name", name="uq_tag_owner_name"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="tags")
+    note_links: Mapped[list[NoteTag]] = relationship(
+        "NoteTag",
+        back_populates="tag",
+        cascade="all, delete-orphan",
+    )
+
+
+class NoteTag(Base):
+    """Links a Note to a Tag (m:n). The composite PK makes a note's tags a set.
+
+    Tags are per-user: a user only sees the links to their own tags. The
+    service layer only links a tag to a note its owner can view.
+    """
+
+    __tablename__ = "note_tags"
+    __table_args__ = (
+        Index("ix_note_tags_tag_id", "tag_id"),
+        {"schema": "assistant"},
+    )
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tag_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.tags.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    note: Mapped[Note] = relationship("Note", back_populates="tag_links")
+    tag: Mapped[Tag] = relationship("Tag", back_populates="note_links")
 
 
 class File(Base):

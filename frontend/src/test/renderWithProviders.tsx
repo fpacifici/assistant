@@ -4,11 +4,12 @@ import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import type { RouteObject } from 'react-router';
 import type { ReactElement } from 'react';
 import { LayoutModeProvider } from '../layout/LayoutModeContext';
+import { ThemeProvider } from '../theme/ThemeContext';
 import type { LayoutMode } from '../layout/layoutMode';
 
 /**
- * Render under a data router (memory history), a QueryClient and a layout
- * mode.
+ * Render under a data router (memory history), a QueryClient, the theme
+ * provider and a layout mode.
  *
  * `ui` becomes the element of a catch-all route, so callers may pass either a
  * plain component or their own `<Routes>` tree. Pass `routes` instead of `ui`
@@ -40,9 +41,11 @@ export function renderWithProviders(
     [
       {
         element: (
-          <LayoutModeProvider forcedMode={forcedMode}>
-            <Outlet />
-          </LayoutModeProvider>
+          <ThemeProvider>
+            <LayoutModeProvider forcedMode={forcedMode}>
+              <Outlet />
+            </LayoutModeProvider>
+          </ThemeProvider>
         ),
         children: routes ?? [{ path: '*', element: ui }],
       },

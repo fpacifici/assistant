@@ -48,6 +48,7 @@ StrictMode
   QueryClientProvider        -- React Query cache (refetchOnWindowFocus: false)
     RouterProvider           -- React Router v7 data router
       RootProviders          -- root layout route (components/RouteLayouts.tsx)
+       ThemeProvider         -- resolves 'light' | 'dark' (see Theming)
         LayoutModeProvider   -- resolves 'mobile' | 'desktop' (see Responsive layout)
           Sentry.ErrorBoundary -- reports render errors, shows a reload fallback
             <public pages>
@@ -131,6 +132,32 @@ The same SPA serves desktop, tablets and phones
   (default `'desktop'`; `'auto'` uses real detection), and
   `test/matchMedia.ts` provides `mockViewport` / `resizeViewport`.
 
+## Theming (light / dark)
+
+Both layouts support a light and a dark theme.
+
+- **Preference** (`theme/theme.ts`): `'system' | 'light' | 'dark'`, stored in
+  `localStorage` (`assistant.theme`; `'system'` clears the key). `'system'`
+  follows `(prefers-color-scheme: dark)`; an explicit choice wins.
+- **Resolution** (`theme/ThemeContext.tsx`): `ThemeProvider` (outermost in
+  `RootProviders`, so auth pages are themed too) subscribes to the OS color
+  scheme via `matchMedia`, exposes `useTheme()` → `{ theme, preference,
+  setPreference }` and mirrors the theme on `<html data-theme="…">`.
+- **No flash**: an inline script in `index.html` applies the same rule
+  before first paint; keep the two in sync.
+- **Styling**: every color in `index.css` is a CSS variable defined on
+  `:root` and overridden under `:root[data-theme="dark"]`, which also sets
+  `color-scheme`. New styles must use the tokens, not literal colors. The
+  header / mobile top bar stays dark in both themes.
+- **Editor**: `BlockNoteView` receives `theme={theme}`; its editor surface
+  colors are mapped to the app tokens.
+- **Controls**: `ThemeSwitcher.tsx` — a `<select aria-label="Theme">` in
+  `DesktopHeader`, and `menuitemradio` entries in the mobile `⋯` menu (they
+  keep the menu open).
+- **Tests**: `setPrefersDark(dark)` in `test/matchMedia.ts` simulates the OS
+  scheme. `test/setup.ts` installs an in-memory `localStorage` when the
+  runtime's is unusable (Node ≥ 25 shadows jsdom's).
+
 ## Component Tree
 
 ```mermaid
@@ -159,6 +186,8 @@ On mobile it shows one level at a time; see [Responsive layout](#responsive-layo
 ### NotebookList
 
 Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL.
+
+It also opens `ImportDialog` (an "Import" button in its header on desktop, an "Import from Evernote" entry in the `⋯` menu on mobile). The dialog uploads an Evernote export zip with `XMLHttpRequest` for progress, runs the import, then shows the report with links to notes that were kept because the user edited them, and invalidates the notebooks and notes queries.
 
 ### NoteList
 
@@ -220,7 +249,7 @@ All API modules live in `src/api/` and use a shared `apiFetch()` wrapper (`api/c
 - Sets `Content-Type: application/json` when there is a body and sends cookies (`credentials: 'include'`)
 - Throws `ApiError` (with HTTP status) on non-OK responses
 
-Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`.
+Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`.
 
 ## Data Flow Summary
 

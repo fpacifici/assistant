@@ -106,6 +106,48 @@ def test_config_get_document_storage_path_env_override(tmp_path: Path) -> None:
         assert path == Path("/env/path").resolve()
 
 
+def test_config_get_import_storage_path_default(tmp_path: Path) -> None:
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("{}\n")
+
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("IMPORT_STORAGE_PATH", None)
+        path = Config(config_path=config_file).get_import_storage_path()
+
+    assert path == Path("data/imports").resolve()
+
+
+def test_config_get_import_storage_path_env_override(tmp_path: Path) -> None:
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("import_storage_path: /config/imports\n")
+
+    with patch.dict(os.environ, {"IMPORT_STORAGE_PATH": "/env/imports"}):
+        path = Config(config_path=config_file).get_import_storage_path()
+
+    assert path == Path("/env/imports").resolve()
+
+
+def test_config_get_import_max_upload_bytes(tmp_path: Path) -> None:
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("import_max_upload_bytes: 1024\n")
+    config = Config(config_path=config_file)
+
+    assert config.get_import_max_upload_bytes() == 1024
+    with patch.dict(os.environ, {"IMPORT_MAX_UPLOAD_BYTES": "2048"}):
+        assert config.get_import_max_upload_bytes() == 2048
+
+
+def test_config_get_import_max_upload_bytes_default(tmp_path: Path) -> None:
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text("{}\n")
+
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("IMPORT_MAX_UPLOAD_BYTES", None)
+        limit = Config(config_path=config_file).get_import_max_upload_bytes()
+
+    assert limit == 500 * 1024 * 1024
+
+
 def test_config_get_external_source_config(tmp_path: Path) -> None:
     """Test getting external source configuration."""
     config_file = tmp_path / "test_config.yaml"

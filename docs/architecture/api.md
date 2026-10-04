@@ -379,6 +379,55 @@ Entitlement response shape:
 }
 ```
 
+### Imports
+
+Import an Evernote HTML export (a zip with one folder per notebook, one
+`.html` file per note) in two steps, so the client can show upload
+progress before the import starts.
+
+```
+POST /imports                 multipart/form-data, field `file`   -> {import_id} (201)
+POST /imports/{import_id}/run body: {include_web_clips: bool}       -> ImportReport (200)
+```
+
+- Upload: 413 if larger than `import_max_upload_bytes`, 400 if not a zip.
+- Run: 404 if the id is unknown or was uploaded by another user, 400 if the
+  zip is unsafe (path traversal, symlinks), over the extraction limits,
+  corrupt, or contains no notebook folders. The zip is deleted after a run
+  whatever the outcome, so an id can only be run once.
+- The import runs synchronously. See `docs/specs/adapters.md` for the
+  re-import semantics.
+
+ImportReport response shape:
+```json
+{
+    "notebooks_touched": 2,
+    "created": 10,
+    "refreshed": 1,
+    "unchanged": 30,
+    "skipped_web_clip": 3,
+    "imported_web_clip": 0,
+    "kept_modified": [
+        {
+            "note_id": "uuid",
+            "notebook_id": "uuid",
+            "title": "Groceries",
+            "notebook": "Personal",
+            "source_path": "Personal/Groceries.html",
+            "imported_at": "2026-09-01T10:00:00Z",
+            "modified_at": "2026-09-02T10:00:00Z"
+        }
+    ],
+    "kept_untracked": [],
+    "duplicate_title": [{"title": "Untitled", "notebook": "Work", "source_path": "Work/Untitled (1).html"}],
+    "failed": [{"source_path": "Work/broken.html", "error": "..."}],
+    "notebooks_failed": [{"name": "Shared", "reason": "...", "skipped_notes": 4}]
+}
+```
+
+`kept_untracked` entries have the `kept_modified` shape with
+`imported_at: null`.
+
 ### Error Responses
 
 All error responses follow the format:
@@ -396,6 +445,7 @@ Status codes:
   that exists but is invisible to the caller is indistinguishable from one
   that doesn't exist)
 - 409: Conflict (duplicate email, version conflict)
+- 413: Upload too large
 - 422: Validation error (missing/invalid fields or headers)
 
 ## Websocket

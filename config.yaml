@@ -16,6 +16,13 @@ document_storage_path: data/documents
 # File (attachment) storage path (can be overridden with FILE_STORAGE_PATH env var)
 file_storage_path: data/files
 
+# Where note-import zips are uploaded and extracted; each is deleted after its
+# import (can be overridden with IMPORT_STORAGE_PATH env var)
+import_storage_path: data/imports
+
+# Largest import zip accepted, in bytes (IMPORT_MAX_UPLOAD_BYTES env var)
+import_max_upload_bytes: 524288000  # 500 MB
+
 # External source configurations
 external_sources:
   fake:

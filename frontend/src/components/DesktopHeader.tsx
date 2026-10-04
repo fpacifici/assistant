@@ -1,9 +1,11 @@
-/** Desktop header: app title, Invites and Settings links, quota, user name and Logout. */
+/** Desktop header: app title, Invites and Settings links, quota, theme picker, user
+ * name and Logout. */
 
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchInvitesConfig } from '../api/invites';
+import { ThemeSelect } from './ThemeSwitcher';
 
 export default function DesktopHeader() {
   const { user, logout } = useAuth();
@@ -22,6 +24,7 @@ export default function DesktopHeader() {
         )}
         <Link to="/settings" className="nav-link">Settings</Link>
         <span className="quota-badge">{user.invite_quota_remaining} invites left</span>
+        <ThemeSelect />
         <span className="user-name">{user.firstname} {user.lastname}</span>
         <button className="btn-logout" onClick={logout}>Logout</button>
       </div>

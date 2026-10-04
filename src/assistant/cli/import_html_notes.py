@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from assistant.adapters.notes_import import run_import
+from assistant.adapters.notes_import import ImportReport, run_import
 from assistant.adapters.plugins.html_file import HTMLFileImportSource
 from assistant.auth.service import AuthError, authenticate_user
 from assistant.models.database import get_session_factory
@@ -35,6 +35,44 @@ def _resolve_password(cli_password: str | None) -> str:
     if env_password is not None:
         return env_password
     return getpass.getpass("Password: ")
+
+
+def _log_report(report: ImportReport) -> None:
+    """Log the counts, then one line per note or notebook that needs review."""
+    logger.info(
+        "Import complete: %d created, %d refreshed, %d unchanged,"
+        " %d web clips skipped, %d web clips imported, %d notebooks",
+        report.created,
+        report.refreshed,
+        report.unchanged,
+        report.skipped_web_clip,
+        report.imported_web_clip,
+        report.notebooks_touched,
+    )
+    for kept in report.kept_modified:
+        logger.warning(
+            "Kept (edited after import on %s, last edit %s): %s",
+            kept.imported_at,
+            kept.modified_at,
+            kept.source_path,
+        )
+    for kept in report.kept_untracked:
+        logger.warning("Kept (imported before tracking): %s", kept.source_path)
+    for duplicate in report.duplicate_title:
+        logger.warning(
+            "Not imported (duplicate title %r): %s",
+            duplicate.title,
+            duplicate.source_path,
+        )
+    for failed_notebook in report.notebooks_failed:
+        logger.error(
+            "Notebook skipped (%s, %d notes): %s",
+            failed_notebook.reason,
+            failed_notebook.skipped_notes,
+            failed_notebook.name,
+        )
+    for failed in report.failed:
+        logger.error("Failed (%s): %s", failed.error, failed.source_path)
 
 
 def main() -> int:
@@ -63,7 +101,10 @@ def main() -> int:
     parser.add_argument(
         "--override",
         action="store_true",
-        help="Replace already-imported notes with freshly parsed content",
+        help=(
+            "Also refresh notes edited since their import, and notes imported"
+            " before import tracking existed (they are kept by default)"
+        ),
     )
     parser.add_argument(
         "--include-web-clips",
@@ -89,8 +130,8 @@ def main() -> int:
         import_source = HTMLFileImportSource(
             args.root_dir, include_web_clips=args.include_web_clips
         )
-        stats = run_import(session, import_source, user, override=args.override)
-        logger.info("Import complete: %s", stats)
+        report = run_import(session, import_source, user, override=args.override)
+        _log_report(report)
 
     return 0
 

@@ -5,6 +5,7 @@ import { Outlet, useRouteError } from 'react-router';
 import * as Sentry from '@sentry/react';
 import { AuthProvider } from '../contexts/AuthContext';
 import { LayoutModeProvider } from '../layout/LayoutModeContext';
+import { ThemeProvider } from '../theme/ThemeContext';
 
 function ErrorFallback() {
   return (
@@ -20,11 +21,13 @@ function ErrorFallback() {
 /** Root route element: app-wide providers that need router context. */
 export function RootProviders() {
   return (
-    <LayoutModeProvider>
-      <Sentry.ErrorBoundary fallback={<ErrorFallback />}>
-        <Outlet />
-      </Sentry.ErrorBoundary>
-    </LayoutModeProvider>
+    <ThemeProvider>
+      <LayoutModeProvider>
+        <Sentry.ErrorBoundary fallback={<ErrorFallback />}>
+          <Outlet />
+        </Sentry.ErrorBoundary>
+      </LayoutModeProvider>
+    </ThemeProvider>
   );
 }
 

@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NotebookList from './NotebookList';
 import { renderWithProviders } from '../test/renderWithProviders';
+import { TopBarMenuProvider, useRegisteredMenuItems } from './TopBarMenuContext';
 
 vi.mock('../api/notebooks', () => ({
   fetchNotebooks: vi.fn(),
@@ -167,5 +168,42 @@ describe('NotebookList permission gating', () => {
       expect(screen.getByTitle('Share notebook')).toBeInTheDocument();
     });
     expect(screen.queryByTitle('Delete notebook')).not.toBeInTheDocument();
+  });
+
+  it('opens the import dialog from the Import button', async () => {
+    const user = userEvent.setup();
+    mockFetch.mockResolvedValue([]);
+    renderWithProviders(<NotebookList />);
+
+    await user.click(await screen.findByRole('button', { name: 'Import' }));
+
+    expect(screen.getByRole('dialog', { name: 'Import from Evernote' })).toBeInTheDocument();
+  });
+
+  it('registers an "Import from Evernote" entry for the mobile menu', async () => {
+    const user = userEvent.setup();
+    mockFetch.mockResolvedValue([]);
+    function MenuItems() {
+      return (
+        <>
+          {useRegisteredMenuItems().map((item) => (
+            <button key={item.id} onClick={item.onSelect}>
+              {item.label}
+            </button>
+          ))}
+        </>
+      );
+    }
+    renderWithProviders(
+      <TopBarMenuProvider>
+        <MenuItems />
+        <NotebookList />
+      </TopBarMenuProvider>,
+      { layout: 'mobile' },
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Import from Evernote' }));
+
+    expect(screen.getByRole('dialog', { name: 'Import from Evernote' })).toBeInTheDocument();
   });
 });

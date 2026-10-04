@@ -124,6 +124,45 @@ def cmd_delete_note(args: argparse.Namespace) -> None:
     _print_response(response)
 
 
+def cmd_list_tags(args: argparse.Namespace) -> None:
+    response = httpx.get(
+        f"{args.base_url}/tag",
+        headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
+def cmd_create_tag(args: argparse.Namespace) -> None:
+    response = httpx.post(
+        f"{args.base_url}/tag",
+        json={"name": args.name},
+        headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
+def cmd_tag_note(args: argparse.Namespace) -> None:
+    body = {"tag_id": args.tag_id} if args.tag_id else {"name": args.name}
+    response = httpx.post(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/tag",
+        json=body,
+        headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
+def cmd_untag_note(args: argparse.Namespace) -> None:
+    response = httpx.delete(
+        f"{args.base_url}/notebook/{args.notebook_id}/note/{args.note_id}/tag/{args.tag_id}",
+        headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
 def cmd_create_node(args: argparse.Namespace) -> None:
     body: dict[str, str] = {"payload": args.payload}
     if args.after_node_id:
@@ -259,6 +298,35 @@ def _register_note_commands(
     p.set_defaults(func=cmd_delete_note)
 
 
+def _register_tag_commands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser("list-tags")
+    p.add_argument("--user-id", required=True)
+    p.set_defaults(func=cmd_list_tags)
+
+    p = subparsers.add_parser("create-tag")
+    p.add_argument("--name", required=True)
+    p.add_argument("--user-id", required=True)
+    p.set_defaults(func=cmd_create_tag)
+
+    p = subparsers.add_parser("tag-note", help="Tag a note by tag id or by name")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--user-id", required=True)
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--tag-id")
+    target.add_argument("--name", help="Created on the fly if missing")
+    p.set_defaults(func=cmd_tag_note)
+
+    p = subparsers.add_parser("untag-note")
+    p.add_argument("--notebook-id", required=True)
+    p.add_argument("--note-id", required=True)
+    p.add_argument("--tag-id", required=True)
+    p.add_argument("--user-id", required=True)
+    p.set_defaults(func=cmd_untag_note)
+
+
 def _register_node_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -318,6 +386,7 @@ def main() -> int:
     _register_user_commands(subparsers)
     _register_notebook_commands(subparsers)
     _register_note_commands(subparsers)
+    _register_tag_commands(subparsers)
     _register_node_commands(subparsers)
 
     args = parser.parse_args()

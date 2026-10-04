@@ -174,5 +174,12 @@ entrypoint. Import runs are orchestrated by a pipeline (`notes_import.py`,
 shaped like `dataload.py`) that drives an `ImportSource` and writes through
 `notes/service.py`.
 
+`run_import` returns an `ImportReport`. It refreshes notes it imported
+earlier only if nobody edited them since, tracked through the `note_imports`
+table, and lists edited notes instead of overwriting them.
+`zip_import.py` wraps the pipeline for the web UI: it stores an uploaded
+zip, extracts it safely and runs the same `HTMLFileImportSource` +
+`run_import` on it (see `POST /imports` in [the API](./api.md)).
+
 See `docs/specs/adapters.md` for the HTML adapter's detailed parsing and
-import/override semantics.
+import/re-import semantics.
