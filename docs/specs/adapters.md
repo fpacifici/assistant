@@ -133,8 +133,8 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   notes-import (and deciding whether it stays on the live ENML API or moves to
   a manual HTML-export-based flow) is deferred to a later iteration.
 - The **UI zip-file import flow** (uploading a zip of HTML notes from the app)
-  is deferred entirely. This iteration ships the CLI-driven directory import
-  only.
+  was deferred from this iteration and has since been added — see "Zip upload
+  from the web UI" below.
 
 ### HTML directory adapter
 
@@ -148,8 +148,8 @@ notes-import path, not removed, deleted, or migrated in this iteration.
   marker and not also emitted as a heading block in the note body.
 - A note is skipped entirely if `meta itemprop=source` has content `web.clip`,
   unless the import runs with `--include-web-clips`; then it is parsed like
-  any other note. `ImportStats` counts skipped web clips
-  (`notes_skipped_web_clip`) and imported ones (`notes_imported_web_clip`).
+  any other note. `ImportReport` counts skipped web clips
+  (`skipped_web_clip`) and imported ones (`imported_web_clip`).
 - Block mapping:
   - `<ul>`/`<ol>` → `list_item` blocks (list style, ordered vs. unordered, is
     encoded in the block's markdown payload text, since the schema's
@@ -262,17 +262,60 @@ notes-import path, not removed, deleted, or migrated in this iteration.
 - All notes and notebooks created by a given import run are owned by the
   authenticated user.
 
-### Import / override semantics
+### Import / re-import semantics
 
-- Default run behavior: a note whose `external_id` already exists in the
-  database is skipped/ignored — only genuinely new notes are imported.
-- `--override` flag: notes matched by `external_id` are **wholesale
-  replaced** — all existing `MarkdownNode`s for that note are deleted and
-  recreated from the freshly parsed source content. This is a blanket,
-  run-wide flag, not selective per-note targeting.
+Notes are matched by `external_id = sha256(title)` within their notebook.
+Every note the importer creates or refreshes gets a row in `note_imports`
+(`note_id`, `imported_at`, `source_path`). `imported_at` is copied from the
+note's own `update_timestamp` right after the importer's last write, so a
+note counts as **edited** when `note.update_timestamp > imported_at` (every
+user edit — title or any node change — bumps `update_timestamp`).
+
+`run_import` returns an `ImportReport`. For each source document, in sorted
+path order:
+
+| Situation | Action | Report |
+|---|---|---|
+| No note with this title in the notebook | create it and its `note_imports` row | `created` |
+| Imported, not edited since, same content | nothing (no writes, no timestamp changes) | `unchanged` |
+| Imported, not edited since, content differs | replace all its nodes, update `imported_at` | `refreshed` |
+| Imported, edited since | nothing | `kept_modified` (with ids, import and edit times) |
+| Exists but has no `note_imports` row (imported before tracking existed; there is no backfill) | nothing | `kept_untracked` |
+| Same title already handled earlier in this run, same notebook | nothing; the first one in path order wins | `duplicate_title` |
+| Web clip and `--include-web-clips` off | nothing | `skipped_web_clip` |
+| Notebook exists and the user cannot create notes in it (it belongs to another user; names are globally unique) | skip all its notes | `notebooks_failed` |
+| Any error | roll back that note's writes (including a notebook created for it) and continue | `failed` |
+
+- Re-running the same export is idempotent: the second run reports
+  everything as `unchanged` (or kept/duplicate) and writes nothing.
+- `--override` (CLI only): also refreshes `kept_modified` and
+  `kept_untracked` notes, discarding user edits, and starts tracking
+  untracked ones. It is a blanket, run-wide flag.
+- A deleted imported note loses its `note_imports` row (cascade) and is
+  created again by the next import.
 - Notes and their nodes are **never deleted** by the importer, even if the
   corresponding source file disappears between runs (no deletion
   propagation).
+
+### Zip upload from the web UI
+
+- The notebooks sidebar (desktop) and the top bar `⋯` menu (mobile) open an
+  "Import from Evernote" dialog. It uploads a zip, runs the import and shows
+  the report, with links to the notes kept because the user edited them.
+- `POST /imports` stores the zip as
+  `<import_storage_path>/<user uid>/<import_id>.zip` (default
+  `data/imports`); `POST /imports/{import_id}/run` extracts it next to the
+  zip, runs `run_import` (never with override) and deletes the zip and the
+  extracted files whether the import succeeds or fails. Uploads that are
+  never run stay on disk until removed by hand.
+- The zip has one directory per notebook, as for the CLI. A single top-level
+  folder with no `.html` files of its own is treated as a wrapper and
+  unwrapped. `__MACOSX/` and dotfiles are ignored.
+- Extraction rejects absolute paths, `..` components and symlinks, and
+  enforces limits on entry count and total uncompressed size (counted from
+  the decompressed bytes). Upload size is limited by
+  `import_max_upload_bytes` (default 500 MB).
+- The import runs synchronously inside the request.
 
 ---
 
@@ -316,7 +359,8 @@ convention. See Further Notes.
 
 1. Migrating the Evernote adapter to the notes-import pipeline (its content
    format, ENML vs. HTML-export, is a separate open design question).
-2. The UI zip-file upload import flow (Goal 5 in the original spec framing).
+2. ~~The UI zip-file upload import flow~~ — done, see "Zip upload from the
+   web UI".
 3. Image and attachment support in the HTML parser (tracked as a TODO).
 4. Deletion propagation — deleting a `Note` because its source file was
    deleted or moved.

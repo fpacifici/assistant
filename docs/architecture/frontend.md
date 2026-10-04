@@ -158,6 +158,8 @@ On mobile it shows one level at a time; see [Responsive layout](#responsive-layo
 
 Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL.
 
+It also opens `ImportDialog` (an "Import" button in its header on desktop, an "Import from Evernote" entry in the `⋯` menu on mobile). The dialog uploads an Evernote export zip with `XMLHttpRequest` for progress, runs the import, then shows the report with links to notes that were kept because the user edited them, and invalidates the notebooks and notes queries.
+
 ### NoteList
 
 Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD pattern as NotebookList. Returns `null` when no notebook is selected.
@@ -218,7 +220,7 @@ All API modules live in `src/api/` and use a shared `apiFetch()` wrapper (`api/c
 - Sets `Content-Type: application/json` when there is a body and sends cookies (`credentials: 'include'`)
 - Throws `ApiError` (with HTTP status) on non-OK responses
 
-Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`.
+Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`.
 
 ## Data Flow Summary
 
