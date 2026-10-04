@@ -24,6 +24,7 @@ from assistant.invites.exceptions import (
 )
 from assistant.notes.exceptions import (
     InvalidBlockTypeError,
+    InvalidTagNameError,
     NodeVersionConflictError,
     NotesServiceError,
     PermissionDeniedError,
@@ -48,6 +49,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def invalid_block_type_handler(
         request: Request,  # noqa: ARG001
         exc: InvalidBlockTypeError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidTagNameError)
+    async def invalid_tag_name_handler(
+        request: Request,  # noqa: ARG001
+        exc: InvalidTagNameError,
     ) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 

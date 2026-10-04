@@ -39,7 +39,7 @@ FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker/frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
 
-# Where nginx proxies /auth, /user, /notebook, /files (see the template). Point
+# Where nginx proxies /auth, /user, /notebook, /files, /tag (see the template). Point
 # these at the backend Service and port in whatever chart/compose file deploys
 # this image alongside the backend.
 ENV BACKEND_HOST=backend

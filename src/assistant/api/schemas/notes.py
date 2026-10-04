@@ -7,6 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from assistant.api.schemas.tags import TagResponse
 from assistant.models.schema import PermissionName
 
 
@@ -28,3 +29,5 @@ class NoteResponse(BaseModel):
     creation_timestamp: datetime
     update_timestamp: datetime
     permissions: list[PermissionName]
+    # The caller's own tags on this note — tags are per user.
+    tags: list[TagResponse]

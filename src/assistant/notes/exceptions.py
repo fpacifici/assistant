@@ -46,6 +46,14 @@ class InvalidBlockTypeError(NotesServiceError):
     """Raised when an invalid markdown block type is provided."""
 
 
+class TagNotFoundError(NotesServiceError):
+    """Raised when a tag does not exist or belongs to another user."""
+
+
+class InvalidTagNameError(NotesServiceError):
+    """Raised when a tag name is empty or too long after trimming."""
+
+
 class PermissionDeniedError(NotesServiceError):
     """Raised when a caller has view access but lacks a specific permission."""
 
