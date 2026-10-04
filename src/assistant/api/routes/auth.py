@@ -445,7 +445,7 @@ def google_reauth_start(session: SessionDep, user_id: CurrentUserId) -> GoogleRe
 
 
 @router.post("/credentials/password", response_model=UserResponse)
-def switch_to_password(  # noqa: PLR0913, PLR0917
+def switch_to_password(  # noqa: PLR0913
     body: SetPasswordRequest,
     session: SessionDep,
     user_id: CurrentUserId,
