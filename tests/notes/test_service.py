@@ -17,6 +17,7 @@ from assistant.models.schema import (
     NodeType,
     Note,
     Notebook,
+    NoteImport,
     PermissionName,
     RoleName,
     User,
@@ -44,6 +45,8 @@ from assistant.notes.service import (
     get_node_in_note,
     get_note,
     get_note_by_external_id,
+    get_note_import,
+    get_note_update_timestamp,
     get_notebook,
     get_ordered_nodes,
     insert_markdown_node,
@@ -51,6 +54,7 @@ from assistant.notes.service import (
     list_notebooks,
     list_notes,
     merge_text_nodes,
+    record_note_import,
     replace_markdown_nodes,
     split_text_node,
     update_markdown_node,
@@ -1183,3 +1187,78 @@ def test_delete_node_returns_none_for_text_node(db_session: Session) -> None:
 def test_delete_node_returns_none_for_absent_node(db_session: Session) -> None:
     user = _make_user(db_session)
     assert delete_node(db_session, uuid.uuid4(), user) is None
+
+
+# -----------------------------------------------------------------------
+# Import tracking (no permission check — importer-internal)
+# -----------------------------------------------------------------------
+
+
+def test_record_note_import_copies_update_timestamp(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user)
+    note = create_note(db_session, nb.id, user, "T")
+    add_markdown_node(db_session, note.id, user, "hello", "paragraph")
+
+    record = record_note_import(db_session, note.id, "NB/T.html")
+
+    assert record.source_path == "NB/T.html"
+    assert record.imported_at == get_note_update_timestamp(db_session, note.id)
+    assert get_note_import(db_session, note.id) is record
+
+
+def test_record_note_import_twice_updates_the_same_row(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user)
+    note = create_note(db_session, nb.id, user, "T")
+    first = record_note_import(db_session, note.id, "NB/old.html")
+    first_imported_at = first.imported_at
+
+    add_markdown_node(db_session, note.id, user, "more", "paragraph")
+    second = record_note_import(db_session, note.id, "NB/new.html")
+
+    rows = list(db_session.scalars(select(NoteImport)))
+    assert rows == [second]
+    assert second.source_path == "NB/new.html"
+    assert second.imported_at >= first_imported_at
+    assert second.imported_at == get_note_update_timestamp(db_session, note.id)
+
+
+def test_get_note_import_none_for_untracked_note(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user)
+    note = create_note(db_session, nb.id, user, "T")
+
+    assert get_note_import(db_session, note.id) is None
+
+
+def test_record_note_import_unknown_note_raises(db_session: Session) -> None:
+    with pytest.raises(NoteNotFoundError):
+        record_note_import(db_session, uuid.uuid4(), "x.html")
+
+
+def test_deleting_note_deletes_its_import_record(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user)
+    note = create_note(db_session, nb.id, user, "T")
+    record_note_import(db_session, note.id, "NB/T.html")
+    db_session.commit()
+
+    delete_note(db_session, note.id, user)
+    db_session.commit()
+
+    assert list(db_session.scalars(select(NoteImport))) == []
+
+
+def test_user_edit_after_import_moves_update_timestamp_past_imported_at(
+    db_session: Session,
+) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "NB", user)
+    note = create_note(db_session, nb.id, user, "T")
+    record = record_note_import(db_session, note.id, "NB/T.html")
+    imported_at = record.imported_at
+
+    update_note(db_session, note.id, user, title="Renamed")
+
+    assert get_note_update_timestamp(db_session, note.id) > imported_at
