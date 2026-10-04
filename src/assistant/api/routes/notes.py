@@ -11,8 +11,9 @@ from assistant.api.routes._sharing import validate_role_for_subject_type
 from assistant.api.schemas.notebooks import EntitlementCreate, EntitlementResponse
 from assistant.api.schemas.notes import NoteCreate, NoteResponse, NoteUpdate
 from assistant.api.schemas.pagination import Pagination
+from assistant.api.schemas.tags import NoteTagAdd, TagResponse
 from assistant.attachments.service import delete_file_record
-from assistant.models.schema import NodeType, Note, SubjectType, User
+from assistant.models.schema import NodeType, Note, SubjectType, Tag, User
 from assistant.notes.entitlements import (
     grant_entitlement,
     list_entitlements,
@@ -30,6 +31,7 @@ from assistant.notes.service import (
     list_notes,
     update_note,
 )
+from assistant.notes.tags import add_tag_to_note, remove_tag_from_note, tags_for_notes
 
 router = APIRouter()
 
@@ -46,8 +48,20 @@ def _get_note_in_notebook(
     return note
 
 
-def _note_response(session: SessionDep, note: Note, caller: User) -> NoteResponse:
+def _note_response(
+    session: SessionDep,
+    note: Note,
+    caller: User,
+    tags: list[Tag] | None = None,
+) -> NoteResponse:
+    """Build the caller's view of a note.
+
+    `tags` lets list endpoints pass tags fetched in one batch; when omitted
+    they are loaded for this note alone.
+    """
     perms = note_permissions(session, caller, note)
+    if tags is None:
+        tags = tags_for_notes(session, caller, [note.id]).get(note.id, [])
     return NoteResponse(
         id=note.id,
         notebook_id=note.notebook_id,
@@ -56,6 +70,7 @@ def _note_response(session: SessionDep, note: Note, caller: User) -> NoteRespons
         creation_timestamp=note.creation_timestamp,
         update_timestamp=note.update_timestamp,
         permissions=sorted(perms, key=lambda p: p.value),
+        tags=[TagResponse.model_validate(t) for t in tags],
     )
 
 
@@ -97,7 +112,8 @@ def list_notes_endpoint(
         offset=pagination.offset,
         limit=pagination.limit,
     )
-    return [_note_response(session, n, user) for n in notes]
+    tags_by_note = tags_for_notes(session, user, [n.id for n in notes])
+    return [_note_response(session, n, user, tags_by_note.get(n.id, [])) for n in notes]
 
 
 @router.get(
@@ -217,4 +233,41 @@ def revoke_note_share_endpoint(
 ) -> Response:
     _get_note_in_notebook(session, notebook_id, note_id, user)
     revoke_entitlement(session, user, entitlement_id, note_id=note_id)
+    return Response(status_code=204)
+
+
+@router.post(
+    "/{notebook_id}/note/{note_id}/tag",
+    response_model=list[TagResponse],
+)
+def add_note_tag_endpoint(
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID,
+    body: NoteTagAdd,
+    session: SessionDep,
+    user: CurrentUser,
+) -> list[TagResponse]:
+    """Tag the note with an existing tag, or by name (creating it if needed).
+
+    Returns the caller's tags on the note after the change.
+    """
+    _get_note_in_notebook(session, notebook_id, note_id, user)
+    add_tag_to_note(session, user, note_id, tag_id=body.tag_id, name=body.name)
+    tags = tags_for_notes(session, user, [note_id]).get(note_id, [])
+    return [TagResponse.model_validate(t) for t in tags]
+
+
+@router.delete(
+    "/{notebook_id}/note/{note_id}/tag/{tag_id}",
+    status_code=204,
+)
+def remove_note_tag_endpoint(
+    notebook_id: uuid.UUID,
+    note_id: uuid.UUID,
+    tag_id: uuid.UUID,
+    session: SessionDep,
+    user: CurrentUser,
+) -> Response:
+    _get_note_in_notebook(session, notebook_id, note_id, user)
+    remove_tag_from_note(session, user, note_id, tag_id)
     return Response(status_code=204)
