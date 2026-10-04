@@ -1,7 +1,7 @@
 """add note_imports
 
 Revision ID: a3c91e7d5b20
-Revises: f27627e16644
+Revises: eb31f745ef86
 Create Date: 2026-10-03 10:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a3c91e7d5b20"
-down_revision: str | Sequence[str] | None = "f27627e16644"
+down_revision: str | Sequence[str] | None = "eb31f745ef86"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

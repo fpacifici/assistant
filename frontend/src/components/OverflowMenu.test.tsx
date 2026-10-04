@@ -40,6 +40,7 @@ function renderMenu({ withRegistrar = false } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 // --- Open / close ---
@@ -92,5 +93,20 @@ describe('OverflowMenu', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Extra action' }));
     expect(onExtra).toHaveBeenCalled();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  // --- Theme ---
+
+  it('switches the theme and stays open', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'false');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
   });
 });

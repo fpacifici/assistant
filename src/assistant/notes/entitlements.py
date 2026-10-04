@@ -18,6 +18,7 @@ from assistant.email.service import Email, send_best_effort_email
 from assistant.email.templates import SHARE_NOTIFICATION_EMAIL
 from assistant.models.schema import (
     Entitlement,
+    Note,
     PermissionName,
     RoleName,
     SubjectType,
@@ -31,6 +32,7 @@ from assistant.notes.permissions import (
     require_note_access,
     require_notebook_access,
 )
+from assistant.notes.tags import copy_note_tags
 from assistant.notes.user_service import get_user_by_email
 from assistant.urls import note_url, notebook_url
 
@@ -101,6 +103,11 @@ def grant_entitlement(  # noqa: PLR0913
     `share_notebook` on the subject, or if `role_name`'s permission bundle
     is not a subset of the granter's own effective permissions there.
 
+    A new grant also copies the granter's tags on the shared note (or on
+    every note currently in the shared notebook) into the grantee's tag
+    vocabulary — see `tags.copy_note_tags`. An idempotent re-grant copies
+    nothing, so tags the grantee removed are not brought back.
+
     Idempotent: granting the same (grantee, subject, role) twice returns the
     existing row rather than duplicating it. This is checked in Python, not
     relied on at the DB level — `uq_entitlement_no_duplicate_grant` includes
@@ -136,6 +143,14 @@ def grant_entitlement(  # noqa: PLR0913
     )
     session.add(entitlement)
     session.flush()
+
+    if note_id is not None:
+        shared_note_ids = [note_id]
+    else:
+        shared_note_ids = list(
+            session.scalars(select(Note.id).where(Note.notebook_id == notebook_id)),
+        )
+    copy_note_tags(session, source=granter, target=grantee, note_ids=shared_note_ids)
     return entitlement, True
 
 
