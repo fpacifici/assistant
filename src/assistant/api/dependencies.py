@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Generator
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 import sentry_sdk
@@ -72,9 +74,22 @@ def get_storage(request: Request) -> FileStorage:
     return request.app.state.file_storage  # type: ignore[no-any-return]
 
 
+@dataclass(frozen=True, slots=True)
+class ImportSettings:
+    """Where note-import uploads are stored, and how large they may be."""
+
+    storage_root: Path
+    max_upload_bytes: int
+
+
+def get_import_settings(request: Request) -> ImportSettings:
+    return request.app.state.import_settings  # type: ignore[no-any-return]
+
+
 SessionDep = Annotated[Session, Depends(get_session)]
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
 StorageDep = Annotated[FileStorage, Depends(get_storage)]
+ImportSettingsDep = Annotated[ImportSettings, Depends(get_import_settings)]
 
 
 def get_current_user(session: SessionDep, user_id: CurrentUserId) -> User:
