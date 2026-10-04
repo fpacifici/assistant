@@ -55,6 +55,10 @@ mailgun:
 # the Google Cloud Console.
 google:
   redirect_path: /auth/google/callback  # optional, this is the default
+  # Reject a Google re-authentication (before switching to password sign-in)
+  # unless Google reports a sign-in in the last 5 minutes. Needs a verified
+  # app with "Session age claims" enabled in the Cloud Console.
+  # require_auth_time: false  # optional, this is the default
 
 # Sentry (dsn is always supplied via SENTRY_DSN env var; omit it to disable)
 sentry:

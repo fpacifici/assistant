@@ -1175,6 +1175,16 @@ ul {
   font-size: 13px;
 }
 
+.settings-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.settings-page form {
+  max-width: 360px;
+}
+
 /* Mobile editor chrome */
 
 [data-layout="mobile"] .note-editor {

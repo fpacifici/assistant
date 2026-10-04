@@ -42,6 +42,7 @@ _ph = PasswordHasher()
 
 ACCESS_TOKEN_MINUTES = 15
 REFRESH_TOKEN_DAYS = 7
+_ACCESS_JWT_TYP = "access"
 
 CONFIRMATION_TOKEN_TTL = timedelta(hours=24)
 CONFIRMATION_RESEND_COOLDOWN = timedelta(minutes=5)
@@ -56,6 +57,19 @@ def jwt_secret() -> str:
     return secret
 
 
+def hash_password(password: str) -> str:
+    """Return the argon2 hash stored in a password Credential."""
+    return _ph.hash(password)
+
+
+def verify_password(credential_hash: str, password: str) -> bool:
+    """Return whether password matches an argon2 credential hash."""
+    try:
+        return _ph.verify(credential_hash, password)
+    except VerifyMismatchError:
+        return False
+
+
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
@@ -68,6 +82,7 @@ def create_access_token(user_id: uuid_module.UUID) -> str:
     now = datetime.now(UTC)
     payload = {
         "sub": str(user_id),
+        "typ": _ACCESS_JWT_TYP,
         "iat": now,
         "exp": now + timedelta(minutes=ACCESS_TOKEN_MINUTES),
     }
@@ -75,11 +90,20 @@ def create_access_token(user_id: uuid_module.UUID) -> str:
 
 
 def decode_access_token(token: str) -> uuid_module.UUID:
-    """Validate a JWT and return the user UUID from the sub claim."""
+    """Validate a JWT and return the user UUID from the sub claim.
+
+    The `typ` claim is what rejects the other tokens signed with the same
+    secret (OAuth state, Google handoff tokens), whatever their claims.
+    """
     try:
         payload = jwt.decode(token, jwt_secret(), algorithms=["HS256"])
+    except jwt.InvalidTokenError as exc:
+        raise AuthError("Invalid or expired access token") from exc  # noqa: TRY003
+    if payload.get("typ") != _ACCESS_JWT_TYP:
+        raise AuthError("Invalid or expired access token")  # noqa: TRY003
+    try:
         return uuid_module.UUID(payload["sub"])
-    except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
+    except (KeyError, ValueError) as exc:
         raise AuthError("Invalid or expired access token") from exc  # noqa: TRY003
 
 
@@ -256,7 +280,7 @@ def register_user(  # noqa: PLR0913
     credential = Credential(
         user_id=user.uid,
         provider="password",
-        credential_hash=_ph.hash(password),
+        credential_hash=hash_password(password),
     )
     session.add(credential)
     session.flush()
@@ -296,10 +320,8 @@ def authenticate_user(session: Session, *, email: str, password: str) -> User:
     if credential is None or credential.credential_hash is None:
         raise AuthError("Invalid credentials")  # noqa: TRY003
 
-    try:
-        _ph.verify(credential.credential_hash, password)
-    except VerifyMismatchError as exc:
-        raise AuthError("Invalid credentials") from exc  # noqa: TRY003
+    if not verify_password(credential.credential_hash, password):
+        raise AuthError("Invalid credentials")  # noqa: TRY003
 
     if user.status != UserStatus.ACTIVE.value:
         raise AccountNotConfirmedError
@@ -358,3 +380,8 @@ def logout_user(session: Session, raw_token: str) -> None:
     if rt is None:
         return
     session.execute(delete(RefreshToken).where(RefreshToken.family_id == rt.family_id))
+
+
+def revoke_all_refresh_tokens(session: Session, user_id: uuid_module.UUID) -> None:
+    """Delete every refresh token of the user, logging out all their sessions."""
+    session.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))

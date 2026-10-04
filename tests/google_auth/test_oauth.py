@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -93,6 +94,20 @@ def test_build_authorization_url_includes_required_params(
     assert params["state"] == ["signed-state"]
     assert params["nonce"] == ["the-nonce"]
     assert params["prompt"] == ["select_account"]
+    assert "claims" not in params
+
+
+def test_build_authorization_url_requests_auth_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _write_config(tmp_path, monkeypatch)
+    with patch("assistant.google_auth.oauth.Config", return_value=config):
+        url = build_authorization_url(
+            state="signed-state", nonce="the-nonce", request_auth_time=True
+        )
+
+    [claims] = parse_qs(urlparse(url).query)["claims"]
+    assert json.loads(claims) == {"id_token": {"auth_time": {"essential": True}}}
 
 
 # --- exchange_code_for_tokens ---
@@ -167,6 +182,7 @@ def test_verify_id_token_valid_claims(
         "given_name": "Ada",
         "family_name": "Lovelace",
         "nonce": "the-nonce",
+        "auth_time": 1_700_000_000,
     }
     with (
         patch("assistant.google_auth.oauth.Config", return_value=config),
@@ -183,6 +199,7 @@ def test_verify_id_token_valid_claims(
         email_verified=True,
         given_name="Ada",
         family_name="Lovelace",
+        auth_time=1_700_000_000,
     )
 
 

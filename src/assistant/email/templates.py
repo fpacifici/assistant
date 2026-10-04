@@ -17,6 +17,14 @@ CONFIRM_REGISTRATION = string.Template(
     "This link expires in 24 hours."
 )
 
+CREDENTIAL_CHANGED = string.Template(
+    "Hi $firstname,\n\n"
+    "The sign-in method of your Assistant account was changed. From now on "
+    "you sign in with $method.\n\n"
+    "If you didn't make this change, someone else may have access to your "
+    "account. Contact the Assistant administrator right away."
+)
+
 INVITE_EMAIL = string.Template(
     "Hi,\n\n"
     "$inviter_name has invited you to join Assistant. Click the link "

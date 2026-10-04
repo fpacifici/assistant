@@ -676,7 +676,24 @@ def test_config_get_google_config_from_yaml(tmp_path: Path) -> None:
         "client_id": "client-123.apps.googleusercontent.com",
         "client_secret": "secret-abc",
         "redirect_path": "/custom/callback",
+        "require_auth_time": False,
     }
+
+
+def test_config_get_google_config_require_auth_time(tmp_path: Path) -> None:
+    """Test that require_auth_time reads YAML and GOOGLE_REQUIRE_AUTH_TIME."""
+    config_file = tmp_path / "test_config.yaml"
+    config_file.write_text(
+        "google:\n"
+        "  client_id: client-123.apps.googleusercontent.com\n"
+        "  client_secret: secret-abc\n"
+        "  require_auth_time: true\n",
+    )
+
+    config = Config(config_path=config_file)
+    assert config.get_google_config()["require_auth_time"] is True
+    with patch.dict(os.environ, {"GOOGLE_REQUIRE_AUTH_TIME": "false"}):
+        assert config.get_google_config()["require_auth_time"] is False
 
 
 def test_config_get_google_config_redirect_path_defaults(tmp_path: Path) -> None:
@@ -737,6 +754,7 @@ def test_config_get_google_config_env_overrides(tmp_path: Path) -> None:
             "client_id": "env-client.apps.googleusercontent.com",
             "client_secret": "env-secret",
             "redirect_path": "/env/callback",
+            "require_auth_time": False,
         }
 
 
@@ -758,6 +776,7 @@ def test_config_get_google_config_env_only_without_yaml(tmp_path: Path) -> None:
             "client_id": "env-client.apps.googleusercontent.com",
             "client_secret": "env-secret",
             "redirect_path": "/auth/google/callback",
+            "require_auth_time": False,
         }
 
 

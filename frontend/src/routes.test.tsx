@@ -34,6 +34,7 @@ const USER = {
   firstname: 'A',
   lastname: 'B',
   invite_quota_remaining: 3,
+  auth_provider: 'password' as const,
 };
 
 const originalLocation = window.location;

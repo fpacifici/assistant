@@ -37,7 +37,7 @@ describe('LoginPage', () => {
 
   it('calls login with entered credentials on submit', async () => {
     const user = userEvent.setup();
-    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5 });
+    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5, auth_provider: 'password' });
 
     renderLogin();
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
@@ -51,7 +51,7 @@ describe('LoginPage', () => {
 
   it('navigates to /notebooks on successful login', async () => {
     const user = userEvent.setup();
-    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5 });
+    mockLogin.mockResolvedValueOnce({ uid: 'u1', email: 'a@b.com', firstname: 'A', lastname: 'B', invite_quota_remaining: 5, auth_provider: 'password' });
 
     renderLogin();
     await user.type(screen.getByLabelText('Email'), 'a@b.com');
@@ -141,7 +141,7 @@ describe('LoginPage', () => {
   it('renders the mapped message for a google_error query param', () => {
     renderWithProviders(<LoginPage />, { initialEntries: ['/login?google_error=collision'] });
     expect(
-      screen.getByText('This email already has a password account. Log in with your password instead.'),
+      screen.getByText('This email is already linked to a different Google account.'),
     ).toBeInTheDocument();
   });
 });

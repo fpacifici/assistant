@@ -8,6 +8,8 @@ import RegisterPage from './pages/RegisterPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import InvitesPage from './pages/InvitesPage';
+import SettingsPage from './pages/SettingsPage';
+import SwitchToGooglePage from './pages/SwitchToGooglePage';
 import {
   ProtectedLayout,
   RootProviders,
@@ -23,6 +25,7 @@ export const routes: RouteObject[] = [
     errorElement: <RouteErrorElement />,
     children: [
       { path: '/login', element: <LoginPage /> },
+      { path: '/login/switch-to-google', element: <SwitchToGooglePage /> },
       { path: '/register', element: <RegisterPage /> },
       { path: '/invite/:inviteId', element: <AcceptInvitePage /> },
       { path: '/confirm-email/:token', element: <ConfirmEmailPage /> },
@@ -34,6 +37,7 @@ export const routes: RouteObject[] = [
           { path: '/notebooks/:notebookId/notes', element: <Layout /> },
           { path: '/notebooks/:notebookId/notes/:noteId', element: <Layout /> },
           { path: '/invites', element: <InvitesPage /> },
+          { path: '/settings', element: <SettingsPage /> },
           { path: '*', element: null },
         ],
       },

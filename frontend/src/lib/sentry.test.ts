@@ -133,6 +133,7 @@ describe('initSentry', () => {
       firstname: 'A',
       lastname: 'B',
       invite_quota_remaining: 0,
+      auth_provider: 'password' as const,
     });
 
     expect(Sentry.init).not.toHaveBeenCalled();
@@ -176,6 +177,7 @@ describe('initSentry', () => {
       firstname: 'A',
       lastname: 'B',
       invite_quota_remaining: 0,
+      auth_provider: 'password' as const,
     };
     setSentryUser(user);
     setSentryUser(user);

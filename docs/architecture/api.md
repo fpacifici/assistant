@@ -29,7 +29,9 @@ Every endpoint below that needs to know the acting user (essentially all
 notebook/note/node/sharing endpoints) resolves it from the access token —
 there is no `X-User-Id` header or other unauthenticated identification.
 
-Google OAuth2 authentication is planned but not yet implemented.
+Google sign-in (OpenID Connect) is also supported, and a user can swap
+between password and Google sign-in — see
+[`Authentication`](authentication.md).
 
 ### User
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -14,6 +16,7 @@ import pytest
 from assistant.auth.service import (
     create_access_token,
     create_email_confirmation,
+    hash_password,
     issue_tokens,
 )
 from assistant.email.exceptions import EmailSendError
@@ -22,6 +25,7 @@ from assistant.google_auth.exceptions import (
     GoogleEmailNotVerifiedError,
     GoogleTokenExchangeError,
 )
+from assistant.google_auth.handoff import sign_reauth_token
 from assistant.google_auth.oauth import GoogleIdTokenClaims
 from assistant.google_auth.state import sign_state, verify_state
 from assistant.invites.exceptions import (
@@ -29,11 +33,19 @@ from assistant.invites.exceptions import (
     RegistrationDisabledError,
 )
 from assistant.invites.service import create_invite
-from assistant.models.schema import EmailConfirmation, Invite, InviteState, User
+from assistant.models.schema import (
+    Credential,
+    EmailConfirmation,
+    Invite,
+    InviteState,
+    User,
+    UserStatus,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    import httpx
     from fastapi.testclient import TestClient
     from sqlalchemy.orm import Session
 
@@ -721,3 +733,298 @@ def test_google_callback_returning_user_no_duplicate_row(
 
     count = db_session.query(User).filter_by(email=claims.email).count()
     assert count == 1
+
+
+# --- Credential swap: password -> Google ---
+
+
+def _make_password_user(db_session: Session, email: str = "user@example.com") -> User:
+    user = User(
+        email=email, firstname="Jane", lastname="Doe", status=UserStatus.ACTIVE.value
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        Credential(
+            user_id=user.uid,
+            provider="password",
+            credential_hash=hash_password("secret123"),
+        )
+    )
+    db_session.commit()
+    return user
+
+
+def _google_login(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    claims: GoogleIdTokenClaims,
+    *,
+    reauth_user_id: uuid.UUID | None = None,
+) -> httpx.Response:
+    _patch_google_boundary(monkeypatch, claims=claims)
+    state = sign_state(nonce="nonce", invite_id=None, reauth_user_id=reauth_user_id)
+    return client.get(
+        "/auth/google/callback",
+        params={"code": "abc", "state": state},
+        follow_redirects=False,
+    )
+
+
+def test_google_callback_password_account_offers_swap(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_password_user(db_session)
+
+    response = _google_login(
+        client, monkeypatch, _google_claims(email="user@example.com")
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"].endswith("/login/switch-to-google")
+    assert "google_swap" in client.cookies
+    assert "access_token" not in client.cookies
+
+    info = client.get("/auth/google/swap")
+    assert info.status_code == 200
+    assert info.json() == {"email": "user@example.com", "password_required": True}
+
+
+def test_google_swap_claims_pending_account_without_password(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _make_password_user(db_session)
+    user.status = UserStatus.PENDING.value
+    db_session.commit()
+    _google_login(client, monkeypatch, _google_claims(email="user@example.com"))
+
+    info = client.get("/auth/google/swap")
+    assert info.json()["password_required"] is False
+    response = client.post("/auth/google/swap", json={})
+
+    assert response.status_code == 200
+    assert response.json()["auth_provider"] == "google"
+
+
+def test_google_swap_active_account_requires_password(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_password_user(db_session)
+    _google_login(client, monkeypatch, _google_claims(email="user@example.com"))
+
+    response = client.post("/auth/google/swap", json={})
+
+    assert response.status_code == 401
+
+
+def test_google_swap_without_pending_swap_returns_401(client: TestClient) -> None:
+    assert client.get("/auth/google/swap").status_code == 401
+    response = client.post("/auth/google/swap", json={"password": "secret123"})
+    assert response.status_code == 401
+
+
+def test_google_swap_wrong_password_keeps_password_account(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_password_user(db_session)
+    _google_login(client, monkeypatch, _google_claims(email="user@example.com"))
+
+    response = client.post("/auth/google/swap", json={"password": "wrong"})
+
+    assert response.status_code == 401
+    login = client.post(
+        "/auth/login", json={"email": "user@example.com", "password": "secret123"}
+    )
+    assert login.status_code == 200
+
+
+def test_google_swap_confirm_switches_to_google(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _make_password_user(db_session)
+    claims = _google_claims(email="user@example.com")
+    _google_login(client, monkeypatch, claims)
+
+    response = client.post("/auth/google/swap", json={"password": "secret123"})
+
+    assert response.status_code == 200
+    assert response.json()["auth_provider"] == "google"
+    assert "access_token" in client.cookies
+    assert "google_swap" not in client.cookies
+    # The test session override never commits; without this the failing
+    # login below would roll the swap back.
+    db_session.commit()
+
+    login = client.post(
+        "/auth/login", json={"email": "user@example.com", "password": "secret123"}
+    )
+    assert login.status_code == 401
+
+    client.cookies.clear()
+    again = _google_login(client, monkeypatch, claims)
+    assert again.headers["location"].endswith("/notebooks")
+    assert client.get("/auth/me").json()["uid"] == str(user.uid)
+
+
+def test_google_swap_cancel_clears_pending_swap(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_password_user(db_session)
+    _google_login(client, monkeypatch, _google_claims(email="user@example.com"))
+
+    assert client.delete("/auth/google/swap").status_code == 204
+    assert "google_swap" not in client.cookies
+    assert client.get("/auth/google/swap").status_code == 401
+
+
+# --- Credential swap: Google -> password ---
+
+
+def _make_google_user(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> tuple[uuid.UUID, GoogleIdTokenClaims]:
+    claims = _google_claims()
+    _google_login(client, monkeypatch, claims)
+    return uuid.UUID(client.get("/auth/me").json()["uid"]), claims
+
+
+def test_me_reports_auth_provider(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_google_user(client, monkeypatch)
+    assert client.get("/auth/me").json()["auth_provider"] == "google"
+
+
+def test_google_reauth_start_returns_authorization_url(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, _claims = _make_google_user(client, monkeypatch)
+
+    response = client.post("/auth/google/reauth")
+
+    assert response.status_code == 200
+    url = response.json()["authorization_url"]
+    assert url.startswith("https://accounts.google.com")
+    state = parse_qs(urlparse(url).query)["state"][0]
+    assert verify_state(state).reauth_user_id == user_id
+
+
+def test_google_reauth_start_rejects_password_user(
+    client: TestClient, db_session: Session
+) -> None:
+    user = _make_password_user(db_session)
+    headers = {"Authorization": f"Bearer {create_access_token(user.uid)}"}
+    response = client.post("/auth/google/reauth", headers=headers)
+    assert response.status_code == 409
+
+
+def test_google_reauth_callback_sets_reauth_cookie(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, claims = _make_google_user(client, monkeypatch)
+
+    response = _google_login(client, monkeypatch, claims, reauth_user_id=user_id)
+
+    assert response.headers["location"].endswith("/settings?reauth=ok")
+    assert "google_reauth" in client.cookies
+
+
+def test_google_reauth_callback_rejects_other_identity(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, _claims = _make_google_user(client, monkeypatch)
+    other = _google_claims(sub="other-sub", email="other@example.com")
+
+    response = _google_login(client, monkeypatch, other, reauth_user_id=user_id)
+
+    assert response.headers["location"].endswith("/settings?google_error=reauth_mismatch")
+    assert "google_reauth" not in client.cookies
+
+
+def test_google_reauth_start_requests_auth_time(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_google_user(client, monkeypatch)
+
+    url = client.post("/auth/google/reauth").json()["authorization_url"]
+
+    assert "auth_time" in parse_qs(urlparse(url).query)["claims"][0]
+
+
+def test_google_reauth_callback_rejects_stale_sign_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, claims = _make_google_user(client, monkeypatch)
+    stale = dataclasses.replace(claims, auth_time=int(time.time()) - 3600)
+
+    response = _google_login(client, monkeypatch, stale, reauth_user_id=user_id)
+
+    assert response.headers["location"].endswith("/settings?google_error=reauth_stale")
+    assert "google_reauth" not in client.cookies
+
+
+def test_switch_to_password_notifies_owner(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, mock_send_email: MagicMock
+) -> None:
+    user_id, claims = _make_google_user(client, monkeypatch)
+    _google_login(client, monkeypatch, claims, reauth_user_id=user_id)
+
+    client.post("/auth/credentials/password", json={"password": "newsecret1"})
+
+    [email] = [c.args[0] for c in mock_send_email.call_args_list]
+    assert email.recipient == claims.email
+    assert email.subject == "Your Assistant sign-in method was changed"
+
+
+def test_switch_to_password_requires_reauth(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_google_user(client, monkeypatch)
+
+    response = client.post("/auth/credentials/password", json={"password": "newsecret1"})
+
+    assert response.status_code == 403
+
+
+def test_switch_to_password_rejects_reauth_of_other_user(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_google_user(client, monkeypatch)
+    client.cookies.set(
+        "google_reauth", sign_reauth_token(user_id=uuid.uuid4()), path="/auth/credentials"
+    )
+
+    response = client.post("/auth/credentials/password", json={"password": "newsecret1"})
+
+    assert response.status_code == 403
+
+
+def test_switch_to_password_after_reauth(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, claims = _make_google_user(client, monkeypatch)
+    _google_login(client, monkeypatch, claims, reauth_user_id=user_id)
+
+    response = client.post("/auth/credentials/password", json={"password": "newsecret1"})
+
+    assert response.status_code == 200
+    assert response.json()["auth_provider"] == "password"
+    assert "google_reauth" not in client.cookies
+
+    client.cookies.clear()
+    login = client.post(
+        "/auth/login",
+        json={"email": "googleuser@example.com", "password": "newsecret1"},
+    )
+    assert login.status_code == 200
+
+
+def test_switch_to_password_rejects_short_password(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id, claims = _make_google_user(client, monkeypatch)
+    _google_login(client, monkeypatch, claims, reauth_user_id=user_id)
+
+    response = client.post("/auth/credentials/password", json={"password": "short"})
+
+    assert response.status_code == 422

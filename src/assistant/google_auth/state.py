@@ -21,12 +21,21 @@ STATE_TTL_MINUTES = 10
 class GoogleStateClaims:
     nonce: str
     invite_id: uuid.UUID | None
+    # Set when a logged-in user re-authenticates (before a sensitive
+    # change) instead of logging in.
+    reauth_user_id: uuid.UUID | None = None
 
 
-def sign_state(*, nonce: str, invite_id: uuid.UUID | None) -> str:
+def sign_state(
+    *,
+    nonce: str,
+    invite_id: uuid.UUID | None,
+    reauth_user_id: uuid.UUID | None = None,
+) -> str:
     payload = {
         "nonce": nonce,
         "invite_id": str(invite_id) if invite_id else None,
+        "reauth_user_id": str(reauth_user_id) if reauth_user_id else None,
         "exp": datetime.now(UTC) + timedelta(minutes=STATE_TTL_MINUTES),
     }
     return jwt.encode(payload, jwt_secret(), algorithm="HS256")
@@ -37,5 +46,12 @@ def verify_state(raw: str) -> GoogleStateClaims:
         payload = jwt.decode(raw, jwt_secret(), algorithms=["HS256"])
     except jwt.InvalidTokenError as exc:
         raise GoogleStateInvalidError from exc
+    if "nonce" not in payload:
+        raise GoogleStateInvalidError
     invite_id = uuid.UUID(payload["invite_id"]) if payload.get("invite_id") else None
-    return GoogleStateClaims(nonce=payload["nonce"], invite_id=invite_id)
+    reauth_user_id = (
+        uuid.UUID(payload["reauth_user_id"]) if payload.get("reauth_user_id") else None
+    )
+    return GoogleStateClaims(
+        nonce=payload["nonce"], invite_id=invite_id, reauth_user_id=reauth_user_id
+    )

@@ -72,6 +72,7 @@ Routes are declared in `src/routes.tsx`.
 | Route | Page |
 |---|---|
 | `/login`, `/register` | `LoginPage`, `RegisterPage` (password + Google sign-in) — public |
+| `/login/switch-to-google` | `SwitchToGooglePage`: confirm converting a password account to Google sign-in — public |
 | `/invite/:inviteId` | `AcceptInvitePage` — public |
 | `/confirm-email/:token` | `ConfirmEmailPage` — public |
 | `/` | Redirects to `/notebooks` |
@@ -79,6 +80,7 @@ Routes are declared in `src/routes.tsx`.
 | `/notebooks/:notebookId/notes` | `Layout`: notebook list + note list |
 | `/notebooks/:notebookId/notes/:noteId` | `Layout`: lists + note editor |
 | `/invites` | `InvitesPage`: send, resend and void invites |
+| `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
 
 The three note routes are siblings that render the same `<Layout />` element
 at the same position, so React reuses one `Layout` (and `NoteEditor`)
@@ -124,8 +126,8 @@ The same SPA serves desktop, tablets and phones
   area, so the formatting toolbar and Save bar stay visible. On mobile the
   editor grows with its content and `.main` scrolls instead.
 - **Dialogs**: `.modal` (share dialog, confirmations) is full screen on
-  mobile. Auth pages and `InvitesPage` are responsive CSS only;
-  `InvitesPage` renders `MobileTopBar` on mobile.
+  mobile. Auth pages, `InvitesPage` and `SettingsPage` are responsive CSS
+  only; `InvitesPage` and `SettingsPage` render `MobileTopBar` on mobile.
 - **Tests**: `renderWithProviders(ui, { layout })` forces a mode
   (default `'desktop'`; `'auto'` uses real detection), and
   `test/matchMedia.ts` provides `mockViewport` / `resizeViewport`.

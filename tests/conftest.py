@@ -58,6 +58,7 @@ def _clear_credential_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "GOOGLE_CLIENT_ID",
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_REDIRECT_PATH",
+        "GOOGLE_REQUIRE_AUTH_TIME",
         "MAILGUN_APIKEY",
     ):
         monkeypatch.delenv(key, raising=False)
