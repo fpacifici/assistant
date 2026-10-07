@@ -63,3 +63,32 @@ export interface NoteNode {
   version: number;
   update_timestamp: string;
 }
+
+/** A run of search-result text; `highlighted` when it matched the query. */
+export interface SnippetSegment {
+  text: string;
+  highlighted: boolean;
+}
+
+/** A matching block of a note; open the note at `node_id`. */
+export interface SearchSnippet {
+  node_id: string;
+  segments: SnippetSegment[];
+}
+
+export interface SearchResult {
+  note: Note;
+  notebook: { id: string; name: string };
+  score: number;
+  /** The note title with matched words highlighted. */
+  title: SnippetSegment[];
+  snippets: SearchSnippet[];
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  /** `tag:` filters naming a tag the caller doesn't have. */
+  unknown_tags: string[];
+  offset: number;
+  limit: number;
+}

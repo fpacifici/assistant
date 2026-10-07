@@ -60,6 +60,11 @@
   --badge-synced-bg: #d1fae5;
   --badge-synced-text: #065f46;
 
+  /* Search: matched words and the block opened from a result */
+  --highlight-bg: #fef08a;
+  --highlight-text: #1a1a1a;
+  --search-hit-bg: #fef9c3;
+
   --overlay: rgba(0, 0, 0, 0.4);
   --shadow: rgba(0, 0, 0, 0.2);
 }
@@ -119,6 +124,10 @@
   --badge-new-text: #fcd34d;
   --badge-synced-bg: #0d3324;
   --badge-synced-text: #6ee7b7;
+
+  --highlight-bg: #854d0e;
+  --highlight-text: #fef9c3;
+  --search-hit-bg: #3b2c0b;
 
   --overlay: rgba(0, 0, 0, 0.6);
   --shadow: rgba(0, 0, 0, 0.6);
@@ -1638,4 +1647,133 @@ ul {
 
 [data-layout="mobile"] .invites-page td:empty {
   display: none;
+}
+
+/* Search */
+
+.search-box {
+  flex: 1;
+  max-width: 420px;
+  margin: 0 16px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--chrome-hover);
+  color: var(--chrome-text);
+  font-size: 14px;
+}
+
+.search-box input::placeholder {
+  color: var(--chrome-text-faint);
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: var(--chrome-border-hover);
+}
+
+.search-page {
+  flex: 1;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.search-page-input {
+  padding: 8px 12px;
+  background: var(--chrome-bg);
+}
+
+.search-page-input .search-box {
+  max-width: none;
+  margin: 0;
+}
+
+.search-page-input .search-box input {
+  padding: 10px 12px;
+  font-size: 16px; /* >= 16px stops iOS zooming into the field */
+}
+
+.search-status {
+  color: var(--text-muted);
+}
+
+.search-results {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.search-result-title {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.search-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.search-snippet {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.search-snippet:hover,
+.search-result-title:hover {
+  background: var(--hover);
+}
+
+.search-result mark {
+  background: var(--highlight-bg);
+  color: var(--highlight-text);
+  border-radius: 2px;
+}
+
+.search-more {
+  display: block;
+  margin: 16px auto 0;
+}
+
+/* The block a search result opened: flashed briefly (see NoteEditor) */
+.bn-block-outer.search-hit,
+[data-id].search-hit {
+  background: var(--search-hit-bg);
+  border-radius: 4px;
+  transition: background 0.4s;
+}
+
+[data-layout="mobile"] .search-page {
+  padding: 12px;
+}
+
+[data-layout="mobile"] .search-snippet {
+  padding: 8px;
 }
