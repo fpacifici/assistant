@@ -428,6 +428,51 @@ ImportReport response shape:
 `kept_untracked` entries have the `kept_modified` shape with
 `imported_at: null`.
 
+### Search
+
+Keyword and tag search over every note the caller can view. The query
+syntax and behaviour are in `docs/specs/0007-search.md`; the pipeline is in
+[`search.md`](search.md).
+
+```
+GET /search/notes?q=<query>&sort=relevance|updated&offset=0&limit=20 -> SearchResponse
+```
+
+- `q` accepts words (all must match), `"phrases"`, and `tag:name` /
+  `tag:"two words"` (the caller's own tags). The last word is matched as a
+  prefix unless `q` ends in a space.
+- Returns 400 if `q` has nothing to search for, and 422 for an invalid
+  `sort`.
+- `sort` defaults to relevance, or to most recently updated when `q` has
+  only tags.
+
+SearchResponse shape:
+```json
+{
+    "results": [
+        {
+            "note": { "...": "NoteResponse, with the caller's tags" },
+            "notebook": {"id": "uuid", "name": "Travel"},
+            "score": 0.42,
+            "title": [{"text": "Trip to ", "highlighted": false}, {"text": "Berlin", "highlighted": true}],
+            "snippets": [
+                {"node_id": "uuid", "segments": [{"text": "Fly to ", "highlighted": false}, {"text": "Berlin", "highlighted": true}]}
+            ]
+        }
+    ],
+    "unknown_tags": [],
+    "offset": 0,
+    "limit": 20
+}
+```
+
+- Segments are plain text, never HTML; clients render the highlight markup
+  themselves.
+- `snippets` holds up to 3 matching blocks, or the note's first block if
+  only the title or tags matched.
+- `unknown_tags` lists `tag:` filters the caller has no tag for, in which
+  case `results` is empty.
+
 ### Error Responses
 
 All error responses follow the format:

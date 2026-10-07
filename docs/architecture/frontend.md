@@ -79,6 +79,7 @@ Routes are declared in `src/routes.tsx`.
 | `/notebooks` | `Layout`: notebook list |
 | `/notebooks/:notebookId/notes` | `Layout`: notebook list + note list |
 | `/notebooks/:notebookId/notes/:noteId` | `Layout`: lists + note editor |
+| `/search?q=…` | `SearchPage`: note search results (see Search below) |
 | `/invites` | `InvitesPage`: send, resend and void invites |
 | `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
 
@@ -208,7 +209,22 @@ The main editing surface (`components/NoteEditor.tsx`). Uses BlockNote (`useCrea
 5. **Tags**: `TagEditor` (between the toolbar and the body, both layouts) shows the caller's tags on the note as removable chips and an "Add tag" combobox. Suggestions come from `GET /tag` (query key `['tags']`), filtered case-insensitively and excluding tags already on the note; an unmatched name offers `Create "<name>"`, which tags the note by name so the backend creates the tag. Arrow keys/Enter/Escape drive the list. Tagging needs only `view_note`, so it works on read-only notes. On success it writes the returned tags into the `['note', nb, note]` cache and invalidates `['notes', nb]` (and `['tags']` after a create). Tags are saved immediately, independent of the Save button.
 6. **Unsaved-changes guard**: `useUnsavedChangesGuard(isDirty)` (`hooks/`) uses `useBlocker` to intercept pathname-changing navigations (links, the mobile back arrow, browser back/swipe) with a "Discard unsaved changes?" dialog, and registers a `beforeunload` prompt while dirty. Query-string-only changes (e.g. `?layout=`) are not blocked.
 
+7. **Opened from search**: `?node=<server node id>` scrolls to the block the registry maps to that node (`ServerRegistry.blockIdForNode`, found in the DOM by BlockNote's `data-id`) and flashes it with the `search-hit` class for 1.5s. The param is then removed with a `replace` navigation, so a reload doesn't scroll again. If the node is gone, the note simply opens at the top.
+
 Holds a `ServerRegistry` and a block snapshot in refs that persist across renders. All save state (`isDirty`, `saving`, `status`) lives here; only where the controls render differs between layouts.
+
+### Search
+
+- `SearchBox` is a search-role form. Submitting a non-blank query navigates to `/search?q=…`.
+  - **Desktop**: the box sits in `DesktopHeader` and shows the current query on the search page.
+  - **Mobile**: `MobileTopBar` has a search button linking to `/search`. `SearchPage` then renders a full-screen view with its own autofocused `SearchBox`; `hideSearch` hides the button there.
+- `SearchResults` is shared by both layouts. It pages through `GET /search/notes` with `useInfiniteQuery` (key `['search', q]`, 20 per page, "Load more").
+- Each result shows:
+  - the highlighted title, linking to the note at its first snippet's block
+  - the notebook name and the tag chips (`NoteTags` from `NoteList`)
+  - up to 3 snippets, each linking to `?node=<its block>`
+- Highlights are rendered from API segments as `<mark>` text nodes, never as HTML.
+- The empty state, unknown-tag messages and a syntax hint (when there is no query) are text lines.
 
 ## Markdown Engine
 
@@ -224,6 +240,7 @@ Key operations:
 - `markDeleted(blockId)` — moves the block's server node ID to the deleted queue.
 - `consumeDeletedIds()` — drains the deleted queue (used by the reconciler before DELETE calls).
 - `updateVersion(blockId, version)` — updates the version after a successful PATCH.
+- `blockIdForNode(nodeId)` — reverse lookup, used to scroll to a search hit.
 - `clear()` — resets the registry on note change.
 
 ### Mapper (`markdown/mapper.ts`)
@@ -252,7 +269,7 @@ All API modules live in `src/api/` and use a shared `apiFetch()` wrapper (`api/c
 - Sets `Content-Type: application/json` when there is a body and sends cookies (`credentials: 'include'`)
 - Throws `ApiError` (with HTTP status) on non-OK responses
 
-Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`, `tags.ts`.
+Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`, `tags.ts`, `search.ts`.
 
 ## Data Flow Summary
 

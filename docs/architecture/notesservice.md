@@ -43,6 +43,10 @@ erDiagram
         STRING title
         DATETIME creation_timestamp
         DATETIME update_timestamp
+        TEXT search_title
+        TEXT search_body
+        INT search_index_version
+        TSVECTOR search_vector "generated, Postgres only"
     }
 
     TextNode {
@@ -112,6 +116,12 @@ erDiagram
   the note's `update_timestamp` right after the importer last wrote it, so
   `update_timestamp > imported_at` means a user edited the note since. It is
   deleted with its Note. See `docs/specs/adapters.md`.
+- Search index. Every node has a `search_text` column, and every note has
+  `search_title`, `search_body` and `search_index_version`, plus a
+  Postgres-generated `search_vector`. The search indexer keeps them current:
+  `_touch_note`, which every note mutation calls, and `create_note` both run
+  `index_note` in the same transaction. Any new mutation must therefore go
+  through `_touch_note`. See [`Search`](search.md).
 
 ## Structure of a Note.
 

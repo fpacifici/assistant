@@ -160,3 +160,4 @@ the webui.
 - [`Attachments`](attachments.md)
 - [`Authentication`](authentication.md)
 - [`Observability (Sentry)`](observability.md)
+- [`Search`](search.md)

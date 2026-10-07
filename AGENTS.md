@@ -27,6 +27,7 @@ When working on the backend:
 
 - Note service: the backend [`Notes Service`](docs/architecture/notesservice.md)
 - The [`API`](docs/architecture/api.md)
+- Keyword search: [`Search`](docs/architecture/search.md)
 
 When working on the frontend:
 

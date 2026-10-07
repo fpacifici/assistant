@@ -345,6 +345,30 @@ Follow `docs/architecture/frontend.md` and `docs/specs/0006-mobile-layout.md`.
 Any later tokenizer change: bump `SEARCH_INDEX_VERSION`, deploy, then run
 `reindex_search --stale-only`.
 
+## Deviations during implementation
+
+- **Delivered as one PR**, in three commits (index → service and API → UI),
+  instead of three PRs.
+- **The API is `GET /search/notes`, not `GET /search`.** nginx routes to the
+  backend by path prefix, so an API at `/search` would also catch page loads
+  of the SPA's `/search?q=` page. nginx proxies only `/search/`.
+- **Permissions are a predicate, not a subquery**:
+  `permissions.viewable_note_filter(caller)` returns a SQL condition on
+  `Note`.
+- **No snippet with a null node id.** An empty note has no snippets, so
+  `Snippet.node_id` is never null.
+- **The search page is its own page component (`SearchPage`), not `Layout`.**
+  It follows the `SettingsPage` pattern: `DesktopHeader` or `MobileTopBar`
+  above the shared `SearchResults`.
+- **Markdown is stripped with `markdown-it-py`**, which is now a direct
+  dependency (it was already installed transitively), instead of
+  hand-written regexes.
+- **CI runs Postgres.** `ci.yml` gained a `pgvector/pgvector:pg16` service,
+  so the `postgres`-marked tests run in CI instead of being skipped.
+- **The test fixture restores logging after migrating.** Alembic's `env.py`
+  calls `fileConfig`, which disables existing loggers and broke an unrelated
+  log-asserting test.
+
 ## Future work (keep the interface)
 
 - BM25: `pg_textsearch` (needs PG 17+) or our own postings tables. Swap
