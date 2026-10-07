@@ -1,16 +1,18 @@
 """Shared pytest fixtures and configuration."""
 
 import os
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
 from assistant.config import Config
 from assistant.models import schema as _schema  # noqa: F401
-from assistant.models.database import Base
+from assistant.models.database import Base, upgrade_database
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -152,6 +154,67 @@ def mock_database_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> str:
     db_url = f"sqlite:///{db_path}"
     monkeypatch.setenv("DATABASE_URL", db_url)
     return db_url
+
+
+_PG_ADMIN_URL = os.environ.get(
+    "TEST_POSTGRES_URL",
+    "postgresql://assistant:assistant@localhost:5432/assistant",
+)
+
+
+@pytest.fixture(scope="session")
+def _pg_engine() -> Iterator[Engine]:
+    """A throwaway Postgres database, migrated to head, for the whole run.
+
+    Connects to `TEST_POSTGRES_URL` (default: the docker compose Postgres,
+    see `make services-up`), creates a uniquely named database, runs the
+    Alembic migrations on it and drops it at the end. Tests using it skip
+    when Postgres is unreachable.
+    """
+    admin = create_engine(_PG_ADMIN_URL, isolation_level="AUTOCOMMIT")
+    try:
+        admin_conn = admin.connect()
+    except OperationalError:
+        admin.dispose()
+        pytest.skip(
+            "Postgres not reachable (run `make services-up` or set TEST_POSTGRES_URL)"
+        )
+    name = f"assistant_test_{uuid.uuid4().hex[:12]}"
+    admin_conn.execute(text(f'CREATE DATABASE "{name}"'))
+    url = admin.url.set(database=name)
+    engine = create_engine(url)
+    try:
+        # Alembic resolves its target from DATABASE_URL; only set it for the
+        # upgrade so it doesn't leak into other tests.
+        previous_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = url.render_as_string(hide_password=False)
+        try:
+            upgrade_database()
+        finally:
+            if previous_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_url
+        yield engine
+    finally:
+        engine.dispose()
+        admin_conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        admin_conn.close()
+        admin.dispose()
+
+
+@pytest.fixture
+def pg_session(_pg_engine: Engine) -> Iterator[Session]:
+    """Per-test Postgres session; everything it writes is rolled back."""
+    connection = _pg_engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture

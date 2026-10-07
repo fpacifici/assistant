@@ -114,6 +114,7 @@ from assistant.notes.permissions import (
     require_notebook_access,
 )
 from assistant.notes.positions import generate_position_between
+from assistant.search.indexer import index_note
 
 if TYPE_CHECKING:
     import uuid
@@ -284,6 +285,7 @@ def create_note(
     session.add(note)
     session.flush()
     _grant_owner_entitlement(session, owner, RoleName.NOTE_OWNER, note_id=note.id)
+    index_note(session, note.id)
     return note
 
 
@@ -370,9 +372,15 @@ def _ensure_text_node(node: Node) -> None:
 
 
 def _touch_note(session: Session, note_id: uuid.UUID) -> None:
+    """Mark a note as changed: bump its timestamp and reindex it for search.
+
+    Every note mutation goes through here, which is what keeps the search
+    index in step with the content (see `assistant.search.indexer`).
+    """
     session.execute(
         update(Note).where(Note.id == note_id).values(update_timestamp=datetime.now(UTC)),
     )
+    index_note(session, note_id)
 
 
 def _last_position(

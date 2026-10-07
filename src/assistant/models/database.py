@@ -99,9 +99,17 @@ def downgrade_database(revision: str = "-1") -> None:
     command.downgrade(AlembicConfig(str(_ALEMBIC_INI)), revision)
 
 
+# Postgres-only search index objects, created by hand in the add_search_index
+# migration and intentionally not mapped in the ORM (SQLite tests can't
+# represent tsvector). Autogenerate must not propose dropping them.
+_UNMAPPED_SEARCH_OBJECTS = frozenset(
+    {"search_vector", "ix_notes_search_vector", "ix_nodes_search_vector"},
+)
+
+
 def include_object_for_migrations(
     obj: SchemaItem,
-    _name: str | None,
+    name: str | None,
     type_: str,
     _reflected: bool,
     _compare_to: object | None,
@@ -114,8 +122,10 @@ def include_object_for_migrations(
     checkpoint tables, which live outside `Base.metadata` entirely.
 
     Args mirror Alembic's `include_object` hook signature exactly (called
-    positionally) — only `obj`/`type_` are actually used here.
+    positionally) — only `obj`/`name`/`type_` are actually used here.
     """
+    if type_ in ("column", "index") and name in _UNMAPPED_SEARCH_OBJECTS:
+        return False
     if type_ == "table":
         return getattr(obj, "schema", None) == "assistant"
     table = getattr(obj, "table", None)
