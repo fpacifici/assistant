@@ -386,6 +386,21 @@ class Note(Base):
         DateTime(timezone=True),
         nullable=False,
     )
+    # Search index text, maintained by `assistant.search.indexer.index_note`.
+    # On Postgres a generated `search_vector` tsvector column (not mapped
+    # here, see the add_search_index migration) is derived from these.
+    search_title: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    search_body: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    search_index_version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
 
     notebook: Mapped[Notebook] = relationship(
         "Notebook",
@@ -637,6 +652,12 @@ class Node(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
+    )
+    # Analyzed plain text of the node, maintained by
+    # `assistant.search.indexer.index_note`; Postgres derives the generated
+    # `search_vector` column from it.
+    search_text: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
     )
 
     note: Mapped[Note] = relationship(

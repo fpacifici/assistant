@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
@@ -22,6 +22,7 @@ import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import type { NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
+const SEARCH_HIT_FLASH_MS = 1500;
 
 export default function NoteEditor() {
   const { notebookId, noteId } = useParams();
@@ -80,6 +81,35 @@ export default function NoteEditor() {
   // editor is stable across renders; nodes is the real dependency
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes]);
+
+  // Opened from a search result (`?node=<server node id>`): once the blocks
+  // are rendered, scroll to the matching one and flash it, then drop the
+  // param so a reload doesn't scroll again. A block that no longer exists
+  // just leaves the note open at the top.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetNodeId = searchParams.get('node');
+  useEffect(() => {
+    if (!nodes || !targetNodeId) return;
+    const frame = requestAnimationFrame(() => {
+      const blockId = registry.current.blockIdForNode(targetNodeId);
+      const element = blockId
+        ? document.querySelector<HTMLElement>(`[data-id="${blockId}"]`)
+        : null;
+      if (element) {
+        element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        element.classList.add('search-hit');
+        window.setTimeout(() => element.classList.remove('search-hit'), SEARCH_HIT_FLASH_MS);
+      }
+      setSearchParams(
+        (params) => {
+          params.delete('node');
+          return params;
+        },
+        { replace: true },
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [nodes, targetNodeId, setSearchParams]);
 
   // Track changes made by the user
   useEffect(() => {

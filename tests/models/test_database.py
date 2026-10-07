@@ -283,3 +283,27 @@ def test_include_object_for_migrations_object_without_table_is_included() -> Non
     """Test that an object with no `.table` attribute isn't excluded by mistake."""
     obj = object()
     assert include_object_for_migrations(obj, "x", "column", False, None) is True
+
+
+def test_include_object_for_migrations_skips_unmapped_search_vector_objects() -> None:
+    """The Postgres-only search_vector columns and indexes are not in the ORM."""
+    column = MagicMock()
+    column.table.schema = "assistant"
+    assert (
+        include_object_for_migrations(column, "search_vector", "column", True, None)
+        is False
+    )
+    index = MagicMock()
+    index.table.schema = "assistant"
+    assert (
+        include_object_for_migrations(
+            index, "ix_notes_search_vector", "index", True, None
+        )
+        is False
+    )
+    assert (
+        include_object_for_migrations(
+            index, "ix_nodes_search_vector", "index", True, None
+        )
+        is False
+    )

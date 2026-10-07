@@ -12,7 +12,7 @@ const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 const MAX_VISIBLE_TAGS = 3;
 
 /** Read-only chips for a note's tags; extra tags collapse into a `+N` chip. */
-function NoteTags({ tags }: { tags: Tag[] }) {
+export function NoteTags({ tags }: { tags: Tag[] }) {
   if (tags.length === 0) return null;
   const visible = tags.slice(0, MAX_VISIBLE_TAGS);
   const hidden = tags.slice(MAX_VISIBLE_TAGS);
