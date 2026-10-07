@@ -1,5 +1,6 @@
 """Shared pytest fixtures and configuration."""
 
+import logging
 import os
 import uuid
 from collections.abc import Iterator
@@ -162,6 +163,37 @@ _PG_ADMIN_URL = os.environ.get(
 )
 
 
+def _migrate(database_url: str) -> None:
+    """Run the Alembic migrations on `database_url` without side effects.
+
+    Alembic resolves its target from DATABASE_URL, and its env.py calls
+    `logging.config.fileConfig`, which disables every existing logger and
+    replaces the root handlers. Both are restored afterwards so they don't
+    leak into other tests (e.g. ones asserting on log records).
+    """
+    previous_url = os.environ.get("DATABASE_URL")
+    root = logging.getLogger()
+    root_level, root_handlers = root.level, root.handlers[:]
+    loggers = [
+        logger
+        for logger in logging.root.manager.loggerDict.values()
+        if isinstance(logger, logging.Logger)
+    ]
+    disabled = {logger.name: logger.disabled for logger in loggers}
+    os.environ["DATABASE_URL"] = database_url
+    try:
+        upgrade_database()
+    finally:
+        if previous_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_url
+        root.setLevel(root_level)
+        root.handlers[:] = root_handlers
+        for logger in loggers:
+            logger.disabled = disabled[logger.name]
+
+
 @pytest.fixture(scope="session")
 def _pg_engine() -> Iterator[Engine]:
     """A throwaway Postgres database, migrated to head, for the whole run.
@@ -184,17 +216,7 @@ def _pg_engine() -> Iterator[Engine]:
     url = admin.url.set(database=name)
     engine = create_engine(url)
     try:
-        # Alembic resolves its target from DATABASE_URL; only set it for the
-        # upgrade so it doesn't leak into other tests.
-        previous_url = os.environ.get("DATABASE_URL")
-        os.environ["DATABASE_URL"] = url.render_as_string(hide_password=False)
-        try:
-            upgrade_database()
-        finally:
-            if previous_url is None:
-                os.environ.pop("DATABASE_URL", None)
-            else:
-                os.environ["DATABASE_URL"] = previous_url
+        _migrate(url.render_as_string(hide_password=False))
         yield engine
     finally:
         engine.dispose()
