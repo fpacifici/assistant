@@ -63,7 +63,10 @@ errors the data router catches itself (they never reach a React boundary).
 
 A data router is required for `useBlocker` (the unsaved-changes guard).
 Authentication is cookie based: `apiFetch` sends `credentials: 'include'`,
-and `AuthProvider` exposes `{ user, logout }` via `useAuth()`.
+and `AuthProvider` exposes `{ user, logout }` via `useAuth()`. The access
+cookie lives 5 minutes, so `AuthProvider` runs `useSessionHeartbeat`: while
+the page is visible it calls `POST /auth/refresh` every 4 minutes, and right
+away when a tab hidden for longer becomes visible again.
 
 ## Routing
 
@@ -114,16 +117,16 @@ The same SPA serves desktop, tablets and phones
   note list, or editor) under a `[← back] [title] [⋯]` top bar. The back
   link goes one URL level up.
 - **Top bar extension points** (provided by `Layout`):
-  - `TopBarSlot.tsx`: `<TopBarActions>` portals children (NoteEditor's Save
-    button) into the top bar; renders nothing on desktop.
+  - `TopBarSlot.tsx`: `<TopBarActions>` portals children (NoteEditor's
+    save state) into the top bar; renders nothing on desktop.
   - `TopBarMenuContext.tsx`: `useTopBarMenuItems(items)` adds entries
     (Share, Debug) to the `⋯` `OverflowMenu` while the caller is mounted.
-- **Mobile editor**: Save in the top bar, status line under it, Share/Debug
+- **Mobile editor**: save state in the top bar, save errors in a status line under it, Share/Debug
   in the `⋯` menu, debug view full screen, sticky horizontally scrolling
   formatting toolbar.
 - **Editor scrolling**: on desktop the note editor fills `.main` and the
   BlockNote container (`.editor-content > .bn-container`) is the scroll
-  area, so the formatting toolbar and Save bar stay visible. On mobile the
+  area, so the formatting toolbar and the bottom bar stay visible. On mobile the
   editor grows with its content and `.main` scrolls instead.
 - **Dialogs**: `.modal` (share dialog, confirmations) is full screen on
   mobile. Auth pages, `InvitesPage` and `SettingsPage` are responsive CSS
@@ -203,12 +206,12 @@ The main editing surface (`components/NoteEditor.tsx`). Uses BlockNote (`useCrea
 
 1. **Load**: Fetches `NoteNode[]` from the server via React Query. Calls `buildBlocksFromNodes()` to convert server nodes into BlockNote blocks and populate `ServerRegistry`. Calls `editor.replaceBlocks()` to set the document, then snapshots the initial serialized state.
 2. **Edit**: The `BlockNoteView` component provides a rich WYSIWYG editing experience with a built-in formatting toolbar (bold, italic, headings, lists, code, tables, text colors, etc.). Changes are tracked via `editor.onChange()` to set the dirty flag.
-3. **Save**: Calls `executeSave()` to reconcile the current document against the server. Updates the snapshot on success. Handles 409 conflicts.
+3. **Auto-save**: there is no Save button. `useAutoSave` (`hooks/`) starts a timer on the first edit after a save and, after `VITE_AUTOSAVE_SECONDS` (default 5), calls `executeSave()` once for everything edited in that window. Edits made while a save is in flight are saved in the next window. A failed save keeps the edits dirty and retries on the next edit; a 409 conflict stops auto-saving until the note is reloaded. After a save the `['nodes', …]` query is only marked stale (`refetchType: 'none'`): refetching would replace the blocks under the cursor. The save state (`Saved` / `Unsaved changes` / `Saving…` / `Not saved`) shows in the bottom bar (desktop) or the top bar (mobile); it is hidden on read-only notes.
 4. **Toolbar and attachments**: `MarkdownToolbar` applies block types/styles, indents/unindents list items (`nestBlock`/`unnestBlock`, same as Tab/Shift+Tab; the nested item is saved inside its parent block's markdown) and uploads files as attachment nodes, listed by `AttachmentList` below the body.
-5. **Tags**: `TagEditor` (between the toolbar and the body, both layouts) shows the caller's tags on the note as removable chips and an "Add tag" combobox. Suggestions come from `GET /tag` (query key `['tags']`), filtered case-insensitively and excluding tags already on the note; an unmatched name offers `Create "<name>"`, which tags the note by name so the backend creates the tag. Arrow keys/Enter/Escape drive the list. Tagging needs only `view_note`, so it works on read-only notes. On success it writes the returned tags into the `['note', nb, note]` cache and invalidates `['notes', nb]` (and `['tags']` after a create). Tags are saved immediately, independent of the Save button.
-6. **Unsaved-changes guard**: `useUnsavedChangesGuard(isDirty)` (`hooks/`) uses `useBlocker` to intercept pathname-changing navigations (links, the mobile back arrow, browser back/swipe) with a "Discard unsaved changes?" dialog, and registers a `beforeunload` prompt while dirty. Query-string-only changes (e.g. `?layout=`) are not blocked.
+5. **Tags**: `TagEditor` (between the toolbar and the body, both layouts) shows the caller's tags on the note as removable chips and an "Add tag" combobox. Suggestions come from `GET /tag` (query key `['tags']`), filtered case-insensitively and excluding tags already on the note; an unmatched name offers `Create "<name>"`, which tags the note by name so the backend creates the tag. Arrow keys/Enter/Escape drive the list. Tagging needs only `view_note`, so it works on read-only notes. On success it writes the returned tags into the `['note', nb, note]` cache and invalidates `['notes', nb]` (and `['tags']` after a create). Tags are saved immediately, independent of auto-save.
+6. **Unsaved-changes guard**: `useUnsavedChangesGuard(isDirty, flush)` (`hooks/`) uses `useBlocker` to intercept pathname-changing navigations (links, the mobile back arrow, browser back/swipe) while edits are pending. It saves them first (`flush`) and proceeds; only if that save fails does it ask "Discard unsaved changes?". It also registers a `beforeunload` prompt while dirty. Query-string-only changes (e.g. `?layout=`) are not blocked.
 
-Holds a `ServerRegistry` and a block snapshot in refs that persist across renders. All save state (`isDirty`, `saving`, `status`) lives here; only where the controls render differs between layouts.
+Holds a `ServerRegistry` and a block snapshot in refs that persist across renders. Save state (`isDirty`, `saving`, `error`) comes from `useAutoSave`; only where the controls render differs between layouts.
 
 ## Markdown Engine
 

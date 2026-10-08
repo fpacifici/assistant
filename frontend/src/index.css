@@ -1639,3 +1639,15 @@ ul {
 [data-layout="mobile"] .invites-page td:empty {
   display: none;
 }
+
+/* Auto-save indicator (desktop editor toolbar, mobile top bar) */
+
+.save-state {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.save-state.error {
+  color: var(--danger);
+}
