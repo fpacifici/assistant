@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
@@ -6,6 +6,7 @@ import { Route, Routes } from 'react-router';
 import NoteEditor from './NoteEditor';
 import Layout from './Layout';
 import { renderWithProviders } from '../test/renderWithProviders';
+import { AUTOSAVE_DELAY_MS } from '../hooks/useAutoSave';
 import type { BlockNoteEditor } from '@blocknote/core';
 import type { Note } from '../types';
 
@@ -92,6 +93,27 @@ function renderEditor() {
   );
 }
 
+async function makeDirty() {
+  await waitFor(() => expect(onChangeCallback).toBeDefined());
+  act(() => onChangeCallback?.());
+}
+
+async function elapseAutosave() {
+  await act(() => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS));
+}
+
+function saveState(): HTMLElement {
+  return screen.getByTestId('save-state');
+}
+
+beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('NoteEditor permission gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -99,31 +121,22 @@ describe('NoteEditor permission gating', () => {
     mockFetchNodes.mockResolvedValue([]);
   });
 
-  it('disables the Save button and makes the editor read-only without update permission', async () => {
+  it('has no Save button and no save state without update permission', async () => {
     mockFetchNote.mockResolvedValue(makeNote(['view_note']));
     renderEditor();
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeDisabled());
-  });
-
-  it('enables the Save button once dirty when the caller has update permission', async () => {
-    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
-    renderEditor();
-
-    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
-
-    await waitFor(() => expect(onChangeCallback).toBeDefined());
-    act(() => onChangeCallback?.());
-
-    expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    await screen.findByRole('button', { name: 'Debug' });
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
+    await makeDirty();
+    await elapseAutosave();
+    expect(mockExecuteSave).not.toHaveBeenCalled();
   });
 
   it('hides the Share button without share_note permission', async () => {
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
     renderEditor();
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
+    await screen.findByRole('button', { name: 'Debug' });
     expect(screen.queryByRole('button', { name: /share/i })).not.toBeInTheDocument();
   });
 
@@ -132,6 +145,63 @@ describe('NoteEditor permission gating', () => {
     renderEditor();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument());
+  });
+});
+
+// --- Auto-save ---
+
+describe('NoteEditor auto-save', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onChangeCallback = undefined;
+    mockFetchNodes.mockResolvedValue([]);
+    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
+    mockExecuteSave.mockResolvedValue(new Map());
+  });
+
+  it('saves accumulated edits once after the delay and shows the save state', async () => {
+    renderEditor();
+    await waitFor(() => expect(saveState()).toHaveTextContent('Saved'));
+
+    await makeDirty();
+    expect(saveState()).toHaveTextContent('Unsaved changes');
+    await act(() => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS - 1000));
+    act(() => onChangeCallback?.());
+    expect(mockExecuteSave).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+
+    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(saveState()).toHaveTextContent('Saved'));
+  });
+
+  it('shows a save error and retries on the next edit', async () => {
+    mockExecuteSave.mockRejectedValueOnce(new Error('500 boom'));
+    renderEditor();
+    await makeDirty();
+    await elapseAutosave();
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Error: 500 boom');
+    expect(saveState()).toHaveTextContent('Not saved');
+
+    await makeDirty();
+    await elapseAutosave();
+    expect(mockExecuteSave).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(saveState()).toHaveTextContent('Saved'));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('stops auto-saving after a conflict', async () => {
+    mockExecuteSave.mockRejectedValue(new Error('409 Conflict'));
+    renderEditor();
+    await makeDirty();
+    await elapseAutosave();
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/^Conflict/);
+
+    await makeDirty();
+    await elapseAutosave();
+    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -160,11 +230,6 @@ function topBar(): HTMLElement {
   return screen.getByRole('banner');
 }
 
-async function makeDirty() {
-  await waitFor(() => expect(onChangeCallback).toBeDefined());
-  act(() => onChangeCallback?.());
-}
-
 describe('NoteEditor on mobile', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -172,62 +237,33 @@ describe('NoteEditor on mobile', () => {
     mockFetchNodes.mockResolvedValue([]);
   });
 
-  it('renders Save in the top bar instead of the bottom toolbar', async () => {
+  it('shows the save state in the top bar and no bottom toolbar', async () => {
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
     const { container } = renderMobileEditor();
 
-    const save = await within(topBar()).findByRole('button', { name: 'Save' });
-    expect(save).toBeDisabled();
+    expect(await within(topBar()).findByText('Saved')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
     expect(container.querySelector('.editor-toolbar')).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(1);
-  });
-
-  it('enables Save once dirty and saves from the top bar', async () => {
-    const user = userEvent.setup();
-    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
-    mockExecuteSave.mockResolvedValue(new Map());
-    renderMobileEditor();
-
-    await within(topBar()).findByRole('button', { name: 'Save' });
-    await makeDirty();
-    const save = within(topBar()).getByRole('button', { name: 'Save' });
-    expect(save).not.toBeDisabled();
-
-    await user.click(save);
-
-    expect(mockExecuteSave).toHaveBeenCalled();
-    expect(await screen.findByRole('status')).toHaveTextContent('Saved');
   });
 
   it('shows a conflict in the status line', async () => {
-    const user = userEvent.setup();
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
     mockExecuteSave.mockRejectedValue(new Error('409 Conflict'));
     renderMobileEditor();
 
-    await within(topBar()).findByRole('button', { name: 'Save' });
     await makeDirty();
-    await user.click(within(topBar()).getByRole('button', { name: 'Save' }));
+    await elapseAutosave();
 
     expect(await screen.findByRole('status')).toHaveTextContent(/^Conflict/);
-  });
-
-  it('keeps Save disabled without update permission', async () => {
-    mockFetchNote.mockResolvedValue(makeNote(['view_note']));
-    renderMobileEditor();
-
-    await within(topBar()).findByRole('button', { name: 'Save' });
-    await makeDirty();
-    expect(within(topBar()).getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(within(topBar()).getByText('Not saved')).toBeInTheDocument();
   });
 
   it('offers Share and Debug in the menu with share_note permission', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'share_note']));
     renderMobileEditor();
-    await within(topBar()).findByRole('button', { name: 'Save' });
 
-    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    await user.click(await screen.findByRole('button', { name: 'Menu' }));
     expect(await screen.findByRole('menuitem', { name: 'Share' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Debug' })).toBeInTheDocument();
 
@@ -236,23 +272,21 @@ describe('NoteEditor on mobile', () => {
   });
 
   it('omits Share from the menu without share_note permission', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockFetchNote.mockResolvedValue(makeNote(['view_note']));
     renderMobileEditor();
-    await within(topBar()).findByRole('button', { name: 'Save' });
 
-    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    await user.click(await screen.findByRole('button', { name: 'Menu' }));
     expect(await screen.findByRole('menuitem', { name: 'Debug' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Share' })).not.toBeInTheDocument();
   });
 
   it('opens Debug full screen and closes it', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     mockFetchNote.mockResolvedValue(makeNote(['view_note']));
     renderMobileEditor();
-    await within(topBar()).findByRole('button', { name: 'Save' });
 
-    await user.click(screen.getByRole('button', { name: 'Menu' }));
+    await user.click(await screen.findByRole('button', { name: 'Menu' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Debug' }));
 
     const panel = screen.getByRole('dialog', { name: 'Debug blocks' });
@@ -284,35 +318,36 @@ describe('NoteEditor unsaved-changes guard', () => {
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
   });
 
-  it('asks before leaving via the mobile back arrow when dirty', async () => {
-    const user = userEvent.setup();
+  it('saves pending edits and leaves via the mobile back arrow', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockExecuteSave.mockResolvedValue(new Map());
     const { router } = renderMobileEditor();
-    await within(topBar()).findByRole('button', { name: 'Save' });
+    await within(topBar()).findByText('Saved');
     await makeDirty();
 
     await user.click(screen.getByRole('link', { name: 'Back' }));
 
-    expect(screen.getByRole('alertdialog', { name: 'Discard unsaved changes?' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
-    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-1');
-    expect(within(topBar()).getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes'));
+    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
   it('lets the mobile back arrow through when clean', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { router } = renderMobileEditor();
-    await within(topBar()).findByRole('button', { name: 'Save' });
+    await within(topBar()).findByText('Saved');
 
     await user.click(screen.getByRole('link', { name: 'Back' }));
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes');
+    expect(mockExecuteSave).not.toHaveBeenCalled();
   });
 
-  it('asks before switching notes on desktop when dirty, and discards on confirm', async () => {
-    const user = userEvent.setup();
+  it('asks to discard when saving before switching notes fails', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockExecuteSave.mockRejectedValue(new Error('500 boom'));
     const { router } = renderEditor();
-    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
     await makeDirty();
 
     act(() => {
@@ -326,19 +361,18 @@ describe('NoteEditor unsaved-changes guard', () => {
     expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-2');
   });
 
-  it('does not ask after a successful save', async () => {
-    const user = userEvent.setup();
+  it('does not ask after the auto-save completed', async () => {
     mockExecuteSave.mockResolvedValue(new Map());
     const { router } = renderEditor();
-    await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument());
     await makeDirty();
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await screen.findByText('Saved');
+    await elapseAutosave();
+    await waitFor(() => expect(saveState()).toHaveTextContent('Saved'));
 
     await act(() => router.navigate('/notebooks/nb-1/notes/note-2'));
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-2');
+    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -349,13 +383,13 @@ describe('NoteEditor on desktop', () => {
     mockFetchNodes.mockResolvedValue([]);
   });
 
-  it('keeps Save, Debug and Share in the bottom toolbar', async () => {
-    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'share_note']));
+  it('keeps the save state, Debug and Share in the bottom toolbar', async () => {
+    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update', 'share_note']));
     const { container } = renderEditor();
 
     await waitFor(() => expect(screen.getByRole('button', { name: /share/i })).toBeInTheDocument());
     const toolbar = container.querySelector('.editor-toolbar') as HTMLElement;
-    expect(within(toolbar).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(within(toolbar).getByText('Saved')).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: 'Debug' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: 'Share' })).toBeInTheDocument();
   });

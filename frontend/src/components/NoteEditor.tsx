@@ -19,6 +19,7 @@ import { useTopBarMenuItems } from './TopBarMenuContext';
 import { useIsMobile } from '../layout/LayoutModeContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
+import { useAutoSave } from '../hooks/useAutoSave';
 import type { NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
@@ -28,9 +29,6 @@ export default function NoteEditor() {
   const isMobile = useIsMobile();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
   const [sharing, setSharing] = useState(false);
@@ -60,6 +58,32 @@ export default function NoteEditor() {
     editor.isEditable = canUpdate;
   }, [editor, canUpdate]);
 
+  const save = useCallback(async () => {
+    if (!notebookId || !noteId) return;
+    snapshotRef.current = await executeSave(
+      notebookId,
+      noteId,
+      editor,
+      registry.current,
+      snapshotRef.current,
+    );
+    // The registry already tracks the new server nodes. Refetching would
+    // replace the blocks under the cursor, so only mark the cache stale.
+    queryClient.invalidateQueries({
+      queryKey: ['nodes', notebookId, noteId],
+      refetchType: 'none',
+    });
+  }, [notebookId, noteId, editor, queryClient]);
+
+  const [conflict, setConflict] = useState(false);
+  const autoSave = useAutoSave(save, { enabled: canUpdate && !conflict });
+  const { markDirty, reset: resetAutoSave } = autoSave;
+
+  useEffect(() => {
+    const err = autoSave.error;
+    if (err instanceof Error && err.message.includes('409')) setConflict(true);
+  }, [autoSave.error]);
+
   // Load server nodes into the BlockNote editor; keep attachments separate
   useEffect(() => {
     if (!nodes) return;
@@ -75,8 +99,8 @@ export default function NoteEditor() {
       editor.replaceBlocks(editor.document, blocks as Parameters<typeof editor.replaceBlocks>[1]);
       snapshotRef.current = buildSnapshot(editor.document, editor);
     }
-    setIsDirty(false);
-    setStatus(null);
+    resetAutoSave();
+    setConflict(false);
   // editor is stable across renders; nodes is the real dependency
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes]);
@@ -84,40 +108,11 @@ export default function NoteEditor() {
   // Track changes made by the user
   useEffect(() => {
     const unsubscribe = editor.onChange(() => {
-      setIsDirty(true);
-      setStatus(null);
+      markDirty();
       setDebugTick((t) => t + 1);
     });
     return unsubscribe;
-  }, [editor]);
-
-  const handleSave = useCallback(async () => {
-    if (!notebookId || !noteId) return;
-    setSaving(true);
-    setStatus(null);
-
-    try {
-      const newSnapshot = await executeSave(
-        notebookId,
-        noteId,
-        editor,
-        registry.current,
-        snapshotRef.current,
-      );
-      snapshotRef.current = newSnapshot;
-      setIsDirty(false);
-      setStatus('Saved');
-      queryClient.invalidateQueries({ queryKey: ['nodes', notebookId, noteId] });
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('409')) {
-        setStatus('Conflict: note was modified externally. Please refresh.');
-      } else {
-        setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    } finally {
-      setSaving(false);
-    }
-  }, [notebookId, noteId, editor, queryClient]);
+  }, [editor, markDirty]);
 
   const handleAttached = useCallback((node: NoteNode) => {
     setAttachmentNodes((prev) => [...prev, node]);
@@ -138,7 +133,10 @@ export default function NoteEditor() {
   }, [isMobile, canShare, debugOpen]);
   useTopBarMenuItems(menuItems);
 
-  const unsavedChangesDialog = useUnsavedChangesGuard(isDirty);
+  const unsavedChangesDialog = useUnsavedChangesGuard(
+    autoSave.isDirty || autoSave.saving,
+    autoSave.flush,
+  );
 
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
@@ -146,15 +144,25 @@ export default function NoteEditor() {
 
   if (isLoading) return <div>Loading...</div>;
 
-  const saveDisabled = !isDirty || saving || !canUpdate;
-  const saveLabel = saving ? 'Saving...' : 'Save';
-  const statusLine = status && (
+  const saveError = autoSave.error;
+  let errorMessage: string | null = null;
+  if (conflict) {
+    errorMessage = 'Conflict: note was modified externally. Please refresh.';
+  } else if (saveError) {
+    errorMessage = `Error: ${saveError instanceof Error ? saveError.message : String(saveError)}`;
+  }
+  let saveState: string | null = null;
+  if (autoSave.saving) saveState = 'Saving…';
+  else if (errorMessage) saveState = 'Not saved';
+  else if (autoSave.isDirty) saveState = 'Unsaved changes';
+  else if (canUpdate) saveState = 'Saved';
+  const saveIndicator = saveState && (
     <span
-      className={`status ${
-        status.startsWith('Error') || status.startsWith('Conflict') ? 'error' : 'success'
-      }`}
+      className={`save-state${errorMessage ? ' error' : ''}`}
+      data-testid="save-state"
+      aria-live="polite"
     >
-      {status}
+      {saveState}
     </span>
   );
 
@@ -162,8 +170,10 @@ export default function NoteEditor() {
   // remounted when the layout mode switches.
   return (
     <div className="note-editor">
-      {isMobile && status && (
-        <div className="editor-status" role="status">{statusLine}</div>
+      {isMobile && errorMessage && (
+        <div className="editor-status" role="status">
+          <span className="status error">{errorMessage}</span>
+        </div>
       )}
       <MarkdownToolbar
         editor={editor}
@@ -190,9 +200,7 @@ export default function NoteEditor() {
       <AttachmentList nodes={attachmentNodes} />
       {!isMobile && (
         <div className="editor-toolbar">
-          <button onClick={handleSave} disabled={saveDisabled}>
-            {saveLabel}
-          </button>
+          {saveIndicator}
           <button
             className="debug-toggle"
             onClick={() => setDebugOpen((prev) => !prev)}
@@ -204,15 +212,13 @@ export default function NoteEditor() {
               Share
             </button>
           )}
-          {statusLine}
+          {errorMessage && (
+            <span className="status error" role="status">{errorMessage}</span>
+          )}
         </div>
       )}
       {isMobile && (
-        <TopBarActions>
-          <button onClick={handleSave} disabled={saveDisabled}>
-            {saveLabel}
-          </button>
-        </TopBarActions>
+        <TopBarActions>{saveIndicator}</TopBarActions>
       )}
       {isMobile && debugOpen && (
         <div className="fullscreen-panel" role="dialog" aria-label="Debug blocks">
