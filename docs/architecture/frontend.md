@@ -107,11 +107,11 @@ The same SPA serves desktop, tablets and phones
 - **Styling**: the provider mirrors the mode on `<html data-layout="…">`;
   mobile CSS is scoped under `[data-layout="mobile"]` so the override affects
   styling too. Media queries are only used for sizing (e.g. the desktop
-  sidebar narrows to 240px below 1024px). `.app-shell` uses `100dvh` and
+  sidebar and notes column narrow below 1024px). `.app-shell` uses `100dvh` and
   safe-area insets (`viewport-fit=cover`).
 - **Single tree**: `Layout` renders one component tree in both modes — the
   header slot swaps between `DesktopHeader` and `MobileTopBar`, the sidebar
-  is conditionally rendered, and `.main` keeps its position — so switching
+  and notes column are conditionally rendered, and `.main` keeps its position — so switching
   mode (resize, override) never remounts `NoteEditor` or loses unsaved edits.
 - **Mobile navigation**: only the deepest URL level is shown (notebook list,
   note list, or editor) under a `[← back] [title] [⋯]` top bar. The back
@@ -180,23 +180,32 @@ graph TD
 
 ### Layout
 
-Top-level composition component (`components/Layout.tsx`). Reads `notebookId` and `noteId` from URL params. On desktop it renders a header plus a two-panel layout:
-- **Sidebar** (300px, 240px below 1024px): `NotebookList` always visible; `NoteList` shown when a notebook is selected.
+Top-level composition component (`components/Layout.tsx`). Reads `notebookId` and `noteId` from URL params. On desktop it renders a header plus three columns:
+- **Sidebar** (`.sidebar`, 260px, 200px below 1024px): `NotebookList`, always visible.
+- **Notes column** (`.notes-column`, 340px, 280px below 1024px): `NoteList`, shown when a notebook is selected.
 - **Main area** (flex): `NoteEditor` when a note is selected; placeholder message otherwise.
 
 On mobile it shows one level at a time; see [Responsive layout](#responsive-layout).
 
 ### NotebookList
 
-Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL.
+Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL. Notebooks are sorted by name by the API and loaded page by page (see [Pagination](#pagination)).
 
 It also opens `ImportDialog` (an "Import" button in its header on desktop, an "Import from Evernote" entry in the `⋯` menu on mobile). The dialog uploads an Evernote export zip with `XMLHttpRequest` for progress, runs the import, then shows the report with links to notes that were kept because the user edited them, and invalidates the notebooks and notes queries.
 
 ### NoteList
 
-Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD pattern as NotebookList. Returns `null` when no notebook is selected.
+Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD pattern as NotebookList. Returns `null` when no notebook is selected. Its heading is the notebook name (`['notebook', id]` query, shared with the mobile top bar title).
+
+Notes are sorted most recently updated first by the API and loaded page by page (see [Pagination](#pagination)). Each row is a card: last-update date (`formatNoteDate`: "May 11", with the year when it isn't the current one), title, and a two-line clamp of `Note.preview` (a plain-text excerpt the API builds from the note's first blocks). Share/delete buttons appear on hover on desktop. After each save `NoteEditor` invalidates `['notes', notebookId]`, so the edited note moves to the top with a fresh preview.
 
 Each row shows the caller's tags on the note as read-only chips under the title (at most three, then a `+N` chip whose tooltip lists the rest), from `Note.tags` in the list response.
+
+### Pagination
+
+`NotebookList` and `NoteList` use `useInfiniteQuery` over the offset-paginated list endpoints, `PAGE_SIZE` (50, `api/pagination.ts`) items per request; `nextPageOffset` stops when a page comes back short. The query keys stay `['notebooks']` and `['notes', notebookId]`, so existing invalidations refetch every loaded page.
+
+Infinite scroll (`hooks/useInfiniteScroll.ts`) watches a sentinel `<li>` at the end of the list with an `IntersectionObserver` (200px margin). The sentinel is rendered only while there is a next page and none is loading: every fetch remounts it, and a sentinel that is still visible (a list shorter than the screen) fires again right away. Tests drive it with the fake in `test/intersectionObserver.ts`.
 
 Both lists gate share/delete actions on the item's `permissions`, open `ShareDialog` to manage entitlements, and ask for confirmation (`ConfirmDialog`) before deleting.
 

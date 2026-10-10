@@ -1,7 +1,8 @@
 /**
  * App shell for the note views. URL params drive visibility.
  *
- * Desktop: header, sidebar (notebooks + notes) and main area (editor).
+ * Desktop: header, then three columns — notebooks, notes (with previews)
+ * and the editor.
  * Mobile: top bar and only the deepest URL level — notebook list, note list
  * or editor. Both modes share one component tree so that `NoteEditor` keeps
  * its identity (and unsaved edits) when the mode switches.
@@ -17,16 +18,16 @@ import MobileTopBar from './MobileTopBar';
 import { TopBarMenuProvider } from './TopBarMenuContext';
 import { TopBarSlotProvider } from './TopBarSlot';
 import { useLayoutMode } from '../layout/LayoutModeContext';
-import { fetchNotebooks } from '../api/notebooks';
+import { fetchNotebook } from '../api/notebooks';
 import { fetchNote } from '../api/notes';
 
 function useMobileTitle(enabled: boolean): string {
   const { notebookId, noteId } = useParams();
 
-  // Same keys and fetchers as NotebookList / NoteEditor, so these share their cache.
-  const { data: notebooks } = useQuery({
-    queryKey: ['notebooks'],
-    queryFn: fetchNotebooks,
+  // Same keys and fetchers as NoteList / NoteEditor, so these share their cache.
+  const { data: notebook } = useQuery({
+    queryKey: ['notebook', notebookId],
+    queryFn: () => fetchNotebook(notebookId!),
     enabled: enabled && !!notebookId && !noteId,
   });
   const { data: note } = useQuery({
@@ -36,7 +37,7 @@ function useMobileTitle(enabled: boolean): string {
   });
 
   if (noteId) return note?.title ?? 'Note';
-  if (notebookId) return notebooks?.find((nb) => nb.id === notebookId)?.name ?? 'Notes';
+  if (notebookId) return notebook?.name ?? 'Notes';
   return 'Notebooks';
 }
 
@@ -52,8 +53,8 @@ export default function Layout() {
       ? '/notebooks'
       : undefined;
 
-  // On mobile only the deepest URL level is shown.
-  const showSidebar = !mobile || !noteId;
+  // Desktop: notebooks | notes | editor columns. On mobile only the deepest
+  // URL level is shown.
   const showNotebookList = !mobile || !notebookId;
   const showNoteList = !!notebookId && (!mobile || !noteId);
   const showMain = !mobile || !!noteId;
@@ -64,10 +65,14 @@ export default function Layout() {
         <div className="app-shell" data-layout={mode}>
           {mobile ? <MobileTopBar title={title} backTo={backTo} /> : <DesktopHeader />}
           <div className="layout">
-            {showSidebar && (
+            {showNotebookList && (
               <div key="sidebar" className="sidebar">
-                {showNotebookList && <NotebookList />}
-                {showNoteList && <NoteList />}
+                <NotebookList />
+              </div>
+            )}
+            {showNoteList && (
+              <div key="notes" className="notes-column">
+                <NoteList />
               </div>
             )}
             {showMain && (

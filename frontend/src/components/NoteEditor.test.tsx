@@ -81,6 +81,7 @@ function makeNote(permissions: string[]): Note {
     update_timestamp: '',
     permissions,
     tags: [],
+    preview: '',
   };
 }
 

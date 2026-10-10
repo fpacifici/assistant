@@ -113,7 +113,8 @@ just this one.
 List notebooks visible to the current user: notebooks they have an
 entitlement on directly, plus any notebook containing at least one note
 they have an entitlement on (only that note is then visible when listing
-its notes). Supports pagination via query parameters:
+its notes). Sorted by name, case-insensitively (ties by id, so pages are
+stable). Supports pagination via query parameters:
 - `offset` (default: 0)
 - `limit` (default: 20, max: 100)
 
@@ -166,7 +167,9 @@ Response (201):
     "title": "My Note",
     "creation_timestamp": "2026-01-01T00:00:00Z",
     "update_timestamp": "2026-01-01T00:00:00Z",
-    "permissions": ["view_note", "update", "delete_note", "share_note"]
+    "permissions": ["view_note", "update", "delete_note", "share_note"],
+    "tags": [],
+    "preview": ""
 }
 ```
 
@@ -174,8 +177,14 @@ Response (201):
 
 List notes visible to the caller in this notebook: all of them if the
 caller holds `list_notes`/`view_notes`/`own_notes` on the notebook,
-otherwise only the notes the caller has a direct entitlement on. Supports
-pagination via `offset` and `limit` query parameters.
+otherwise only the notes the caller has a direct entitlement on. Sorted by
+`update_timestamp`, most recent first (ties by id). Supports pagination via
+`offset` and `limit` query parameters.
+
+Every note response carries `preview`: a plain-text excerpt (at most 200
+characters) of the note's first text/markdown blocks with the markdown
+syntax stripped, or `""` for a note without text. The list endpoint builds
+the previews for a page in one query (`notes/previews.py`).
 
 `GET /notebook/{notebook_id}/note/{note_id}`
 

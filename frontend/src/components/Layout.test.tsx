@@ -31,9 +31,9 @@ vi.mock('../api/invites', () => ({
 }));
 
 vi.mock('../api/notebooks', () => ({
-  fetchNotebooks: vi.fn().mockResolvedValue([
+  fetchNotebook: vi.fn().mockResolvedValue(
     { id: 'nb-1', name: 'Work notebook', owner_id: 'u1', permissions: [] },
-  ]),
+  ),
 }));
 
 vi.mock('../api/notes', () => ({
@@ -46,6 +46,7 @@ vi.mock('../api/notes', () => ({
     update_timestamp: '',
     permissions: [],
     tags: [],
+    preview: '',
   }),
 }));
 vi.mock('../api/tags', () => ({
@@ -145,6 +146,14 @@ describe('Layout (desktop)', () => {
     renderLayout('/notebooks/nb-1/notes/note-1');
     expect(screen.getByTestId('notebook-list')).toBeInTheDocument();
     expect(screen.getByTestId('note-list')).toBeInTheDocument();
+  });
+
+  it('lays out notebooks, notes and editor as three columns', () => {
+    const { container } = renderLayout('/notebooks/nb-1/notes/note-1');
+    const columns = [...container.querySelector('.layout')!.children];
+    expect(columns.map((c) => c.className)).toEqual(['sidebar', 'notes-column', 'main']);
+    expect(within(columns[0] as HTMLElement).getByTestId('notebook-list')).toBeInTheDocument();
+    expect(within(columns[1] as HTMLElement).getByTestId('note-list')).toBeInTheDocument();
   });
 
   it('has no mobile top bar', () => {

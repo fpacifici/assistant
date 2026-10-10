@@ -43,6 +43,8 @@ export interface Note {
   permissions: string[];
   /** The caller's own tags on this note. */
   tags: Tag[];
+  /** Plain-text excerpt of the note's first blocks ("" when empty). */
+  preview: string;
 }
 
 export interface Entitlement {
