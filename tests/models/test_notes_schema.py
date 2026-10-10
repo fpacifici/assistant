@@ -113,6 +113,26 @@ def test_create_text_node(db_session: Session) -> None:
     assert node.author.email == "test@example.com"
 
 
+def test_node_position_accepts_2048_characters(db_session: Session) -> None:
+    user = _create_user(db_session)
+    notebook = _create_notebook(db_session, user)
+    note = _create_note(db_session, notebook, user)
+    position = "a" + "V" * 2047
+
+    node = Node(
+        note_id=note.id,
+        position=position,
+        author_id=user.uid,
+        node_type=NodeType.TEXT,
+        payload="deeply nested insert",
+    )
+    db_session.add(node)
+    db_session.flush()
+    db_session.expire(node)
+
+    assert node.position == position
+
+
 def test_create_attachment_node(db_session: Session) -> None:
     user = _create_user(db_session)
     notebook = _create_notebook(db_session, user)
