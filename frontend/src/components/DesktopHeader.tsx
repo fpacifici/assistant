@@ -1,4 +1,4 @@
-/** Desktop header: app title, Invites and Settings links, quota, theme picker, user
+/** Desktop header: app title, Invites, Settings and TUI-layout links, quota, theme picker, user
  * name and Logout. */
 
 import { Link } from 'react-router';
@@ -23,6 +23,13 @@ export default function DesktopHeader() {
           <Link to="/invites" className="nav-link">Invites</Link>
         )}
         <Link to="/settings" className="nav-link">Settings</Link>
+        <Link
+          to="?layout=tui"
+          className="nav-link"
+          title="Terminal-style layout with keyboard shortcuts"
+        >
+          TUI
+        </Link>
         <span className="quota-badge">{user.invite_quota_remaining} invites left</span>
         <ThemeSelect />
         <span className="user-name">{user.firstname} {user.lastname}</span>

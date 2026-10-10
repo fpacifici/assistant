@@ -1,18 +1,8 @@
 /** Theme pickers: a select for the desktop header, radio items for the mobile `⋯` menu. */
 
 import { useTheme } from '../theme/ThemeContext';
-import { THEME_PREFERENCES } from '../theme/theme';
+import { THEME_LABELS as LABELS, THEME_PREFERENCES } from '../theme/theme';
 import type { ThemePreference } from '../theme/theme';
-
-const LABELS: Record<ThemePreference, string> = {
-  system: 'System',
-  light: 'Light',
-  dark: 'Dark',
-  blossom: 'Blossom',
-  ocean: 'Ocean',
-  sand: 'Sand',
-  twilight: 'Twilight',
-};
 
 export function ThemeSelect() {
   const { preference, setPreference } = useTheme();
