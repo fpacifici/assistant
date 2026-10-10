@@ -31,7 +31,9 @@ export type TuiAction =
   | { type: 'fkey'; n: number }
   | { type: 'list'; command: ListCommand }
   | { type: 'pane'; to: 'next' | 'prev' | 'left' | 'right' }
-  | { type: 'escape' };
+  | { type: 'escape' }
+  /** Open the search window (`/`, as in less / vi). */
+  | { type: 'search' };
 
 /** The subset of `KeyboardEvent` the key map reads. */
 export interface KeyLike {
@@ -102,6 +104,7 @@ export function resolveKey(e: KeyLike, { typing }: { typing: boolean }): TuiActi
   if (e.key === 'ArrowLeft') return { type: 'pane', to: 'left' };
   if (e.key === 'ArrowRight') return { type: 'pane', to: 'right' };
   if (e.key === '?') return { type: 'fkey', n: 1 };
+  if (e.key === '/') return { type: 'search' };
   const command = LIST_KEYS[e.key];
   return command ? { type: 'list', command } : null;
 }

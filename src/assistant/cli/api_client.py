@@ -124,6 +124,23 @@ def cmd_delete_note(args: argparse.Namespace) -> None:
     _print_response(response)
 
 
+def cmd_search(args: argparse.Namespace) -> None:
+    params: dict[str, str | int] = {
+        "q": args.q,
+        "offset": args.offset,
+        "limit": args.limit,
+    }
+    if args.sort is not None:
+        params["sort"] = args.sort
+    response = httpx.get(
+        f"{args.base_url}/search/notes",
+        params=params,
+        headers={"X-User-Id": args.user_id},
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
 def cmd_list_tags(args: argparse.Namespace) -> None:
     response = httpx.get(
         f"{args.base_url}/tag",
@@ -388,6 +405,14 @@ def main() -> int:
     _register_note_commands(subparsers)
     _register_tag_commands(subparsers)
     _register_node_commands(subparsers)
+
+    p = subparsers.add_parser("search")
+    p.add_argument("--q", required=True, help="Search string, e.g. 'berlin tag:travel'")
+    p.add_argument("--user-id", required=True)
+    p.add_argument("--sort", choices=["relevance", "updated"])
+    p.add_argument("--offset", type=int, default=0)
+    p.add_argument("--limit", type=int, default=20)
+    p.set_defaults(func=cmd_search)
 
     args = parser.parse_args()
     args.func(args)

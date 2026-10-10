@@ -7,6 +7,7 @@ import { FKEY_LABELS } from './keys';
 const NAVIGATION: [string, string][] = [
   ['↑ ↓  PgUp PgDn  Home End', 'Move the cursor'],
   ['Enter', 'Open notebook / note'],
+  ['/', 'Search notes'],
   ['Tab  Shift+Tab', 'Next / previous pane'],
   ['← →', 'Pane to the left / right'],
   ['Esc', 'Leave the editor or a field'],

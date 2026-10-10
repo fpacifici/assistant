@@ -20,6 +20,14 @@ export class ServerRegistry {
     return this.map.has(blockId);
   }
 
+  /** The editor block currently mapped to a server node, if any. */
+  blockIdForNode(nodeId: string): string | undefined {
+    for (const [blockId, state] of this.map) {
+      if (state.nodeId === nodeId) return blockId;
+    }
+    return undefined;
+  }
+
   markDeleted(blockId: string): void {
     const state = this.map.get(blockId);
     if (state) {

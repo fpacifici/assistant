@@ -112,6 +112,19 @@ def client(db_session: Session) -> Iterator[TestClient]:
 
 
 @pytest.fixture
+def pg_client(pg_session: Session) -> Iterator[TestClient]:
+    """A TestClient backed by the real Postgres session (for search)."""
+
+    def override_get_session() -> Generator[Session]:
+        yield pg_session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = override_get_session
+    with TestClient(app, raise_server_exceptions=True) as tc:
+        yield tc
+
+
+@pytest.fixture
 def test_user(db_session: Session) -> User:
     user = User(
         email="test@example.com",

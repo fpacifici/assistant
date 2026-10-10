@@ -112,6 +112,13 @@ erDiagram
   the note's `update_timestamp` right after the importer last wrote it, so
   `update_timestamp > imported_at` means a user edited the note since. It is
   deleted with its Note. See `docs/specs/adapters.md`.
+- Search index. Notes and nodes carry no search data. The keyword index
+  lives in its own tables (`note_search_index`, `node_search_index`), which
+  have foreign keys to the note or node and are deleted with it. The search
+  indexer keeps them current: `_touch_note`, which every note mutation
+  calls, and `create_note` both run `index_note` in the same transaction.
+  Any new mutation must therefore go through `_touch_note`. See
+  [`Search`](search.md).
 
 ## Structure of a Note.
 

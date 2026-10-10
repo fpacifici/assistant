@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, or_, select
 
 from assistant.models.schema import (
     Entitlement,
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.orm import Session
+    from sqlalchemy.sql.elements import ColumnElement
 
 ROLE_PERMISSIONS: dict[RoleName, frozenset[PermissionName]] = {
     RoleName.NOTEBOOK_OWNER: frozenset(
@@ -174,6 +175,37 @@ def can_view_notebook(
         ),
     )
     return bool(session.scalar(stmt))
+
+
+def _grants_any(permissions: frozenset[PermissionName]) -> ColumnElement[bool]:
+    """SQL test: this Entitlement row grants one of `permissions`."""
+    roles = [
+        role.value for role, perms in ROLE_PERMISSIONS.items() if perms & permissions
+    ]
+    return or_(
+        Entitlement.permission_name.in_([p.value for p in permissions]),
+        Entitlement.role_name.in_(roles),
+    )
+
+
+def viewable_note_filter(principal: User) -> ColumnElement[bool]:
+    """SQL predicate on `Note`: the principal holds VIEW_NOTE on it.
+
+    The set-based counterpart of `note_permissions(...)` containing
+    VIEW_NOTE, for queries over many notes (e.g. search): a direct grant
+    on the note, or VIEW_NOTES/OWN_NOTES on its notebook.
+    """
+    direct = exists().where(
+        Entitlement.principal_id == principal.uid,
+        Entitlement.note_id == Note.id,
+        _grants_any(frozenset({PermissionName.VIEW_NOTE})),
+    )
+    via_notebook = exists().where(
+        Entitlement.principal_id == principal.uid,
+        Entitlement.notebook_id == Note.notebook_id,
+        _grants_any(frozenset({PermissionName.VIEW_NOTES, PermissionName.OWN_NOTES})),
+    )
+    return or_(direct, via_notebook)
 
 
 def require_notebook_access(

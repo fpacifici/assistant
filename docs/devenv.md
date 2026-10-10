@@ -38,6 +38,20 @@ ruff check --fix src/
 black src/
 ```
 
+## Tests that need Postgres
+
+Most tests run on in-memory SQLite. Tests marked `@pytest.mark.postgres`,
+such as keyword search, use the `pg_session` fixture instead. It creates a
+throwaway database on `TEST_POSTGRES_URL` (default: the compose Postgres,
+`postgresql://assistant:assistant@localhost:5432/assistant`), runs the
+Alembic migrations on it, and drops it at the end of the run. Start the
+database with `make services-up`. Without it, those tests are skipped.
+
+```bash
+pytest -m postgres        # only the Postgres tests
+pytest -m "not postgres"  # everything else
+```
+
 ## Enabling Sentry locally
 
 Sentry is off by default. To send local errors, traces and replays to Sentry

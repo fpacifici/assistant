@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search
 
 # Default target
 help:
@@ -18,6 +18,7 @@ help:
 	@echo "  make services-down      - Stop and remove Docker Compose services (Postgres)"
 	@echo "  make db-migrate          - Apply all pending database migrations"
 	@echo "  make db-rollback         - Revert the most recent database migration"
+	@echo "  make reindex-search      - Rebuild the search index for stale notes"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -119,6 +120,12 @@ db-rollback:
 	@echo "Reverting last database migration..."
 	@.venv/bin/python -m assistant.cli.migrate downgrade
 	@echo "✅ Migration reverted"
+
+# Rebuild the search index for notes indexed with an older index version
+reindex-search:
+	@echo "Reindexing notes for search..."
+	@.venv/bin/python -m assistant.cli.reindex_search --stale-only
+	@echo "✅ Search index up to date"
 
 # Clean generated files and cache
 clean:

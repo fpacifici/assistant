@@ -18,6 +18,7 @@ from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
+from assistant.api.routes.search import router as search_router
 from assistant.api.routes.tags import router as tags_router
 from assistant.api.routes.users import router as users_router
 from assistant.attachments.storage import FileStorage, LocalFileStorage
@@ -88,5 +89,6 @@ def create_app(
     app.include_router(files_router, tags=["files"])
     app.include_router(imports_router, prefix="/imports", tags=["imports"])
     app.include_router(tags_router, prefix="/tag", tags=["tags"])
+    app.include_router(search_router, prefix="/search", tags=["search"])
 
     return app

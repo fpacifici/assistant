@@ -36,6 +36,7 @@ dependencies = [
     "alembic>=1.13.0",
     "google-auth>=2.35.0",
     "sentry-sdk[fastapi]>=2.35",
+    "markdown-it-py>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -63,6 +64,9 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--cov=assistant --cov-report=term-missing --cov-report=html"
+markers = [
+    "postgres: needs a real Postgres (the `pg_session` fixture); skipped when unreachable",
+]
 
 [tool.mypy]
 python_version = "3.13"

@@ -19,6 +19,9 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import TuiHelp from './TuiHelp';
+import TuiSearch from './TuiSearch';
+import { searchResultUrl } from '../../lib/searchResultUrl';
+import type { SearchResult } from '../../types';
 import { digitFkey, ESC_DIGIT_WINDOW_MS, nextPane, resolveKey } from './keys';
 import type { ListCommand, ListPane, Pane, TuiAction } from './keys';
 
@@ -42,6 +45,8 @@ interface TuiContextValue {
   setMenuOpen: (open: boolean) => void;
   helpOpen: boolean;
   setHelpOpen: (open: boolean) => void;
+  /** Open the search window (`/`). */
+  openSearch: () => void;
   notebooksHidden: boolean;
   visiblePanes: Pane[];
 }
@@ -100,6 +105,10 @@ export function TuiProvider({
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Kept while the window is closed, so it reopens on the last search.
+  const [searchQuery, setSearchQuery] = useState('');
+  const openSearch = useCallback(() => setSearchOpen(true), []);
   const lists = useRef<Partial<Record<ListPane, ListHandle>>>({});
   const escAt = useRef(0);
 
@@ -215,6 +224,9 @@ export function TuiProvider({
         case 'pane':
           focus(nextPane(activePane, action.to, visiblePanes));
           break;
+        case 'search':
+          openSearch();
+          break;
         case 'escape':
           escAt.current = Date.now();
           if (isTypingTarget(target) || activePane === 'editor') {
@@ -224,13 +236,13 @@ export function TuiProvider({
           break;
       }
     },
-    [activePane, visiblePanes, notebookId, runFkey, runList, focus],
+    [activePane, visiblePanes, notebookId, runFkey, runList, focus, openSearch],
   );
 
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || menuOpen || helpOpen || foreignDialogOpen()) return;
+      if (e.defaultPrevented || menuOpen || helpOpen || searchOpen || foreignDialogOpen()) return;
 
       // mc convention: Esc then a digit is an F-key.
       const armed = Date.now() - escAt.current < ESC_DIGIT_WINDOW_MS;
@@ -251,7 +263,7 @@ export function TuiProvider({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [enabled, menuOpen, helpOpen, dispatch, runFkey]);
+  }, [enabled, menuOpen, helpOpen, searchOpen, dispatch, runFkey]);
 
   const value = useMemo<TuiContextValue>(
     () => ({
@@ -265,6 +277,7 @@ export function TuiProvider({
       setMenuOpen,
       helpOpen,
       setHelpOpen,
+      openSearch,
       notebooksHidden,
       visiblePanes,
     }),
@@ -277,6 +290,7 @@ export function TuiProvider({
       runFkey,
       menuOpen,
       helpOpen,
+      openSearch,
       notebooksHidden,
       visiblePanes,
     ],
@@ -287,10 +301,32 @@ export function TuiProvider({
     focus(activePane);
   }, [focus, activePane]);
 
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    focus(activePane);
+  }, [focus, activePane]);
+
+  const openResult = useCallback(
+    (result: SearchResult) => {
+      setSearchOpen(false);
+      navigate(searchResultUrl(result, result.snippets[0]?.node_id));
+      focus('editor');
+    },
+    [navigate, focus],
+  );
+
   return (
     <TuiContext.Provider value={value}>
       {children}
       {enabled && helpOpen && <TuiHelp onClose={closeHelp} />}
+      {enabled && searchOpen && (
+        <TuiSearch
+          initialQuery={searchQuery}
+          onQueryChange={setSearchQuery}
+          onOpen={openResult}
+          onClose={closeSearch}
+        />
+      )}
     </TuiContext.Provider>
   );
 }

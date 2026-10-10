@@ -89,6 +89,7 @@ export default function TuiMenuBar() {
             disabled: !notebookId,
             onSelect: () => tui.runList('notes', 'new'),
           },
+          { id: 'search', label: 'Search notes…', hint: '/', onSelect: () => tui.openSearch() },
           { id: 'import', label: 'Import from Evernote…', onSelect: () => setImporting(true) },
           { id: 'logout', label: 'Log out', onSelect: () => void logout() },
         ],
