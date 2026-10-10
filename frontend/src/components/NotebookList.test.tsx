@@ -12,14 +12,38 @@ vi.mock('../api/notebooks', () => ({
 }));
 
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
+import { PAGE_SIZE } from '../api/pagination';
+import type { Notebook } from '../types';
+import { mockIntersectionObserver, scrollIntoView } from '../test/intersectionObserver';
 
 const mockFetch = vi.mocked(fetchNotebooks);
 const mockCreate = vi.mocked(createNotebook);
 const mockDelete = vi.mocked(deleteNotebook);
 
+function makeNotebook(i: number, name = `Notebook ${i}`): Notebook {
+  return { id: `nb-${i}`, name, owner_id: 'test-user', permissions: ['view_notebook'] };
+}
+
 describe('NotebookList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIntersectionObserver();
+  });
+
+  it('loads the next page when the end of the list scrolls into view', async () => {
+    const firstPage = Array.from({ length: PAGE_SIZE }, (_, i) => makeNotebook(i));
+    mockFetch
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce([makeNotebook(PAGE_SIZE, 'Zebra')]);
+    const { container } = renderWithProviders(<NotebookList />);
+    await screen.findByText('Notebook 0');
+    expect(mockFetch).toHaveBeenCalledWith(0);
+
+    scrollIntoView(container.querySelector('.list-sentinel')!);
+
+    expect(await screen.findByText('Zebra')).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenLastCalledWith(PAGE_SIZE);
+    expect(container.querySelector('.list-sentinel')).not.toBeInTheDocument();
   });
 
   it('shows loading state', () => {

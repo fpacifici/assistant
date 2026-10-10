@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from assistant.models.schema import Entitlement, RoleName
-from assistant.notes.service import create_note, create_notebook, get_ordered_nodes
+from assistant.notes.service import (
+    add_markdown_node,
+    create_note,
+    create_notebook,
+    get_ordered_nodes,
+)
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
@@ -102,6 +108,39 @@ class TestListNotes:
         )
         assert response.status_code == 200
         assert len(response.json()) == 3
+
+    def test_list_notes_sorted_by_last_update(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "NB", test_user)
+        older = create_note(db_session, nb.id, test_user, "older")
+        newer = create_note(db_session, nb.id, test_user, "newer")
+        older.update_timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+        newer.update_timestamp = datetime(2026, 2, 1, tzinfo=UTC)
+        db_session.flush()
+
+        response = client.get(f"/notebook/{nb.id}/note", headers=auth_headers)
+        assert [n["title"] for n in response.json()] == ["newer", "older"]
+
+    def test_list_notes_includes_preview(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "NB", test_user)
+        note = create_note(db_session, nb.id, test_user, "With body")
+        add_markdown_node(db_session, note.id, test_user, "**Hello** world", "paragraph")
+        create_note(db_session, nb.id, test_user, "Empty")
+
+        response = client.get(f"/notebook/{nb.id}/note", headers=auth_headers)
+        previews = {n["title"]: n["preview"] for n in response.json()}
+        assert previews == {"With body": "Hello world", "Empty": ""}
 
 
 class TestGetNote:

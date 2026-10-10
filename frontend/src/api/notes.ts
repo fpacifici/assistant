@@ -1,8 +1,14 @@
 import { apiFetch } from './client';
+import { PAGE_SIZE } from './pagination';
 import type { Entitlement, Note } from '../types';
 
-export function fetchNotes(notebookId: string): Promise<Note[]> {
-  return apiFetch<Note[]>(`/notebook/${notebookId}/note`);
+/** One page of a notebook's notes, most recently updated first. */
+export function fetchNotes(
+  notebookId: string,
+  offset = 0,
+  limit = PAGE_SIZE,
+): Promise<Note[]> {
+  return apiFetch<Note[]>(`/notebook/${notebookId}/note?offset=${offset}&limit=${limit}`);
 }
 
 export function fetchNote(notebookId: string, noteId: string): Promise<Note> {

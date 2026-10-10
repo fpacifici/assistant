@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -200,6 +201,55 @@ def test_list_notes(db_session: Session) -> None:
     create_note(db_session, nb.id, user, "Note 2")
 
     assert len(list_notes(db_session, nb.id, user)) == 2
+
+
+def test_list_notebooks_sorted_by_name_case_insensitive(db_session: Session) -> None:
+    user = _make_user(db_session)
+    for name in ["beta", "Alpha", "gamma", "Delta"]:
+        create_notebook(db_session, name, user)
+
+    names = [nb.name for nb in list_notebooks(db_session, user)]
+    assert names == ["Alpha", "beta", "Delta", "gamma"]
+
+
+def test_list_notebooks_pages_follow_sort_order(db_session: Session) -> None:
+    user = _make_user(db_session)
+    for name in ["c", "a", "e", "b", "d"]:
+        create_notebook(db_session, name, user)
+
+    first = [nb.name for nb in list_notebooks(db_session, user, offset=0, limit=2)]
+    second = [nb.name for nb in list_notebooks(db_session, user, offset=2, limit=2)]
+    third = [nb.name for nb in list_notebooks(db_session, user, offset=4, limit=2)]
+    assert (first, second, third) == (["a", "b"], ["c", "d"], ["e"])
+
+
+def test_list_notes_sorted_by_last_update_desc(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user)
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for title, days in [("old", 0), ("newest", 2), ("middle", 1)]:
+        note = create_note(db_session, nb.id, user, title)
+        note.update_timestamp = base + timedelta(days=days)
+    db_session.flush()
+
+    titles = [n.title for n in list_notes(db_session, nb.id, user)]
+    assert titles == ["newest", "middle", "old"]
+
+
+def test_list_notes_editing_a_note_moves_it_first(db_session: Session) -> None:
+    user = _make_user(db_session)
+    nb = create_notebook(db_session, "Work", user)
+    first = create_note(db_session, nb.id, user, "first")
+    second = create_note(db_session, nb.id, user, "second")
+    first.update_timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    second.update_timestamp = datetime(2026, 1, 2, tzinfo=UTC)
+    db_session.flush()
+
+    add_text_node(db_session, first.id, user, "edit")
+    db_session.expire_all()
+
+    titles = [n.title for n in list_notes(db_session, nb.id, user)]
+    assert titles == ["first", "second"]
 
 
 def test_create_note_with_external_id(db_session: Session) -> None:

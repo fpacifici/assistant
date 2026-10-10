@@ -1,8 +1,14 @@
 import { apiFetch } from './client';
+import { PAGE_SIZE } from './pagination';
 import type { Entitlement, Notebook } from '../types';
 
-export function fetchNotebooks(): Promise<Notebook[]> {
-  return apiFetch<Notebook[]>('/notebook');
+/** One page of the caller's notebooks, sorted by name. */
+export function fetchNotebooks(offset = 0, limit = PAGE_SIZE): Promise<Notebook[]> {
+  return apiFetch<Notebook[]>(`/notebook?offset=${offset}&limit=${limit}`);
+}
+
+export function fetchNotebook(notebookId: string): Promise<Notebook> {
+  return apiFetch<Notebook>(`/notebook/${notebookId}`);
 }
 
 export function createNotebook(name: string): Promise<Notebook> {

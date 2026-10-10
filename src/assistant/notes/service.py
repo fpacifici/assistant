@@ -80,7 +80,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, exists, or_, select, update
+from sqlalchemy import delete, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from assistant.models.schema import (
@@ -202,7 +202,7 @@ def list_notebooks(
     offset: int = 0,
     limit: int | None = None,
 ) -> list[Notebook]:
-    """Notebooks visible to the caller.
+    """Notebooks visible to the caller, sorted by name (case-insensitive).
 
     Either directly (any entitlement on the notebook itself) or because the
     notebook contains at least one note the caller holds any entitlement on.
@@ -220,7 +220,8 @@ def list_notebooks(
             ),
         ),
     )
-    stmt = stmt.offset(offset)
+    # Case-insensitive by name; the id tiebreak keeps pages stable.
+    stmt = stmt.order_by(func.lower(Notebook.name), Notebook.id).offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
@@ -303,7 +304,7 @@ def list_notes(
     offset: int = 0,
     limit: int | None = None,
 ) -> list[Note]:
-    """Notes visible to the caller in this notebook.
+    """Notes visible to the caller in this notebook, most recently updated first.
 
     All notes, if the caller holds LIST_NOTES/VIEW_NOTES/OWN_NOTES on the
     notebook; otherwise only the notes the caller holds a direct
@@ -332,7 +333,8 @@ def list_notes(
                 Entitlement.note_id == Note.id,
             ),
         )
-    stmt = stmt.offset(offset)
+    # The id tiebreak keeps pages stable when timestamps collide.
+    stmt = stmt.order_by(Note.update_timestamp.desc(), Note.id).offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
