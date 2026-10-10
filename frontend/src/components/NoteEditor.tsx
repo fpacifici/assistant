@@ -33,7 +33,7 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
   const { notebookId, noteId } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { theme } = useTheme();
+  const { colorScheme } = useTheme();
   const queryClient = useQueryClient();
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTick, setDebugTick] = useState(0);
@@ -210,7 +210,7 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
       <div className={`editor-content${debugOpen && !isMobile ? ' with-debug' : ''}`}>
         <BlockNoteView
           editor={editor}
-          theme={theme}
+          theme={colorScheme}
           portalElements={{ default: null }}
         />
         {debugOpen && !isMobile && (

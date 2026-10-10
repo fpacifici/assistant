@@ -8,6 +8,10 @@ const LABELS: Record<ThemePreference, string> = {
   system: 'System',
   light: 'Light',
   dark: 'Dark',
+  blossom: 'Blossom',
+  ocean: 'Ocean',
+  sand: 'Sand',
+  twilight: 'Twilight',
 };
 
 export function ThemeSelect() {

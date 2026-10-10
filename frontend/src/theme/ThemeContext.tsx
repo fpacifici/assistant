@@ -1,12 +1,14 @@
-/** Provides the color theme (light/dark) and the user's preference to the tree. */
+/** Provides the color theme and the user's preference to the tree. */
 
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { DARK_MEDIA_QUERY, readPreference, resolveTheme, writePreference } from './theme';
-import type { Theme, ThemePreference } from './theme';
+import { colorSchemeOf, DARK_MEDIA_QUERY, readPreference, resolveTheme, writePreference } from './theme';
+import type { ColorScheme, Theme, ThemePreference } from './theme';
 
 interface ThemeContextValue {
   /** The applied theme. */
   theme: Theme;
+  /** The light/dark base of the applied theme (for components with only two modes). */
+  colorScheme: ColorScheme;
   /** What the user chose; `'system'` follows the OS setting. */
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
@@ -14,6 +16,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: 'light',
+  colorScheme: 'light',
   preference: 'system',
   setPreference: () => {},
 });
@@ -59,7 +62,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setPreferenceState(next);
   }, []);
 
-  const value = useMemo(() => ({ theme, preference, setPreference }), [theme, preference, setPreference]);
+  const value = useMemo(
+    () => ({ theme, colorScheme: colorSchemeOf(theme), preference, setPreference }),
+    [theme, preference, setPreference],
+  );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

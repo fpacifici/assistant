@@ -1,7 +1,9 @@
 /*
  * Color tokens. Every color in this file goes through a token so the theme
  * is switched in one place: ThemeProvider (and the pre-paint script in
- * index.html) sets <html data-theme="light|dark">.
+ * index.html) sets <html data-theme="…"> to one of THEMES in theme/theme.ts.
+ * Light-based themes override :root; dark-based themes (ocean, twilight)
+ * share the dark block and override its palette tokens.
  */
 :root {
   color-scheme: light;
@@ -64,7 +66,9 @@
   --shadow: rgba(0, 0, 0, 0.2);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+:root[data-theme="ocean"],
+:root[data-theme="twilight"] {
   color-scheme: dark;
 
   --bg: #121214;
@@ -122,6 +126,177 @@
 
   --overlay: rgba(0, 0, 0, 0.6);
   --shadow: rgba(0, 0, 0, 0.6);
+}
+
+/* Blossom: pink accents on a blush surface, marine-green chrome and links */
+:root[data-theme="blossom"] {
+  --bg: #fff6f9;
+  --surface: #fff;
+  --surface-muted: #fdeef3;
+  --surface-subtle: #fff6f9;
+  --hover: #fbe3ec;
+  --hover-strong: #f7d4e1;
+  --active: #d4f1ea;
+
+  --text: #1d2f2c;
+  --text-secondary: #3b504c;
+  --text-muted: #5c6f6b;
+  --text-faint: #93a5a1;
+
+  --border: #f0d2de;
+  --border-strong: #e4b9ca;
+  --border-subtle: #f8e5ec;
+
+  --chrome-bg: #0e5e57;
+  --chrome-edge: #0e5e57;
+  --chrome-text: #fff;
+  --chrome-text-muted: #c8ece5;
+  --chrome-text-faint: #8fcfc4;
+  --chrome-border: #3f8a82;
+  --chrome-border-hover: #7fbfb6;
+  --chrome-hover: #147068;
+
+  --accent: #d23a70;
+  --accent-hover: #b82d5f;
+  --link: #0e7c72;
+  --link-bg: #dcf4ef;
+
+  --primary-bg: #0e5e57;
+  --primary-text: #fff;
+
+  --success: #0f8f78;
+  --ok: #14a38a;
+  --info-bg: #e3f6f2;
+  --info-text: #0c5a53;
+  --debug-bg: #fdf7f9;
+  --debug-header-bg: #f9ebf1;
+}
+
+/* Sand: warm cream paper, espresso chrome, terracotta accents */
+:root[data-theme="sand"] {
+  --bg: #faf6ef;
+  --surface: #fffdf8;
+  --surface-muted: #f4ede1;
+  --surface-subtle: #faf6ef;
+  --hover: #efe6d6;
+  --hover-strong: #e8dcc8;
+  --active: #f6dccd;
+
+  --text: #2e2620;
+  --text-secondary: #4a3f36;
+  --text-muted: #6e6157;
+  --text-faint: #a3958a;
+
+  --border: #e3d7c4;
+  --border-strong: #d4c4ab;
+  --border-subtle: #eee5d6;
+
+  --chrome-bg: #3b2f27;
+  --chrome-edge: #3b2f27;
+  --chrome-text: #fbf5ec;
+  --chrome-text-muted: #dccfbf;
+  --chrome-text-faint: #a8988a;
+  --chrome-border: #6a5849;
+  --chrome-border-hover: #9a8676;
+  --chrome-hover: #4d3e33;
+
+  --accent: #c2410c;
+  --accent-hover: #a5370a;
+  --link: #b0400f;
+  --link-bg: #fbe7da;
+
+  --primary-bg: #3b2f27;
+  --primary-text: #fffdf8;
+
+  --info-bg: #f3ecdf;
+  --info-text: #5b4636;
+  --debug-bg: #f8f3ea;
+  --debug-header-bg: #f1e9db;
+}
+
+/* Ocean: deep navy surfaces with cyan accents */
+:root[data-theme="ocean"] {
+  --bg: #0b1622;
+  --surface: #102030;
+  --surface-muted: #0d1b29;
+  --surface-subtle: #142738;
+  --hover: #1a3247;
+  --hover-strong: #213c55;
+  --active: #0f3d4d;
+
+  --text: #dbe8f2;
+  --text-secondary: #b5c8d8;
+  --text-muted: #8aa3b8;
+  --text-faint: #647d92;
+
+  --border: #1f3a52;
+  --border-strong: #2c4d6a;
+  --border-subtle: #172d40;
+
+  --chrome-bg: #07111b;
+  --chrome-edge: #1a3247;
+  --chrome-text: #e6f1fa;
+  --chrome-text-muted: #a9c2d6;
+  --chrome-text-faint: #6f8aa0;
+  --chrome-border: #26435c;
+  --chrome-border-hover: #4a6f8e;
+  --chrome-hover: #132a3e;
+
+  --accent: #1fa9be;
+  --accent-hover: #35c3d8;
+  --on-accent: #04202a;
+  --link: #67d8ea;
+  --link-bg: #0f3340;
+
+  --primary-bg: #dbe8f2;
+  --primary-text: #0b1622;
+
+  --info-bg: #0f2a3d;
+  --info-text: #8fd3f0;
+  --debug-bg: #0d1b29;
+  --debug-header-bg: #132638;
+}
+
+/* Twilight: dusky violet surfaces, purple accents, amber links */
+:root[data-theme="twilight"] {
+  --bg: #15111f;
+  --surface: #1d1729;
+  --surface-muted: #191424;
+  --surface-subtle: #231c31;
+  --hover: #2c2340;
+  --hover-strong: #362b4d;
+  --active: #3b2a5e;
+
+  --text: #ece6f7;
+  --text-secondary: #cbc1de;
+  --text-muted: #a597bf;
+  --text-faint: #7b6e95;
+
+  --border: #342a49;
+  --border-strong: #46395f;
+  --border-subtle: #2a2240;
+
+  --chrome-bg: #0f0b17;
+  --chrome-edge: #2c2340;
+  --chrome-text: #f3eefc;
+  --chrome-text-muted: #c4b8dc;
+  --chrome-text-faint: #8a7da5;
+  --chrome-border: #3f3358;
+  --chrome-border-hover: #6b5c8a;
+  --chrome-hover: #241c35;
+
+  --accent: #9d4edd;
+  --accent-hover: #b06ee6;
+  --link: #f5b971;
+  --link-bg: #3a2c1a;
+
+  --primary-bg: #ece6f7;
+  --primary-text: #15111f;
+
+  --info-bg: #241c3a;
+  --info-text: #c9b6f2;
+  --debug-bg: #191424;
+  --debug-header-bg: #211a30;
 }
 
 * {
