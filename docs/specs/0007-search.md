@@ -58,7 +58,16 @@ to them.
   the URL can be shared and bookmarked, and the back button works.
 - **Mobile**: a search icon in the top bar opens a full-screen search
   view.
-- Both layouts share one results list. Each result shows the title,
+- **TUI layout** (`?layout=tui`): a separate search window, not a search
+  bar.
+  - Opened with `/` from any list pane, or from File → Search notes….
+  - A `Find:` line sits above a framed result list. Each row shows the
+    title, the notebook, the tags and the best matching snippet.
+  - Results follow the query as you type.
+  - ↑/↓/PgUp/PgDn move the cursor without leaving the field, Enter opens
+    the note at its matching block, and Esc closes the window.
+  - Reopening the window shows the last query.
+- The desktop and mobile layouts share one results list. Each result shows the title,
   notebook, tag chips and snippets, and has a "Load more" control. Empty
   results show an empty state; an unknown tag shows a message.
 - Opening a result opens the note scrolled to the matched block, which
@@ -68,6 +77,7 @@ to them.
 ## Non-goals (v1)
 
 BM25 ranking, vector/semantic search, searching attachment contents,
-live results while typing, search from the agent or the TUI. The search
+live results while typing in the desktop and mobile layouts (the TUI
+window has them), search from the agent or the terminal chat TUI. The search
 service interface is designed so these can be added without changing the
 API.

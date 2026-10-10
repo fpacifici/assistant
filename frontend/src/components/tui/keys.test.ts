@@ -50,6 +50,12 @@ describe('resolveKey', () => {
     }
   });
 
+  it('opens search with / outside text fields only', () => {
+    expect(resolveKey(key('/'), { typing: false })).toEqual({ type: 'search' });
+    expect(resolveKey(key('/'), { typing: true })).toBeNull();
+    expect(resolveKey(key('/', { ctrlKey: true }), { typing: false })).toBeNull();
+  });
+
   it('always takes Escape', () => {
     expect(resolveKey(key('Escape'), { typing: true })).toEqual({ type: 'escape' });
     expect(resolveKey(key('Escape'), { typing: false })).toEqual({ type: 'escape' });

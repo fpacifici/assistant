@@ -165,13 +165,29 @@ turns it off. Code lives in `components/tui/`.
   Hide/show notebooks, F4 Edit, F5 Tags, F6 Filter, F7 New, F8 Delete, F9
   Menu, F10 Classic. Alt+1…0 and Esc-then-digit are equivalents (laptops and
   browsers often eat F-keys). ↑/↓/PgUp/PgDn/Home/End move the cursor, Enter
-  opens, Tab/Shift+Tab and ←/→ switch panes. While focus is in the editor or
-  a text field, only F-keys, their equivalents and Esc (back to the list) are
-  taken. The controller ignores keys while the menu, help or any
-  `.modal-overlay` dialog is open; the key bar and menus also work with the
-  mouse.
+  opens, `/` opens the search window, Tab/Shift+Tab and ←/→ switch panes.
+  While focus is in the editor or a text field, only F-keys, their
+  equivalents and Esc (back to the list) are taken. The controller ignores
+  keys while the menu, help, search or any `.modal-overlay` dialog is open;
+  the key bar and menus also work with the mouse.
 - **Dialogs**: new notebook / note and filter use `TuiPrompt`; share,
   confirm and import reuse the classic dialogs with a TUI skin.
+- **Search window** (`TuiSearch`): a separate framed window, not a header
+  search bar.
+  - Opening: `/` from a list pane (`resolveKey` returns
+    `{ type: 'search' }`), or File → Search notes….
+  - `TuiProvider` owns the open state and the last query, so the window
+    reopens on it. While the window is open, the controller ignores keys.
+  - Results follow the `Find:` field through a 250 ms debounce, sharing the
+    `['search', q]` query cache with `SearchResults`. The result list is a
+    `TuiList`.
+  - Focus stays in the field: ↑/↓/PgUp/PgDn move the cursor (the cursor bar
+    is always drawn as active), and reaching the last row loads the next
+    page.
+  - Enter navigates to the note at its first snippet's block
+    (`searchResultUrl` → `?node=`, see NoteEditor) and focuses the editor.
+    Esc closes the window and refocuses the previous pane.
+  - Highlights use the shared `Highlighted` component.
 
 ## Theming
 

@@ -8,28 +8,15 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { searchNotes, SEARCH_PAGE_SIZE } from '../api/search';
-import type { SearchResult, SnippetSegment } from '../types';
+import type { SearchResult } from '../types';
+import { searchResultUrl } from '../lib/searchResultUrl';
+import Highlighted from './Highlighted';
 import { NoteTags } from './NoteList';
-
-function Highlighted({ segments }: { segments: SnippetSegment[] }) {
-  return (
-    <>
-      {segments.map((segment, i) =>
-        segment.highlighted ? <mark key={i}>{segment.text}</mark> : <span key={i}>{segment.text}</span>,
-      )}
-    </>
-  );
-}
-
-function noteUrl(result: SearchResult, nodeId?: string): string {
-  const base = `/notebooks/${result.note.notebook_id}/notes/${result.note.id}`;
-  return nodeId ? `${base}?node=${encodeURIComponent(nodeId)}` : base;
-}
 
 function SearchResultItem({ result }: { result: SearchResult }) {
   return (
     <li className="search-result">
-      <Link to={noteUrl(result, result.snippets[0]?.node_id)} className="search-result-title">
+      <Link to={searchResultUrl(result, result.snippets[0]?.node_id)} className="search-result-title">
         <Highlighted segments={result.title} />
       </Link>
       <div className="search-result-meta">
@@ -37,7 +24,7 @@ function SearchResultItem({ result }: { result: SearchResult }) {
         <NoteTags tags={result.note.tags} />
       </div>
       {result.snippets.map((snippet) => (
-        <Link key={snippet.node_id} to={noteUrl(result, snippet.node_id)} className="search-snippet">
+        <Link key={snippet.node_id} to={searchResultUrl(result, snippet.node_id)} className="search-snippet">
           <Highlighted segments={snippet.segments} />
         </Link>
       ))}

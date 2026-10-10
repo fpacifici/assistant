@@ -2489,6 +2489,50 @@ ul {
   padding-right: 2ch;
 }
 
+/* Search window (/): Find line over a result list that fills the window */
+.tui-dialog.tui-search {
+  display: flex;
+  flex-direction: column;
+  width: 96ch;
+  height: 80vh;
+}
+
+.tui-search .tui-field {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 1ch;
+}
+
+.tui-search .tui-field input {
+  flex: 1;
+}
+
+.tui-search-status {
+  margin: 0.5em 0;
+  color: var(--text-muted);
+}
+
+/* Focus stays in the Find field, so the cursor bar is always the active one */
+.tui-search .tui-row.cursor {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tui-search .tui-row.cursor :is(.tui-row-mark, .tui-row-sub, .tui-tag) {
+  color: inherit;
+}
+
+.tui-search mark {
+  background: none;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+.tui-search .tui-row.cursor mark {
+  color: inherit;
+  text-decoration: underline;
+}
+
 /* --- Controls: [bracketed] buttons, flat input fields --- */
 
 .app-shell.tui :is(.main, .modal) button,
