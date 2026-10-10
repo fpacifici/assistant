@@ -10,6 +10,7 @@ import ConfirmEmailPage from './pages/ConfirmEmailPage';
 import InvitesPage from './pages/InvitesPage';
 import SettingsPage from './pages/SettingsPage';
 import SwitchToGooglePage from './pages/SwitchToGooglePage';
+import NoteWindow from './pages/NoteWindow';
 import {
   ProtectedLayout,
   RootProviders,
@@ -36,6 +37,7 @@ export const routes: RouteObject[] = [
           { path: '/notebooks', element: <Layout /> },
           { path: '/notebooks/:notebookId/notes', element: <Layout /> },
           { path: '/notebooks/:notebookId/notes/:noteId', element: <Layout /> },
+          { path: '/notebooks/:notebookId/notes/:noteId/window', element: <NoteWindow /> },
           { path: '/invites', element: <InvitesPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '*', element: null },

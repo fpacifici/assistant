@@ -2,7 +2,8 @@
  * App shell for the note views. URL params drive visibility.
  *
  * Desktop: header, then three columns — notebooks, notes (with previews)
- * and the editor.
+ * and the editor. The notebooks column can be hidden while a notebook is
+ * open (remembered per browser).
  * Mobile: top bar and only the deepest URL level — notebook list, note list
  * or editor. Both modes share one component tree so that `NoteEditor` keeps
  * its identity (and unsaved edits) when the mode switches.
@@ -18,6 +19,7 @@ import MobileTopBar from './MobileTopBar';
 import { TopBarMenuProvider } from './TopBarMenuContext';
 import { TopBarSlotProvider } from './TopBarSlot';
 import { useLayoutMode } from '../layout/LayoutModeContext';
+import { useNotebooksHidden } from '../layout/useNotebooksHidden';
 import { fetchNotebook } from '../api/notebooks';
 import { fetchNote } from '../api/notes';
 
@@ -53,9 +55,12 @@ export default function Layout() {
       ? '/notebooks'
       : undefined;
 
-  // Desktop: notebooks | notes | editor columns. On mobile only the deepest
-  // URL level is shown.
-  const showNotebookList = !mobile || !notebookId;
+  const [notebooksHidden, toggleNotebooks] = useNotebooksHidden();
+
+  // Desktop: notebooks | notes | editor columns; the notebooks column can be
+  // hidden while a notebook is open. On mobile only the deepest URL level is
+  // shown.
+  const showNotebookList = mobile ? !notebookId : !(notebooksHidden && notebookId);
   const showNoteList = !!notebookId && (!mobile || !noteId);
   const showMain = !mobile || !!noteId;
 
@@ -72,6 +77,17 @@ export default function Layout() {
             )}
             {showNoteList && (
               <div key="notes" className="notes-column">
+                {!mobile && (
+                  <button
+                    type="button"
+                    className="notebooks-toggle"
+                    onClick={toggleNotebooks}
+                    aria-label={notebooksHidden ? 'Show notebooks' : 'Hide notebooks'}
+                    title={notebooksHidden ? 'Show notebooks' : 'Hide notebooks'}
+                  >
+                    {notebooksHidden ? '»' : '«'}
+                  </button>
+                )}
                 <NoteList />
               </div>
             )}

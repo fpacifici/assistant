@@ -395,3 +395,70 @@ describe('NoteEditor on desktop', () => {
     expect(within(toolbar).getByRole('button', { name: 'Share' })).toBeInTheDocument();
   });
 });
+
+describe('NoteEditor open in new window', () => {
+  let popup: { location: { href: string }; close: ReturnType<typeof vi.fn>; focus: ReturnType<typeof vi.fn> };
+  let openSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onChangeCallback = undefined;
+    mockFetchNodes.mockResolvedValue([]);
+    mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
+    popup = { location: { href: '' }, close: vi.fn(), focus: vi.fn() };
+    openSpy = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+  });
+
+  afterEach(() => {
+    openSpy.mockRestore();
+  });
+
+  it('saves pending edits, loads the note in the popup and leaves the editor', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockExecuteSave.mockResolvedValue(new Map());
+    const { router } = renderEditor();
+    await makeDirty();
+
+    await user.click(await screen.findByRole('button', { name: 'Open in new window' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes'));
+    expect(openSpy).toHaveBeenCalledWith('', 'note-note-1', expect.stringContaining('popup'));
+    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
+    expect(popup.location.href).toBe('/notebooks/nb-1/notes/note-1/window');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('stays on the note when the popup is blocked', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    openSpy.mockReturnValue(null);
+    const { router } = renderEditor();
+
+    await user.click(await screen.findByRole('button', { name: 'Open in new window' }));
+
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-1');
+  });
+
+  it('closes the popup and stays when saving fails', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockExecuteSave.mockRejectedValue(new Error('500 boom'));
+    const { router } = renderEditor();
+    await makeDirty();
+
+    await user.click(await screen.findByRole('button', { name: 'Open in new window' }));
+
+    await waitFor(() => expect(popup.close).toHaveBeenCalled());
+    expect(popup.location.href).toBe('');
+    expect(router.state.location.pathname).toBe('/notebooks/nb-1/notes/note-1');
+  });
+
+  it('has no Open in new window button in the standalone window', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/notebooks/:notebookId/notes/:noteId" element={<NoteEditor standalone />} />
+      </Routes>,
+      { initialEntries: ['/notebooks/nb-1/notes/note-1'] },
+    );
+    await screen.findByRole('button', { name: 'Debug' });
+    expect(screen.queryByRole('button', { name: 'Open in new window' })).not.toBeInTheDocument();
+  });
+});
