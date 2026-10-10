@@ -28,8 +28,12 @@ Postgres extensions that do provide BM25 add an operational dependency:
 
 ## Decision
 - Use Postgres built-in full text search: `tsvector` generated columns
-  with GIN indexes on `nodes` and `notes`, `to_tsquery`, `ts_rank_cd`,
-  and the `simple` config.
+  with GIN indexes, `to_tsquery`, `ts_rank_cd`, and the `simple` config.
+- Store the index apart from the notes, in its own tables
+  (`note_search_index`, `node_search_index`). Each row has a foreign key to
+  its note or node and is deleted with it. `notes` and `nodes` carry no
+  search data, so the index can be rebuilt or replaced without touching
+  them.
 - Do tokenization and accent folding in Python, and use the same function
   for the index and the query. Postgres only sees pre-tokenized,
   space-separated words.

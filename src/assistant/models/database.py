@@ -103,7 +103,7 @@ def downgrade_database(revision: str = "-1") -> None:
 # migration and intentionally not mapped in the ORM (SQLite tests can't
 # represent tsvector). Autogenerate must not propose dropping them.
 _UNMAPPED_SEARCH_OBJECTS = frozenset(
-    {"search_vector", "ix_notes_search_vector", "ix_nodes_search_vector"},
+    {"search_vector", "ix_note_search_index_vector", "ix_node_search_index_vector"},
 )
 
 

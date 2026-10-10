@@ -16,7 +16,14 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import exists, func, literal, literal_column, select
 
-from assistant.models.schema import Node, Note, NoteTag, Tag
+from assistant.models.schema import (
+    Node,
+    NodeSearchIndex,
+    Note,
+    NoteSearchIndex,
+    NoteTag,
+    Tag,
+)
 from assistant.notes.permissions import viewable_note_filter
 from assistant.search.indexer import node_plain_text
 from assistant.search.query import (
@@ -39,9 +46,14 @@ if TYPE_CHECKING:
 DEFAULT_LIMIT = 20
 MAX_SNIPPETS_PER_NOTE = 3
 
-# Generated Postgres-only columns, deliberately not mapped in the ORM.
-_NOTE_VECTOR: ColumnClause[object] = literal_column("assistant.notes.search_vector")
-_NODE_VECTOR: ColumnClause[object] = literal_column("assistant.nodes.search_vector")
+# Generated Postgres-only columns of the index tables, deliberately not
+# mapped in the ORM.
+_NOTE_VECTOR: ColumnClause[object] = literal_column(
+    "assistant.note_search_index.search_vector",
+)
+_NODE_VECTOR: ColumnClause[object] = literal_column(
+    "assistant.node_search_index.search_vector",
+)
 _SIMPLE: ColumnClause[object] = literal_column("'simple'::regconfig")
 
 
@@ -140,7 +152,9 @@ def search(  # noqa: PLR0913
     if query is None:
         sort = SearchSort.UPDATED
     else:
-        stmt = stmt.where(_NOTE_VECTOR.op("@@")(query))
+        stmt = stmt.join(NoteSearchIndex, NoteSearchIndex.note_id == Note.id).where(
+            _NOTE_VECTOR.op("@@")(query),
+        )
     if sort != SearchSort.UPDATED:
         stmt = stmt.order_by(rank.desc())
     stmt = stmt.order_by(Note.update_timestamp.desc()).offset(offset).limit(limit)
@@ -183,7 +197,8 @@ def _snippets(
         )
         ranked = (
             select(Node.id, best)
-            .where(Node.note_id.in_(note_ids), _NODE_VECTOR.op("@@")(query))
+            .join(NodeSearchIndex, NodeSearchIndex.node_id == Node.id)
+            .where(NodeSearchIndex.note_id.in_(note_ids), _NODE_VECTOR.op("@@")(query))
             .subquery()
         )
         matching = session.scalars(
@@ -199,7 +214,8 @@ def _snippets(
     if unmatched:
         first_blocks = session.scalars(
             select(Node)
-            .where(Node.note_id.in_(unmatched), Node.search_text != "")
+            .join(NodeSearchIndex, NodeSearchIndex.node_id == Node.id)
+            .where(Node.note_id.in_(unmatched), NodeSearchIndex.text != "")
             .order_by(Node.note_id, Node.position)
             .distinct(Node.note_id),
         )

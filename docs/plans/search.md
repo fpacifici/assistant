@@ -347,6 +347,18 @@ Any later tokenizer change: bump `SEARCH_INDEX_VERSION`, deploy, then run
 
 ## Deviations during implementation
 
+- **The index lives in its own tables, not in columns on `notes` and
+  `nodes`** (decided after review). Section 1.1 above is superseded:
+  - `note_search_index(note_id PK → notes ON DELETE CASCADE, title, body,
+    index_version)`.
+  - `node_search_index(node_id PK → nodes ON DELETE CASCADE, note_id →
+    notes ON DELETE CASCADE, text)`.
+  - Each has a Postgres-only generated `search_vector` column and a GIN
+    index.
+  - `index_note` reconciles a note's rows: it rewrites changed text and
+    deletes rows for removed blocks.
+  - `reindex_search --stale-only` treats a missing row as stale.
+
 - **Delivered as one PR**, in three commits (index → service and API → UI),
   instead of three PRs.
 - **The API is `GET /search/notes`, not `GET /search`.** nginx routes to the

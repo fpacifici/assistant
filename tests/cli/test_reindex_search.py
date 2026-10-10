@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete, update
 
 from assistant.cli.reindex_search import main
-from assistant.models.schema import Node, Note, User
+from assistant.models.schema import NodeSearchIndex, Note, NoteSearchIndex, User
 from assistant.notes.service import add_markdown_node, create_note, create_notebook
 from assistant.search.service import search
 
@@ -37,14 +37,27 @@ def _make_note(session: Session, owner: User, text: str) -> Note:
     return note
 
 
-def _wipe_index(session: Session, note: Note, *, version: int = 0) -> None:
-    """Make a note look like it predates the search index."""
-    session.execute(
-        update(Note)
-        .where(Note.id == note.id)
-        .values(search_title="", search_body="", search_index_version=version),
-    )
-    session.execute(update(Node).where(Node.note_id == note.id).values(search_text=""))
+def _wipe_index(session: Session, note: Note, *, keep_version: bool = False) -> None:
+    """Make a note unfindable.
+
+    By default its index entries are removed, as for notes that predate the
+    search index. With `keep_version` the entries stay, stamped with the
+    current index version, but hold no text.
+    """
+    if keep_version:
+        session.execute(
+            update(NoteSearchIndex)
+            .where(NoteSearchIndex.note_id == note.id)
+            .values(title="", body=""),
+        )
+        session.execute(
+            update(NodeSearchIndex)
+            .where(NodeSearchIndex.note_id == note.id)
+            .values(text=""),
+        )
+    else:
+        session.execute(delete(NodeSearchIndex).where(NodeSearchIndex.note_id == note.id))
+        session.execute(delete(NoteSearchIndex).where(NoteSearchIndex.note_id == note.id))
     session.expire_all()
 
 
@@ -93,10 +106,27 @@ def test_stale_only_skips_notes_indexed_with_the_current_version(
 ) -> None:
     alice = _make_user(pg_session, "alice@test.com")
     current = _make_note(pg_session, alice, "Berlin")
-    _wipe_index(pg_session, current, version=current.search_index_version)
+    _wipe_index(pg_session, current, keep_version=True)
     _wipe_index(pg_session, _make_note(pg_session, alice, "Paris"))
 
     assert _run(pg_session, "--stale-only", "--batch-size", "1") == 0
 
     assert not _found(pg_session, alice, "berlin")
     assert _found(pg_session, alice, "paris")
+
+
+def test_stale_only_reindexes_notes_indexed_with_an_older_version(
+    pg_session: Session,
+) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    note = _make_note(pg_session, alice, "Berlin")
+    _wipe_index(pg_session, note, keep_version=True)
+    pg_session.execute(
+        update(NoteSearchIndex)
+        .where(NoteSearchIndex.note_id == note.id)
+        .values(index_version=NoteSearchIndex.index_version - 1),
+    )
+
+    assert _run(pg_session, "--stale-only") == 0
+
+    assert _found(pg_session, alice, "berlin")

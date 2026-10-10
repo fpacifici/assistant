@@ -16,13 +16,13 @@ behind it can change without touching callers.
 flowchart LR
   write["Note write\n(notes.service)"] --> touch["_touch_note"]
   touch --> index["indexer.index_note"]
-  index --> cols[("nodes.search_text\nnotes.search_title / search_body")]
+  index --> cols[("note_search_index.title / body\nnode_search_index.text")]
   cols -->|generated| vec[("search_vector (tsvector, GIN)")]
 
   raw["search string"] --> parse["query.parse_query"]
-  parse --> sql["note match + rank\n(notes.search_vector)"]
+  parse --> sql["note match + rank\n(note_search_index)"]
   vec --> sql
-  sql --> snip["snippet blocks\n(nodes.search_vector)"]
+  sql --> snip["snippet blocks\n(node_search_index)"]
   snip --> seg["snippets.build_segments"]
 ```
 
@@ -35,11 +35,13 @@ flowchart LR
 2. **Indexing** (`indexer.py`): `index_note` runs in the same transaction
    as every note write. It is called from `notes.service._touch_note`,
    which every mutation goes through, and from `create_note`. It writes the
-   analyzed tokens joined by spaces: `nodes.search_text` for each block, and
-   `notes.search_title` / `notes.search_body` for the note. It also stamps
-   `notes.search_index_version`. Postgres derives the generated
-   `search_vector` columns with the `simple` config; the note vector gives
-   the title weight A and the body weight B. Because tokenization already
+   analyzed tokens joined by spaces into the index tables (see Storage):
+   one `node_search_index` row per block, and one `note_search_index` row
+   per note holding the title, the body and the `index_version`. Only rows
+   whose text changed are rewritten, and rows for removed blocks are
+   deleted. Postgres derives the generated `search_vector` columns with the
+   `simple` config; the note vector gives the title weight A and the body
+   weight B. Because tokenization already
    happened in Python, Postgres only ever sees clean words, and indexing and
    querying can't disagree.
 3. **Parsing** (`query.py`): `parse_query` turns the string into a
@@ -54,7 +56,8 @@ flowchart LR
    - **Tags**: one `EXISTS` per `tag:` filter, using the caller's own tags.
      If the caller doesn't have a named tag, the result is empty and the
      tag is listed in `unknown_tags`.
-   - **Text**: `notes.search_vector @@ to_tsquery(...)`.
+   - **Text**: join `note_search_index`, then
+     `search_vector @@ to_tsquery(...)`.
    - **Order**: `ts_rank_cd`, then `update_timestamp`. A query with only tags
      is ordered by `update_timestamp` alone.
 5. **Snippets** (`service._snippets`, `snippets.py`): for the page's notes,
@@ -65,7 +68,43 @@ flowchart LR
    tokens against the original text, and comes back as `SnippetSegment`s,
    never HTML.
 
-## Postgres-only columns
+## Storage
+
+The index is stored apart from the notes. The `notes` and `nodes` tables
+carry no search data, so the index can be dropped and rebuilt
+(`reindex_search`) without touching them.
+
+```mermaid
+erDiagram
+    Note ||--o| NoteSearchIndex : "indexed as"
+    Note ||--o{ Node : "composed"
+    Node ||--o| NodeSearchIndex : "indexed as"
+
+    NoteSearchIndex {
+        UUID note_id PK, FK "ON DELETE CASCADE"
+        TEXT title
+        TEXT body
+        INT index_version
+        TSVECTOR search_vector "generated, GIN, Postgres only"
+    }
+
+    NodeSearchIndex {
+        UUID node_id PK, FK "ON DELETE CASCADE"
+        UUID note_id FK "ON DELETE CASCADE, indexed"
+        TEXT text
+        TSVECTOR search_vector "generated, GIN, Postgres only"
+    }
+```
+
+- Only `index_note` writes these tables. `Note` and `Node` have no ORM
+  relationship to them.
+- The database deletes the rows along with their note or node.
+- `node_search_index.note_id` is denormalized, so a note's entries can be
+  found without joining `nodes`.
+- A note with no `note_search_index` row hasn't been indexed yet;
+  `reindex_search --stale-only` picks it up.
+
+### Postgres-only columns
 
 The `search_vector` columns and their GIN indexes are created in the
 `add search index` migration and deliberately left out of the ORM: tests run

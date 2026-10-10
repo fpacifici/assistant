@@ -386,21 +386,6 @@ class Note(Base):
         DateTime(timezone=True),
         nullable=False,
     )
-    # Search index text, maintained by `assistant.search.indexer.index_note`.
-    # On Postgres a generated `search_vector` tsvector column (not mapped
-    # here, see the add_search_index migration) is derived from these.
-    search_title: Mapped[str] = mapped_column(
-        Text, nullable=False, default="", server_default=""
-    )
-    search_body: Mapped[str] = mapped_column(
-        Text, nullable=False, default="", server_default=""
-    )
-    search_index_version: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
 
     notebook: Mapped[Notebook] = relationship(
         "Notebook",
@@ -461,6 +446,67 @@ class NoteImport(Base):
     source_path: Mapped[str] = mapped_column(String(1024), nullable=False)
 
     note: Mapped[Note] = relationship("Note", back_populates="import_record")
+
+
+class NoteSearchIndex(Base):
+    """Keyword search index entry for one note (title + whole body).
+
+    Stored apart from the note on purpose: notes carry no search data, and
+    the index can be dropped and rebuilt (`assistant.cli.reindex_search`)
+    without touching them. Maintained only by
+    `assistant.search.indexer.index_note`; there is deliberately no ORM
+    relationship from `Note`. Rows are deleted with their note by the
+    database (ON DELETE CASCADE).
+
+    `title` and `body` hold analyzed tokens joined by spaces. On Postgres a
+    generated, GIN-indexed `search_vector` tsvector column (title weighted A,
+    body B) is derived from them — it is not mapped here, see the
+    add_search_index migration.
+    """
+
+    __tablename__ = "note_search_index"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # `assistant.search.analysis.SEARCH_INDEX_VERSION` this entry was built with.
+    index_version: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class NodeSearchIndex(Base):
+    """Keyword search index entry for one block of a note.
+
+    Used to pick a matching note's snippet blocks. Like `NoteSearchIndex`,
+    maintained only by `index_note`, with no ORM relationship from `Node`,
+    and deleted with its node or note by the database. `note_id` is
+    denormalized so a note's entries are found without joining `nodes`.
+
+    `text` holds analyzed tokens joined by spaces; Postgres derives a
+    generated, GIN-indexed `search_vector` from it (not mapped here).
+    """
+
+    __tablename__ = "node_search_index"
+    __table_args__ = (
+        Index("ix_node_search_index_note_id", "note_id"),
+        {"schema": "assistant"},
+    )
+
+    node_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.nodes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
 class Tag(Base):
@@ -652,12 +698,6 @@ class Node(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
-    )
-    # Analyzed plain text of the node, maintained by
-    # `assistant.search.indexer.index_note`; Postgres derives the generated
-    # `search_vector` column from it.
-    search_text: Mapped[str] = mapped_column(
-        Text, nullable=False, default="", server_default=""
     )
 
     note: Mapped[Note] = relationship(

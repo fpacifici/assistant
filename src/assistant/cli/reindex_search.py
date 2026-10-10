@@ -15,10 +15,10 @@ import logging
 import sys
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from assistant.models.database import get_session_factory
-from assistant.models.schema import Note
+from assistant.models.schema import Note, NoteSearchIndex
 from assistant.search.analysis import SEARCH_INDEX_VERSION
 from assistant.search.indexer import index_note
 
@@ -37,7 +37,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--stale-only",
         action="store_true",
-        help="Only notes indexed with an older SEARCH_INDEX_VERSION",
+        help="Only notes not indexed yet or indexed with an older SEARCH_INDEX_VERSION",
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     return parser.parse_args(argv)
@@ -54,7 +54,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.user_id is not None:
         stmt = stmt.where(Note.owner_id == args.user_id)
     if args.stale_only:
-        stmt = stmt.where(Note.search_index_version < SEARCH_INDEX_VERSION)
+        # Not indexed yet (no entry), or indexed with an older version.
+        stmt = stmt.outerjoin(NoteSearchIndex, NoteSearchIndex.note_id == Note.id).where(
+            or_(
+                NoteSearchIndex.note_id.is_(None),
+                NoteSearchIndex.index_version < SEARCH_INDEX_VERSION,
+            ),
+        )
     try:
         with get_session_factory()() as session:
             note_ids = list(session.scalars(stmt))

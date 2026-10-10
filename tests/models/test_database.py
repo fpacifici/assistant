@@ -297,13 +297,13 @@ def test_include_object_for_migrations_skips_unmapped_search_vector_objects() ->
     index.table.schema = "assistant"
     assert (
         include_object_for_migrations(
-            index, "ix_notes_search_vector", "index", True, None
+            index, "ix_note_search_index_vector", "index", True, None
         )
         is False
     )
     assert (
         include_object_for_migrations(
-            index, "ix_nodes_search_vector", "index", True, None
+            index, "ix_node_search_index_vector", "index", True, None
         )
         is False
     )

@@ -1,12 +1,14 @@
 """add search index
 
-Adds the keyword search index (see docs/adr/0002-postgres-fts-search.md).
-The plain-text columns are mapped in the ORM; the `search_vector` tsvector
-columns and their GIN indexes are Postgres-only, generated from them, and
-deliberately not mapped (SQLite tests can't represent them).
+Adds the keyword search index (see docs/adr/0002-postgres-fts-search.md) in
+its own tables, apart from notes and nodes: `note_search_index` (one row per
+note) and `node_search_index` (one row per block), each deleted with what it
+indexes. The plain-text columns are mapped in the ORM; the `search_vector`
+tsvector columns and their GIN indexes are Postgres-only, generated from
+them, and deliberately not mapped (SQLite tests can't represent them).
 
-After upgrading, run `python -m assistant.cli.reindex_search` to fill the
-index for existing notes.
+After upgrading, run `make reindex-search` to fill the index for existing
+notes.
 
 Revision ID: 13fee0c1ad4b
 Revises: a3c91e7d5b20
@@ -28,54 +30,75 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "nodes",
-        sa.Column("search_text", sa.Text(), server_default="", nullable=False),
-        schema="assistant",
-    )
-    op.add_column(
-        "notes",
-        sa.Column("search_title", sa.Text(), server_default="", nullable=False),
-        schema="assistant",
-    )
-    op.add_column(
-        "notes",
-        sa.Column("search_body", sa.Text(), server_default="", nullable=False),
-        schema="assistant",
-    )
-    op.add_column(
-        "notes",
-        sa.Column(
-            "search_index_version", sa.Integer(), server_default="0", nullable=False
+    op.create_table(
+        "note_search_index",
+        sa.Column("note_id", sa.UUID(), nullable=False),
+        sa.Column("title", sa.Text(), nullable=False),
+        sa.Column("body", sa.Text(), nullable=False),
+        sa.Column("index_version", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["note_id"],
+            ["assistant.notes.id"],
+            name=op.f("fk_note_search_index_note_id_notes"),
+            ondelete="CASCADE",
         ),
+        sa.PrimaryKeyConstraint("note_id", name=op.f("pk_note_search_index")),
+        schema="assistant",
+    )
+    op.create_table(
+        "node_search_index",
+        sa.Column("node_id", sa.UUID(), nullable=False),
+        sa.Column("note_id", sa.UUID(), nullable=False),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["node_id"],
+            ["assistant.nodes.id"],
+            name=op.f("fk_node_search_index_node_id_nodes"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["note_id"],
+            ["assistant.notes.id"],
+            name=op.f("fk_node_search_index_note_id_notes"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("node_id", name=op.f("pk_node_search_index")),
+        schema="assistant",
+    )
+    op.create_index(
+        "ix_node_search_index_note_id",
+        "node_search_index",
+        ["note_id"],
+        unique=False,
         schema="assistant",
     )
     op.execute(
-        "ALTER TABLE assistant.nodes ADD COLUMN search_vector tsvector "
-        "GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, search_text)) STORED",
-    )
-    op.execute(
-        "CREATE INDEX ix_nodes_search_vector ON assistant.nodes USING gin (search_vector)",
-    )
-    op.execute(
-        "ALTER TABLE assistant.notes ADD COLUMN search_vector tsvector "
+        "ALTER TABLE assistant.note_search_index ADD COLUMN search_vector tsvector "
         "GENERATED ALWAYS AS ("
-        "setweight(to_tsvector('simple'::regconfig, search_title), 'A') || "
-        "setweight(to_tsvector('simple'::regconfig, search_body), 'B')"
+        "setweight(to_tsvector('simple'::regconfig, title), 'A') || "
+        "setweight(to_tsvector('simple'::regconfig, body), 'B')"
         ") STORED",
     )
     op.execute(
-        "CREATE INDEX ix_notes_search_vector ON assistant.notes USING gin (search_vector)",
+        "CREATE INDEX ix_note_search_index_vector "
+        "ON assistant.note_search_index USING gin (search_vector)",
+    )
+    op.execute(
+        "ALTER TABLE assistant.node_search_index ADD COLUMN search_vector tsvector "
+        "GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, text)) STORED",
+    )
+    op.execute(
+        "CREATE INDEX ix_node_search_index_vector "
+        "ON assistant.node_search_index USING gin (search_vector)",
     )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.execute("DROP INDEX IF EXISTS assistant.ix_notes_search_vector")
-    op.execute("ALTER TABLE assistant.notes DROP COLUMN IF EXISTS search_vector")
-    op.execute("DROP INDEX IF EXISTS assistant.ix_nodes_search_vector")
-    op.execute("ALTER TABLE assistant.nodes DROP COLUMN IF EXISTS search_vector")
-    op.drop_column("notes", "search_index_version", schema="assistant")
-    op.drop_column("notes", "search_body", schema="assistant")
-    op.drop_column("notes", "search_title", schema="assistant")
-    op.drop_column("nodes", "search_text", schema="assistant")
+    op.drop_index(
+        "ix_node_search_index_note_id",
+        table_name="node_search_index",
+        schema="assistant",
+    )
+    op.drop_table("node_search_index", schema="assistant")
+    op.drop_table("note_search_index", schema="assistant")
