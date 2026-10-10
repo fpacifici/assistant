@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readPreference, resolveTheme, THEME_STORAGE_KEY, writePreference } from './theme';
+import { colorSchemeOf, readPreference, resolveTheme, THEME_STORAGE_KEY, THEMES, writePreference } from './theme';
 
 beforeEach(() => {
   localStorage.clear();
@@ -16,6 +16,20 @@ describe('resolveTheme', () => {
   it('lets an explicit preference win over the OS', () => {
     expect(resolveTheme('light', true)).toBe('light');
     expect(resolveTheme('dark', false)).toBe('dark');
+    expect(resolveTheme('blossom', true)).toBe('blossom');
+  });
+});
+
+// --- colorSchemeOf ---
+
+describe('colorSchemeOf', () => {
+  it('maps each theme to its light or dark base', () => {
+    expect(colorSchemeOf('light')).toBe('light');
+    expect(colorSchemeOf('dark')).toBe('dark');
+    expect(colorSchemeOf('blossom')).toBe('light');
+    expect(colorSchemeOf('sand')).toBe('light');
+    expect(colorSchemeOf('ocean')).toBe('dark');
+    expect(colorSchemeOf('twilight')).toBe('dark');
   });
 });
 
@@ -31,6 +45,13 @@ describe('readPreference / writePreference', () => {
     writePreference(localStorage, 'dark');
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
     expect(readPreference(localStorage)).toBe('dark');
+  });
+
+  it('round-trips every color theme', () => {
+    for (const theme of THEMES) {
+      writePreference(localStorage, theme);
+      expect(readPreference(localStorage)).toBe(theme);
+    }
   });
 
   it('clears the key for system', () => {

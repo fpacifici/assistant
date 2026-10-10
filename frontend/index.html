@@ -10,16 +10,19 @@
     <title>Assistant</title>
     <script>
       // Apply the theme before first paint to avoid a light flash in dark
-      // mode. Same rule as src/theme/theme.ts; ThemeProvider takes over.
+      // mode. Same rule as src/theme/theme.ts (keep THEMES in sync);
+      // ThemeProvider takes over.
       (function () {
+        var themes = ['light', 'dark', 'blossom', 'ocean', 'sand', 'twilight'];
         var pref = null;
         try {
           pref = localStorage.getItem('assistant.theme');
         } catch (e) {}
-        var dark =
-          pref === 'dark' ||
-          (pref !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        if (themes.indexOf(pref) === -1) {
+          var dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+          pref = dark ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = pref;
       })();
     </script>
   </head>

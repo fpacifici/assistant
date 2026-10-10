@@ -1,15 +1,29 @@
 /** Pure color-theme rules: the stored preference and how it resolves. */
 
-export type Theme = 'light' | 'dark';
+/** Whether a theme is built on a light or a dark base (drives `color-scheme` and BlockNote). */
+export type ColorScheme = 'light' | 'dark';
+
+/** Every theme the app can apply. `light` and `dark` are the neutral defaults. */
+export const THEMES = ['light', 'dark', 'blossom', 'ocean', 'sand', 'twilight'] as const;
+export type Theme = (typeof THEMES)[number];
 export type ThemePreference = Theme | 'system';
 
-export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
+export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', ...THEMES];
+
+const COLOR_SCHEMES: Record<Theme, ColorScheme> = {
+  light: 'light',
+  dark: 'dark',
+  blossom: 'light',
+  ocean: 'dark',
+  sand: 'light',
+  twilight: 'dark',
+};
 
 export const THEME_STORAGE_KEY = 'assistant.theme';
 export const DARK_MEDIA_QUERY = '(prefers-color-scheme: dark)';
 
 function isThemePreference(value: string | null): value is ThemePreference {
-  return value === 'system' || value === 'light' || value === 'dark';
+  return value === 'system' || (THEMES as readonly (string | null)[]).includes(value);
 }
 
 /** Read the stored preference; missing, invalid or unreadable means `'system'`. */
@@ -36,4 +50,9 @@ export function writePreference(storage: Storage | null, preference: ThemePrefer
 export function resolveTheme(preference: ThemePreference, systemDark: boolean): Theme {
   if (preference === 'system') return systemDark ? 'dark' : 'light';
   return preference;
+}
+
+/** The light/dark base a theme is built on. */
+export function colorSchemeOf(theme: Theme): ColorScheme {
+  return COLOR_SCHEMES[theme];
 }

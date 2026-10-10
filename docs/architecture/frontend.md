@@ -136,25 +136,36 @@ The same SPA serves desktop, tablets and phones
   (default `'desktop'`; `'auto'` uses real detection), and
   `test/matchMedia.ts` provides `mockViewport` / `resizeViewport`.
 
-## Theming (light / dark)
+## Theming
 
-Both layouts support a light and a dark theme.
+Both layouts support six themes: the neutral `light` and `dark`, plus four
+color themes — `blossom` (pink + marine green, light base), `sand` (cream +
+terracotta, light base), `ocean` (navy + cyan, dark base) and `twilight`
+(violet + amber, dark base).
 
-- **Preference** (`theme/theme.ts`): `'system' | 'light' | 'dark'`, stored in
+- **Preference** (`theme/theme.ts`): `'system'` or one of `THEMES`, stored in
   `localStorage` (`assistant.theme`; `'system'` clears the key). `'system'`
-  follows `(prefers-color-scheme: dark)`; an explicit choice wins.
+  follows `(prefers-color-scheme: dark)` and picks `light` or `dark`; an
+  explicit choice wins. `colorSchemeOf(theme)` gives each theme's light/dark
+  base.
 - **Resolution** (`theme/ThemeContext.tsx`): `ThemeProvider` (outermost in
   `RootProviders`, so auth pages are themed too) subscribes to the OS color
-  scheme via `matchMedia`, exposes `useTheme()` → `{ theme, preference,
-  setPreference }` and mirrors the theme on `<html data-theme="…">`.
+  scheme via `matchMedia`, exposes `useTheme()` → `{ theme, colorScheme,
+  preference, setPreference }` and mirrors the theme on
+  `<html data-theme="…">`.
 - **No flash**: an inline script in `index.html` applies the same rule
-  before first paint; keep the two in sync.
+  before first paint; keep the two (including the theme list) in sync.
 - **Styling**: every color in `index.css` is a CSS variable defined on
-  `:root` and overridden under `:root[data-theme="dark"]`, which also sets
-  `color-scheme`. New styles must use the tokens, not literal colors. The
-  header / mobile top bar stays dark in both themes.
-- **Editor**: `BlockNoteView` receives `theme={theme}`; its editor surface
-  colors are mapped to the app tokens.
+  `:root`. Dark-based themes share the `:root[data-theme="dark"]` block
+  (which also sets `color-scheme`) and each theme then overrides its palette
+  tokens under `:root[data-theme="<name>"]`. New styles must use the tokens,
+  not literal colors. The header / mobile top bar stays dark in every theme
+  (tinted by the color themes).
+- **Adding a theme**: add it to `THEMES` and `COLOR_SCHEMES` in `theme.ts`,
+  to the list in `index.html`, a label in `ThemeSwitcher.tsx`, and a token
+  block in `index.css` (add dark-based ones to the shared dark selector).
+- **Editor**: `BlockNoteView` receives `theme={colorScheme}`; its editor
+  surface colors are mapped to the app tokens.
 - **Controls**: `ThemeSwitcher.tsx` — a `<select aria-label="Theme">` in
   `DesktopHeader`, and `menuitemradio` entries in the mobile `⋯` menu (they
   keep the menu open).
