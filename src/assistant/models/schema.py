@@ -614,7 +614,7 @@ class Node(Base):
         ForeignKey("assistant.notes.id"),
         nullable=False,
     )
-    position: Mapped[str] = mapped_column(String(255), nullable=False)
+    position: Mapped[str] = mapped_column(String(2048), nullable=False)
     author_id: Mapped[uuid_module.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assistant.users.uid"),
