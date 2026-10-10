@@ -90,6 +90,19 @@ class TestListNotebooks:
         assert response.status_code == 200
         assert len(response.json()) == 2
 
+    def test_list_notebooks_sorted_by_name(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        for name in ["zeta", "Alpha", "mid"]:
+            create_notebook(db_session, name, test_user)
+
+        response = client.get("/notebook", headers=auth_headers)
+        assert [nb["name"] for nb in response.json()] == ["Alpha", "mid", "zeta"]
+
     def test_list_notebooks_only_own(
         self,
         client: TestClient,

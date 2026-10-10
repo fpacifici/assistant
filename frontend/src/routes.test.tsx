@@ -25,6 +25,13 @@ vi.mock('./components/Layout', () => ({
   },
 }));
 
+vi.mock('./pages/NoteWindow', () => ({
+  default: function FakeNoteWindow() {
+    const { noteId } = useParams();
+    return <div data-testid="note-window">{noteId}</div>;
+  },
+}));
+
 import { getMe } from './api/auth';
 const mockGetMe = vi.mocked(getMe);
 
@@ -92,5 +99,15 @@ describe('note routes', () => {
 
     await act(() => router.navigate('/notebooks'));
     expect(screen.getByLabelText('scratch')).toHaveValue('kept');
+  });
+});
+
+describe('note window route', () => {
+  it('renders the standalone note window instead of the Layout', async () => {
+    mockGetMe.mockResolvedValue(USER);
+    renderWithProviders(null, { routes, initialEntries: ['/notebooks/nb-1/notes/note-1/window'] });
+
+    expect(await screen.findByTestId('note-window')).toHaveTextContent('note-1');
+    expect(screen.queryByTestId('layout')).not.toBeInTheDocument();
   });
 });

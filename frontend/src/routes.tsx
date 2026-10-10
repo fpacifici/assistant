@@ -11,6 +11,7 @@ import InvitesPage from './pages/InvitesPage';
 import SettingsPage from './pages/SettingsPage';
 import SearchPage from './pages/SearchPage';
 import SwitchToGooglePage from './pages/SwitchToGooglePage';
+import NoteWindow from './pages/NoteWindow';
 import {
   ProtectedLayout,
   RootProviders,
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
           { path: '/notebooks/:notebookId/notes', element: <Layout /> },
           { path: '/notebooks/:notebookId/notes/:noteId', element: <Layout /> },
           { path: '/search', element: <SearchPage /> },
+          { path: '/notebooks/:notebookId/notes/:noteId/window', element: <NoteWindow /> },
           { path: '/invites', element: <InvitesPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '*', element: null },

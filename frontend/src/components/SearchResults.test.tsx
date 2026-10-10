@@ -21,6 +21,7 @@ function result(overrides: Partial<SearchResult> = {}): SearchResult {
       update_timestamp: '2026-10-02T00:00:00Z',
       permissions: ['view_note'],
       tags: [{ id: 't1', name: 'travel' }],
+      preview: 'Fly to Berlin',
     },
     notebook: { id: 'nb1', name: 'Travel' },
     score: 0.5,

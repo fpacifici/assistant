@@ -8,8 +8,13 @@ import { renderWithProviders } from '../test/renderWithProviders';
 import { mockViewport, setPrefersDark } from '../test/matchMedia';
 
 function ThemeProbe() {
-  const { theme, preference } = useTheme();
-  return <div data-testid="theme">{`${theme}/${preference}`}</div>;
+  const { theme, colorScheme, preference } = useTheme();
+  return (
+    <>
+      <div data-testid="theme">{`${theme}/${preference}`}</div>
+      <div data-testid="color-scheme">{colorScheme}</div>
+    </>
+  );
 }
 
 function renderProbe() {
@@ -85,5 +90,19 @@ describe('explicit preference', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'system');
     expect(screen.getByTestId('theme')).toHaveTextContent('light/system');
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+  });
+
+  it('applies a color theme with its base color scheme', async () => {
+    const user = userEvent.setup();
+    renderProbe();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'blossom');
+    expect(screen.getByTestId('theme')).toHaveTextContent('blossom/blossom');
+    expect(screen.getByTestId('color-scheme')).toHaveTextContent('light');
+    expect(document.documentElement.dataset.theme).toBe('blossom');
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('blossom');
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Theme' }), 'ocean');
+    expect(screen.getByTestId('color-scheme')).toHaveTextContent('dark');
+    expect(document.documentElement.dataset.theme).toBe('ocean');
   });
 });

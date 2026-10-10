@@ -90,3 +90,8 @@ export function switchToPassword(password: string): Promise<User> {
     body: JSON.stringify({ password }),
   });
 }
+
+/** Rotate the session cookies, extending the session. */
+export function refreshSession(): Promise<User> {
+  return apiFetch<User>('/auth/refresh', { method: 'POST' });
+}

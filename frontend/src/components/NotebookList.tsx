@@ -2,10 +2,13 @@
  * Sidebar list of notebooks with create/delete/import. Navigates to the
  * selected notebook's notes. Import is a header button on desktop and a `⋯`
  * menu entry on mobile.
+ *
+ * Notebooks come sorted by name, `PAGE_SIZE` at a time; the next page loads
+ * when the user scrolls to the end of the list.
  */
 
 import { useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotebooks, createNotebook, deleteNotebook } from '../api/notebooks';
 import type { Notebook } from '../types';
@@ -13,8 +16,19 @@ import ShareDialog from './ShareDialog';
 import ConfirmDialog from './ConfirmDialog';
 import ImportDialog from './ImportDialog';
 import { useTopBarMenuItems } from './TopBarMenuContext';
+import { nextPageOffset } from '../api/pagination';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
 
 const NOTEBOOK_ROLE_OPTIONS = ['notebook_viewer', 'notebook_editor', 'notebook_owner'];
+
+function NotebookIcon() {
+  return (
+    <svg className="notebook-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <rect x="3" y="1.5" width="10" height="13" rx="1.5" fill="none" stroke="currentColor" />
+      <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" />
+    </svg>
+  );
+}
 
 export default function NotebookList() {
   const queryClient = useQueryClient();
@@ -33,10 +47,14 @@ export default function NotebookList() {
   );
   useTopBarMenuItems(menuItems);
 
-  const { data: notebooks = [], isLoading } = useQuery({
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
     queryKey: ['notebooks'],
-    queryFn: fetchNotebooks,
+    queryFn: ({ pageParam }) => fetchNotebooks(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: nextPageOffset,
   });
+  const notebooks = useMemo(() => data?.pages.flat() ?? [], [data]);
+  const sentinelRef = useInfiniteScroll(() => void fetchNextPage());
 
   const createMutation = useMutation({
     mutationFn: (name: string) => createNotebook(name),
@@ -88,6 +106,7 @@ export default function NotebookList() {
               className="item-name"
               onClick={() => navigate(`/notebooks/${nb.id}/notes`)}
             >
+              <NotebookIcon />
               {nb.name}
             </span>
             <span className="item-actions">
@@ -118,7 +137,11 @@ export default function NotebookList() {
             </span>
           </li>
         ))}
+        {hasNextPage && !isFetchingNextPage && (
+          <li ref={sentinelRef} className="list-sentinel" aria-hidden="true" />
+        )}
       </ul>
+      {isFetchingNextPage && <p className="list-loading-more">Loading more...</p>}
       {notebooks.length === 0 && <p className="empty">No notebooks yet</p>}
       {pendingDelete && (
         <ConfirmDialog

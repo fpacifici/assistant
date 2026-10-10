@@ -31,3 +31,5 @@ class NoteResponse(BaseModel):
     permissions: list[PermissionName]
     # The caller's own tags on this note — tags are per user.
     tags: list[TagResponse]
+    # Plain-text excerpt of the note's first blocks ("" for an empty note).
+    preview: str

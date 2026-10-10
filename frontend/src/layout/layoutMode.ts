@@ -1,6 +1,9 @@
 /** Pure layout-mode rules: viewport thresholds and the `?layout=` override. */
 
-export type LayoutMode = 'mobile' | 'desktop';
+/** The modes the viewport picks between. */
+export type ViewportMode = 'mobile' | 'desktop';
+/** `tui` (terminal-style panes and keys) is only reached through the override. */
+export type LayoutMode = ViewportMode | 'tui';
 export type LayoutOverride = LayoutMode | null;
 
 export const MOBILE_MAX_WIDTH = 767;
@@ -10,18 +13,18 @@ export const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_MAX_WIDTH}px), (max-heig
 export const OVERRIDE_STORAGE_KEY = 'assistant.layoutMode';
 
 /** Mobile iff the viewport is narrower than 768px or shorter than 500px. */
-export function modeForViewport(width: number, height: number): LayoutMode {
+export function modeForViewport(width: number, height: number): ViewportMode {
   return width <= MOBILE_MAX_WIDTH || height <= MOBILE_MAX_HEIGHT ? 'mobile' : 'desktop';
 }
 
 function isLayoutMode(value: string | null): value is LayoutMode {
-  return value === 'mobile' || value === 'desktop';
+  return value === 'mobile' || value === 'desktop' || value === 'tui';
 }
 
 /**
  * Resolve the layout override from a query string and session storage.
  *
- * `?layout=mobile|desktop` stores and returns that mode, `?layout=auto`
+ * `?layout=mobile|desktop|tui` stores and returns that mode, `?layout=auto`
  * clears it, and any other (or missing) value falls back to the stored one.
  * Storage failures (e.g. private browsing) are ignored.
  */

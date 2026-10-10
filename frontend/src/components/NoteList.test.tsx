@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import NoteList from './NoteList';
+import NoteList, { formatNoteDate } from './NoteList';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { Route, Routes } from 'react-router';
 
@@ -11,7 +11,16 @@ vi.mock('../api/notes', () => ({
   deleteNote: vi.fn(),
 }));
 
+vi.mock('../api/notebooks', () => ({
+  fetchNotebook: vi.fn().mockResolvedValue({
+    id: 'nb-1', name: 'algorithms', owner_id: 'test-user', permissions: [],
+  }),
+}));
+
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
+import { PAGE_SIZE } from '../api/pagination';
+import type { Note } from '../types';
+import { mockIntersectionObserver, scrollIntoView } from '../test/intersectionObserver';
 
 const mockFetchNotes = vi.mocked(fetchNotes);
 const mockCreateNote = vi.mocked(createNote);
@@ -27,9 +36,70 @@ function renderNoteList(path = '/notebooks/nb-1/notes') {
   );
 }
 
+function makeNote(i: number, overrides: Partial<Note> = {}): Note {
+  return {
+    id: `note-${i}`, notebook_id: 'nb-1', owner_id: 'test-user', title: `Note ${i}`,
+    creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [],
+    preview: '', ...overrides,
+  };
+}
+
 describe('NoteList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIntersectionObserver();
+  });
+
+  it('titles the list with the notebook name', async () => {
+    mockFetchNotes.mockResolvedValue([]);
+    renderNoteList();
+    expect(await screen.findByRole('heading', { name: 'algorithms' })).toBeInTheDocument();
+  });
+
+  it('shows the date and preview of each note', async () => {
+    mockFetchNotes.mockResolvedValue([
+      makeNote(1, {
+        title: 'Hilbert curves',
+        update_timestamp: '2026-05-11T10:00:00Z',
+        preview: 'A way to sort multidimensional data',
+      }),
+    ]);
+    renderNoteList();
+
+    const row = (await screen.findByText('Hilbert curves')).closest('li')!;
+    expect(within(row).getByText('A way to sort multidimensional data')).toBeInTheDocument();
+    expect(within(row).getByText(formatNoteDate('2026-05-11T10:00:00Z'))).toBeInTheDocument();
+  });
+
+  it('requests the first page of PAGE_SIZE notes', async () => {
+    mockFetchNotes.mockResolvedValue([makeNote(1)]);
+    renderNoteList();
+    await screen.findByText('Note 1');
+    expect(mockFetchNotes).toHaveBeenCalledTimes(1);
+    expect(mockFetchNotes).toHaveBeenCalledWith('nb-1', 0);
+  });
+
+  it('loads the next page when the end of the list scrolls into view', async () => {
+    const firstPage = Array.from({ length: PAGE_SIZE }, (_, i) => makeNote(i));
+    mockFetchNotes
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce([makeNote(PAGE_SIZE, { title: 'Last note' })]);
+    const { container } = renderNoteList();
+    await screen.findByText('Note 0');
+
+    scrollIntoView(container.querySelector('.list-sentinel')!);
+
+    expect(await screen.findByText('Last note')).toBeInTheDocument();
+    expect(mockFetchNotes).toHaveBeenLastCalledWith('nb-1', PAGE_SIZE);
+    // A short page ends the list.
+    expect(container.querySelector('.list-sentinel')).not.toBeInTheDocument();
+  });
+
+  it('has no sentinel when the first page is short', async () => {
+    mockFetchNotes.mockResolvedValue([makeNote(1)]);
+    const { container } = renderNoteList();
+    await screen.findByText('Note 1');
+    expect(container.querySelector('.list-sentinel')).not.toBeInTheDocument();
   });
 
   it('renders nothing without notebookId', () => {
@@ -50,8 +120,8 @@ describe('NoteList', () => {
 
   it('renders notes list', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'First Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
-      { id: 'note-2', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Second Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'First Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [], preview: '' },
+      { id: 'note-2', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Second Note', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [], preview: '' },
     ]);
     renderNoteList();
 
@@ -64,7 +134,7 @@ describe('NoteList', () => {
   it('renders tag chips under each note with a +N overflow', async () => {
     const tags = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ id: `t-${name}`, name }));
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Tagged', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Tagged', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags, preview: '' },
     ]);
     renderNoteList();
 
@@ -91,7 +161,7 @@ describe('NoteList', () => {
     mockCreateNote.mockResolvedValue({
       id: 'note-new', notebook_id: 'nb-1', owner_id: 'test-user',
       title: 'My Note', creation_timestamp: '', update_timestamp: '',
-      permissions: ['view_note'], tags: [],
+      permissions: ['view_note'], tags: [], preview: '',
     });
 
     renderNoteList();
@@ -110,7 +180,7 @@ describe('NoteList', () => {
   it('asks for confirmation and deletes on confirm', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Delete Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Delete Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [], preview: '' },
     ]);
     mockDeleteNote.mockResolvedValue(undefined);
 
@@ -135,7 +205,7 @@ describe('NoteList', () => {
   it('does not delete when the confirmation is cancelled', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Keep Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Keep Me', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [], preview: '' },
     ]);
 
     renderNoteList();
@@ -151,7 +221,7 @@ describe('NoteList', () => {
   it('confirms deletion in mobile mode too', async () => {
     const user = userEvent.setup();
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Phone Note', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'test-user', title: 'Phone Note', creation_timestamp: '', update_timestamp: '', permissions: ['delete_note'], tags: [], preview: '' },
     ]);
 
     renderWithProviders(
@@ -175,7 +245,7 @@ describe('NoteList permission gating', () => {
 
   it('hides share and delete buttons when permissions lack them', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Read Only', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Read Only', creation_timestamp: '', update_timestamp: '', permissions: ['view_note'], tags: [], preview: '' },
     ]);
     renderNoteList();
 
@@ -188,7 +258,7 @@ describe('NoteList permission gating', () => {
 
   it('shows share button when share_note permission is present', async () => {
     mockFetchNotes.mockResolvedValue([
-      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Shared', creation_timestamp: '', update_timestamp: '', permissions: ['view_note', 'share_note'], tags: [] },
+      { id: 'note-1', notebook_id: 'nb-1', owner_id: 'other-user', title: 'Shared', creation_timestamp: '', update_timestamp: '', permissions: ['view_note', 'share_note'], tags: [], preview: '' },
     ]);
     renderNoteList();
 
@@ -196,5 +266,22 @@ describe('NoteList permission gating', () => {
       expect(screen.getByTitle('Share note')).toBeInTheDocument();
     });
     expect(screen.queryByTitle('Delete note')).not.toBeInTheDocument();
+  });
+});
+
+describe('formatNoteDate', () => {
+  const now = new Date('2026-10-09T12:00:00Z');
+
+  it('omits the year for dates in the current year', () => {
+    expect(formatNoteDate('2026-05-11T12:00:00Z', now)).not.toMatch(/2026/);
+  });
+
+  it('includes the year for older dates', () => {
+    expect(formatNoteDate('2025-05-11T12:00:00Z', now)).toMatch(/2025/);
+  });
+
+  it('returns an empty string for missing or invalid timestamps', () => {
+    expect(formatNoteDate('', now)).toBe('');
+    expect(formatNoteDate('not a date', now)).toBe('');
   });
 });

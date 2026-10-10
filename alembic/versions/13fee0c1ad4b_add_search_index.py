@@ -11,7 +11,7 @@ After upgrading, run `make reindex-search` to fill the index for existing
 notes.
 
 Revision ID: 13fee0c1ad4b
-Revises: a3c91e7d5b20
+Revises: 015c399782be
 Create Date: 2026-10-06 22:43:33.992605
 
 """
@@ -23,7 +23,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "13fee0c1ad4b"
-down_revision: str | Sequence[str] | None = "a3c91e7d5b20"
+down_revision: str | Sequence[str] | None = "015c399782be"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

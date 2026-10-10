@@ -22,6 +22,7 @@ from assistant.notes.entitlements import (
 )
 from assistant.notes.exceptions import NoteNotFoundError
 from assistant.notes.permissions import note_permissions
+from assistant.notes.previews import note_previews
 from assistant.notes.service import (
     add_text_node,
     create_note,
@@ -53,15 +54,18 @@ def _note_response(
     note: Note,
     caller: User,
     tags: list[Tag] | None = None,
+    preview: str | None = None,
 ) -> NoteResponse:
     """Build the caller's view of a note.
 
-    `tags` lets list endpoints pass tags fetched in one batch; when omitted
-    they are loaded for this note alone.
+    `tags` and `preview` let list endpoints pass values fetched in one
+    batch; when omitted they are loaded for this note alone.
     """
     perms = note_permissions(session, caller, note)
     if tags is None:
         tags = tags_for_notes(session, caller, [note.id]).get(note.id, [])
+    if preview is None:
+        preview = note_previews(session, [note.id]).get(note.id, "")
     return NoteResponse(
         id=note.id,
         notebook_id=note.notebook_id,
@@ -71,6 +75,7 @@ def _note_response(
         update_timestamp=note.update_timestamp,
         permissions=sorted(perms, key=lambda p: p.value),
         tags=[TagResponse.model_validate(t) for t in tags],
+        preview=preview,
     )
 
 
@@ -112,8 +117,19 @@ def list_notes_endpoint(
         offset=pagination.offset,
         limit=pagination.limit,
     )
-    tags_by_note = tags_for_notes(session, user, [n.id for n in notes])
-    return [_note_response(session, n, user, tags_by_note.get(n.id, [])) for n in notes]
+    note_ids = [n.id for n in notes]
+    tags_by_note = tags_for_notes(session, user, note_ids)
+    previews = note_previews(session, note_ids)
+    return [
+        _note_response(
+            session,
+            n,
+            user,
+            tags=tags_by_note.get(n.id, []),
+            preview=previews.get(n.id, ""),
+        )
+        for n in notes
+    ]
 
 
 @router.get(
