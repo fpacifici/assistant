@@ -49,7 +49,7 @@ StrictMode
     RouterProvider           -- React Router v7 data router
       RootProviders          -- root layout route (components/RouteLayouts.tsx)
        ThemeProvider         -- resolves 'light' | 'dark' (see Theming)
-        LayoutModeProvider   -- resolves 'mobile' | 'desktop' (see Responsive layout)
+        LayoutModeProvider   -- resolves 'mobile' | 'desktop' | 'tui' (see Responsive layout, TUI layout)
           Sentry.ErrorBoundary -- reports render errors, shows a reload fallback
             <public pages>
             ProtectedLayout  -- pathless layout route
@@ -135,6 +135,42 @@ The same SPA serves desktop, tablets and phones
 - **Tests**: `renderWithProviders(ui, { layout })` forces a mode
   (default `'desktop'`; `'auto'` uses real detection), and
   `test/matchMedia.ts` provides `mockViewport` / `resizeViewport`.
+
+## TUI layout
+
+A third layout mode, `tui`, draws the desktop columns as text-framed panes
+in a monospace font, with a menu bar on top and a Midnight Commander style
+function-key bar at the bottom. The viewport never selects it: it is turned
+on with `?layout=tui` (the **TUI** link in `DesktopHeader`) and persisted
+like the other overrides; `?layout=auto` (F10, or View → Classic layout)
+turns it off. Code lives in `components/tui/`.
+
+- **Same tree**: `Layout` always renders `TuiProvider` and keeps the
+  `.sidebar` / `.notes-column` / `.main` slots; in TUI mode it swaps
+  `NotebookList` / `NoteList` for `TuiNotebookPanel` / `TuiNotePanel`, adds a
+  `TuiBorder` before `NoteEditor` and swaps the header for `TuiMenuBar`.
+  Switching modes never remounts `NoteEditor`.
+- **Frames** (`TuiBorder`): an overlay of box-drawing characters (double
+  lines on the active pane) inside a `.tui-framed` parent that leaves one
+  line / one character of padding. Edges are long character runs clipped by
+  `overflow: hidden`, so frames follow any size. Colors use the theme tokens,
+  so every theme works.
+- **Panes**: `notebooks`, `notes` and `editor`, marked with `data-tui-pane`.
+  `TuiProvider` tracks the active pane (it follows `focusin`) and moves DOM
+  focus with `focus(target)`. List panes register a handle with
+  `useTuiList(pane, { run })` and receive `ListCommand`s; the cursor
+  (`listCursor.ts`) follows an item id and starts on the open item.
+- **Keys** (`keys.ts`, pure and unit-tested): F1 Help, F2 Share, F3
+  Hide/show notebooks, F4 Edit, F5 Tags, F6 Filter, F7 New, F8 Delete, F9
+  Menu, F10 Classic. Alt+1…0 and Esc-then-digit are equivalents (laptops and
+  browsers often eat F-keys). ↑/↓/PgUp/PgDn/Home/End move the cursor, Enter
+  opens, Tab/Shift+Tab and ←/→ switch panes. While focus is in the editor or
+  a text field, only F-keys, their equivalents and Esc (back to the list) are
+  taken. The controller ignores keys while the menu, help or any
+  `.modal-overlay` dialog is open; the key bar and menus also work with the
+  mouse.
+- **Dialogs**: new notebook / note and filter use `TuiPrompt`; share,
+  confirm and import reuse the classic dialogs with a TUI skin.
 
 ## Theming
 

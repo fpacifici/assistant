@@ -1954,3 +1954,549 @@ ul {
 .save-state.error {
   color: var(--danger);
 }
+
+/*
+ * TUI layout (?layout=tui): the desktop columns as text-framed panes
+ * (components/tui/), a menu bar and an mc-style function-key bar. Frames
+ * are box-drawing characters; colors still come from the theme tokens.
+ */
+:root {
+  --tui-font: ui-monospace, 'SF Mono', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+}
+
+.app-shell.tui,
+.tui-dialog,
+.tui-menu {
+  /* Height of a frame line: tall enough that │ glyphs touch */
+  --tui-frame: 1.15em;
+  font-family: var(--tui-font);
+  font-size: 14px;
+}
+
+.app-shell.tui {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.app-shell.tui *,
+.tui-dialog * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-faint) transparent;
+}
+
+.tui-framed {
+  position: relative;
+  padding: var(--tui-frame) 1ch;
+}
+
+/* --- Frame --- */
+
+.tui-border {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text-faint);
+  white-space: pre;
+  line-height: var(--tui-frame);
+  overflow: hidden;
+}
+
+.tui-border.active {
+  color: var(--accent);
+}
+
+.tui-border-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--tui-frame);
+  display: flex;
+  overflow: hidden;
+}
+
+.tui-border-row.top { top: 0; }
+.tui-border-row.bottom { bottom: 0; }
+
+.tui-border-row > span {
+  flex-shrink: 0;
+}
+
+.tui-border-row > .tui-border-fill {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tui-border-row > .tui-border-label {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.tui-border.active .tui-border-row.top > .tui-border-label {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tui-border-side {
+  position: absolute;
+  top: var(--tui-frame);
+  bottom: var(--tui-frame);
+  width: 1ch;
+  overflow: hidden;
+}
+
+.tui-border-side.left { left: 0; }
+.tui-border-side.right { right: 0; }
+
+/* --- Panes --- */
+
+.app-shell.tui .sidebar,
+.app-shell.tui .notes-column,
+.app-shell.tui .main {
+  padding: 0;
+  border: none;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.app-shell.tui .sidebar { width: 32ch; }
+.app-shell.tui .notes-column { width: 50ch; }
+
+@media (max-width: 1023px) {
+  .app-shell.tui .sidebar { width: 24ch; }
+  .app-shell.tui .notes-column { width: 38ch; }
+}
+
+.app-shell.tui .main {
+  position: relative;
+  padding: var(--tui-frame) 1ch;
+  outline: none;
+}
+
+.app-shell.tui .editor-placeholder {
+  color: var(--text-faint);
+}
+
+.tui-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.tui-list {
+  list-style: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  outline: none;
+}
+
+.tui-row {
+  display: flex;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tui-row + .tui-row {
+  margin-top: 1px;
+}
+
+.tui-row-mark {
+  width: 2ch;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.tui-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tui-row-line,
+.tui-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-row-date {
+  white-space: pre;
+  color: var(--text-muted);
+}
+
+.tui-row-sub {
+  color: var(--text-muted);
+}
+
+.tui-tag {
+  color: var(--link);
+}
+
+.tui-row:hover {
+  background: var(--hover);
+}
+
+/* The cursor bar: muted in an inactive pane, inverse in the focused one */
+.tui-row.cursor {
+  background: var(--hover-strong);
+}
+
+.tui-list:focus .tui-row.cursor {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tui-list:focus .tui-row.cursor :is(.tui-row-mark, .tui-row-date, .tui-row-sub, .tui-tag) {
+  color: inherit;
+}
+
+.tui-empty {
+  list-style: none;
+  padding: 0 2ch;
+  color: var(--text-faint);
+}
+
+/* --- Menu bar --- */
+
+.tui-menubar {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  line-height: 1.6;
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  white-space: pre;
+}
+
+.tui-menubar-brand {
+  width: 1ch;
+  color: var(--chrome-text-faint);
+}
+
+.tui-menubar-title {
+  padding: 0 1ch;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tui-menubar-title:hover,
+.tui-menubar-title.open {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tui-menubar-spacer {
+  flex: 1;
+}
+
+.tui-menubar-user {
+  padding: 0 1ch;
+  color: var(--chrome-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.tui-menu {
+  position: absolute;
+  top: 100%;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 32ch;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 1ch var(--tui-frame) 0 var(--shadow);
+}
+
+.tui-menu-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 3ch;
+  padding: 0 1ch;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre;
+  cursor: pointer;
+}
+
+.tui-menu-item.cursor {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tui-menu-item[aria-disabled] {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.tui-menu-hint {
+  color: var(--text-muted);
+}
+
+.tui-menu-item.cursor .tui-menu-hint {
+  color: inherit;
+}
+
+/* --- Function-key bar --- */
+
+.tui-keybar {
+  display: flex;
+  flex-shrink: 0;
+  background: var(--chrome-bg);
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.tui-key {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tui-key-num {
+  padding: 0 0.5ch 0 1ch;
+  color: var(--chrome-text);
+}
+
+.tui-key-label {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0.5ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  background: var(--active);
+  color: var(--text);
+}
+
+.tui-key:hover .tui-key-label {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* --- Dialogs --- */
+
+.app-shell.tui .modal,
+.tui-dialog {
+  border-radius: 0;
+  font-family: var(--tui-font);
+  box-shadow: 1ch var(--tui-frame) 0 var(--shadow);
+}
+
+/* Dialogs shared with the classic layout get a double-line CSS frame */
+.app-shell.tui .modal:not(.tui-dialog) {
+  border: 3px double var(--accent);
+}
+
+.tui-dialog {
+  padding: calc(var(--tui-frame) * 2) 3ch;
+  width: 56ch;
+  max-width: 95vw;
+  line-height: 1.4;
+}
+
+.tui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.tui-dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 2ch;
+  margin-top: 1em;
+}
+
+.tui-help table {
+  border-collapse: collapse;
+}
+
+.tui-help th {
+  padding-right: 2ch;
+  text-align: left;
+  font-weight: normal;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.tui-help td {
+  padding-right: 2ch;
+}
+
+/* --- Controls: [bracketed] buttons, flat input fields --- */
+
+.app-shell.tui :is(.main, .modal) button,
+.tui-dialog button {
+  padding: 0 0.5ch;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.app-shell.tui :is(.main, .modal) button::before,
+.tui-dialog button::before {
+  content: '[';
+  color: var(--text-faint);
+}
+
+.app-shell.tui :is(.main, .modal) button::after,
+.tui-dialog button::after {
+  content: ']';
+  color: var(--text-faint);
+}
+
+.app-shell.tui :is(.main, .modal) button:is(:hover, :focus-visible):not(:disabled),
+.tui-dialog button:is(:hover, :focus-visible):not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
+  outline: none;
+}
+
+.app-shell.tui :is(.main, .modal) button:disabled,
+.tui-dialog button:disabled {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+/* The classic secondary buttons force their box with !important */
+.app-shell.tui :is(.debug-toggle, .open-window-btn) {
+  border: none !important;
+  background: none !important;
+  color: var(--text) !important;
+}
+
+.app-shell.tui :is(.debug-toggle, .open-window-btn):hover {
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
+}
+
+.app-shell.tui .modal .btn-danger {
+  color: var(--danger);
+}
+
+.app-shell.tui :is(input, select, textarea),
+.tui-dialog input {
+  padding: 0 1ch;
+  border: none;
+  border-bottom: 1px solid var(--text-faint);
+  border-radius: 0;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+}
+
+.app-shell.tui :is(input, select, textarea):focus,
+.tui-dialog input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+/* --- Note editor --- */
+
+.app-shell.tui .markdown-toolbar {
+  padding: 0;
+  margin-bottom: 0.5em;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.app-shell.tui .toolbar-btn {
+  min-width: 0;
+}
+
+.app-shell.tui .toolbar-divider {
+  width: auto;
+  height: auto;
+  margin: 0 0.5ch;
+  background: none;
+}
+
+.app-shell.tui .toolbar-divider::before {
+  content: '│';
+  color: var(--text-faint);
+}
+
+.app-shell.tui .tag-chip {
+  border-radius: 0;
+  font-family: inherit;
+}
+
+.app-shell.tui .editor-content {
+  border: none;
+  border-top: 1px dashed var(--border-strong);
+  border-radius: 0;
+}
+
+.app-shell.tui .editor-content .bn-container {
+  --bn-font-family: var(--tui-font);
+}
+
+.app-shell.tui .bn-editor {
+  font-family: var(--tui-font);
+}
+
+/* Headings stay one line tall and show their markdown marker */
+.app-shell.tui .bn-block-content[data-content-type="heading"] {
+  --level: 1em;
+  --prev-level: 1em;
+  color: var(--accent);
+}
+
+.app-shell.tui .bn-block-content[data-content-type="heading"] .bn-inline-content::before {
+  content: '# ';
+  color: var(--text-faint);
+}
+
+.app-shell.tui .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content::before {
+  content: '## ';
+}
+
+.app-shell.tui .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content::before {
+  content: '### ';
+}
+
+.app-shell.tui .bn-block-content[data-content-type="bulletListItem"]::before {
+  content: '*' !important;
+}
+
+.app-shell.tui .editor-toolbar {
+  flex-wrap: wrap;
+  gap: 1ch;
+  margin-top: 0.5em;
+}
+
+.app-shell.tui .save-state {
+  color: var(--text-muted);
+}

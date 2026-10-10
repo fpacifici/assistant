@@ -60,6 +60,12 @@ describe('readOverride', () => {
     expect(readOverride('?layout=tablet', sessionStorage)).toBe('desktop');
   });
 
+  it('stores and returns the tui mode', () => {
+    expect(readOverride('?layout=tui', sessionStorage)).toBe('tui');
+    expect(readOverride('', sessionStorage)).toBe('tui');
+    expect(readOverride('?layout=auto', sessionStorage)).toBeNull();
+  });
+
   it('ignores a garbage stored value', () => {
     sessionStorage.setItem(OVERRIDE_STORAGE_KEY, 'weird');
     expect(readOverride('', sessionStorage)).toBeNull();

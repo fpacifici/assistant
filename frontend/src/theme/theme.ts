@@ -10,6 +10,17 @@ export type ThemePreference = Theme | 'system';
 
 export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', ...THEMES];
 
+/** Display names for the theme pickers. */
+export const THEME_LABELS: Record<ThemePreference, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+  blossom: 'Blossom',
+  ocean: 'Ocean',
+  sand: 'Sand',
+  twilight: 'Twilight',
+};
+
 const COLOR_SCHEMES: Record<Theme, ColorScheme> = {
   light: 'light',
   dark: 'dark',
