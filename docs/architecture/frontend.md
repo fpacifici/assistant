@@ -82,6 +82,7 @@ Routes are declared in `src/routes.tsx`.
 | `/notebooks` | `Layout`: notebook list |
 | `/notebooks/:notebookId/notes` | `Layout`: notebook list + note list |
 | `/notebooks/:notebookId/notes/:noteId` | `Layout`: lists + note editor |
+| `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
 | `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
 
@@ -185,6 +186,8 @@ Top-level composition component (`components/Layout.tsx`). Reads `notebookId` an
 - **Notes column** (`.notes-column`, 340px, 280px below 1024px): `NoteList`, shown when a notebook is selected.
 - **Main area** (flex): `NoteEditor` when a note is selected; placeholder message otherwise.
 
+A `«`/`»` button at the top of the notes column hides or shows the notebooks column while a notebook is open (`layout/useNotebooksHidden.ts`, remembered in `localStorage` as `assistant.notebooksHidden`). At `/notebooks` the column is always shown, and there is no toggle on mobile.
+
 On mobile it shows one level at a time; see [Responsive layout](#responsive-layout).
 
 ### NotebookList
@@ -200,6 +203,12 @@ Lists notes within the selected notebook (`components/NoteList.tsx`). Same CRUD 
 Notes are sorted most recently updated first by the API and loaded page by page (see [Pagination](#pagination)). Each row is a card: last-update date (`formatNoteDate`: "May 11", with the year when it isn't the current one), title, and a two-line clamp of `Note.preview` (a plain-text excerpt the API builds from the note's first blocks). Share/delete buttons appear on hover on desktop. After each save `NoteEditor` invalidates `['notes', notebookId]`, so the edited note moves to the top with a fresh preview.
 
 Each row shows the caller's tags on the note as read-only chips under the title (at most three, then a `+N` chip whose tooltip lists the rest), from `Note.tags` in the list response.
+
+### Note window
+
+On desktop the editor toolbar has an **Open in new window** button (`lib/noteWindow.ts`). The click opens a blank popup named `note-<noteId>` right away, because popup blockers only allow `window.open` inside the click. Reopening the same note reuses that window. The editor then flushes pending edits. If the save works, it points the popup at `/notebooks/:notebookId/notes/:noteId/window` and moves the main window back to the note list, so the note isn't open for editing in two places. If the save fails, it closes the popup and stays put.
+
+`NoteWindow` (`pages/NoteWindow.tsx`) renders `<NoteEditor standalone />` (no pop-out button) under a slim title bar, or `MobileTopBar` without a back link in mobile mode, and sets `document.title` to the note title. It sits under `ProtectedLayout`, so it shares the main window's cookie session.
 
 ### Pagination
 

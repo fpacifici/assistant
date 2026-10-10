@@ -6,6 +6,7 @@ import Layout from './Layout';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { mockViewport, resizeViewport } from '../test/matchMedia';
 import type { LayoutMode } from '../layout/layoutMode';
+import { NOTEBOOKS_HIDDEN_KEY } from '../layout/useNotebooksHidden';
 
 const mockLogout = vi.fn();
 
@@ -88,6 +89,7 @@ function renderLayout(path: string, layout: LayoutMode | 'auto' = 'desktop') {
 beforeEach(() => {
   vi.clearAllMocks();
   mockInvitesEnabled = true;
+  localStorage.removeItem(NOTEBOOKS_HIDDEN_KEY);
 });
 
 // --- Shared across modes ---
@@ -148,6 +150,30 @@ describe('Layout (desktop)', () => {
     expect(screen.getByTestId('note-list')).toBeInTheDocument();
   });
 
+  it('hides and shows the notebooks column, remembering the choice', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderLayout('/notebooks/nb-1/notes/note-1');
+
+    await user.click(screen.getByRole('button', { name: 'Hide notebooks' }));
+    expect(screen.queryByTestId('notebook-list')).not.toBeInTheDocument();
+    expect(screen.getByTestId('note-list')).toBeInTheDocument();
+    expect(localStorage.getItem(NOTEBOOKS_HIDDEN_KEY)).toBe('true');
+
+    unmount();
+    renderLayout('/notebooks/nb-1/notes');
+    expect(screen.queryByTestId('notebook-list')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show notebooks' }));
+    expect(screen.getByTestId('notebook-list')).toBeInTheDocument();
+    expect(localStorage.getItem(NOTEBOOKS_HIDDEN_KEY)).toBeNull();
+  });
+
+  it('keeps the notebooks column at /notebooks even when hidden', () => {
+    localStorage.setItem(NOTEBOOKS_HIDDEN_KEY, 'true');
+    renderLayout('/notebooks');
+    expect(screen.getByTestId('notebook-list')).toBeInTheDocument();
+  });
+
   it('lays out notebooks, notes and editor as three columns', () => {
     const { container } = renderLayout('/notebooks/nb-1/notes/note-1');
     const columns = [...container.querySelector('.layout')!.children];
@@ -166,6 +192,11 @@ describe('Layout (desktop)', () => {
 // --- Mobile ---
 
 describe('Layout (mobile)', () => {
+  it('has no notebooks toggle', () => {
+    renderLayout('/notebooks/nb-1/notes', 'mobile');
+    expect(screen.queryByRole('button', { name: /notebooks/ })).not.toBeInTheDocument();
+  });
+
   it('shows only the notebook list at /notebooks, titled "Notebooks", without back', () => {
     renderLayout('/notebooks', 'mobile');
     expect(screen.getByRole('heading', { name: 'Notebooks' })).toBeInTheDocument();

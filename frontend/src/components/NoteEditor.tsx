@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
@@ -20,12 +20,18 @@ import { useIsMobile } from '../layout/LayoutModeContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useAutoSave } from '../hooks/useAutoSave';
+import { noteWindowPath, openNoteWindow } from '../lib/noteWindow';
 import type { NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 
-export default function NoteEditor() {
+/**
+ * `standalone` is set in the note's own window (`NoteWindow`), which has no
+ * "Open in new window" button.
+ */
+export default function NoteEditor({ standalone = false }: { standalone?: boolean }) {
   const { notebookId, noteId } = useParams();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
@@ -135,6 +141,23 @@ export default function NoteEditor() {
   }, [isMobile, canShare, debugOpen]);
   useTopBarMenuItems(menuItems);
 
+  // The popup opens synchronously (popup blockers allow it only inside the
+  // click), then loads the note once pending edits are saved. This window
+  // goes back to the note list so the note isn't edited in two places.
+  const { flush } = autoSave;
+  const openInNewWindow = useCallback(async () => {
+    if (!notebookId || !noteId) return;
+    const popup = openNoteWindow(noteId);
+    if (!popup) return;
+    if (!(await flush())) {
+      popup.close();
+      return;
+    }
+    popup.location.href = noteWindowPath(notebookId, noteId);
+    popup.focus();
+    navigate(`/notebooks/${notebookId}/notes`);
+  }, [notebookId, noteId, flush, navigate]);
+
   const unsavedChangesDialog = useUnsavedChangesGuard(
     autoSave.isDirty || autoSave.saving,
     autoSave.flush,
@@ -212,6 +235,11 @@ export default function NoteEditor() {
           {canShare && (
             <button className="share-btn" onClick={() => setSharing(true)}>
               Share
+            </button>
+          )}
+          {!standalone && (
+            <button className="open-window-btn" onClick={() => void openInNewWindow()}>
+              Open in new window
             </button>
           )}
           {errorMessage && (

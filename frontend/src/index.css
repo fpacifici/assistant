@@ -279,6 +279,40 @@ body {
   padding: 16px 12px;
   background: var(--surface-subtle);
   height: 100%;
+  position: relative;
+}
+
+/* Hide/show the notebooks column, top-right of the notes column */
+.notebooks-toggle {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notebooks-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+[data-layout="desktop"] .notes-column .note-list-title {
+  padding-right: 36px;
+}
+
+/* Standalone note window: slim title bar over the editor */
+.note-window-header .app-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main {
@@ -1086,14 +1120,16 @@ ul {
 
 /* Debug toggle button (secondary style) */
 
-.debug-toggle {
+.debug-toggle,
+.open-window-btn {
   padding: 8px 16px;
   border: 1px solid var(--border-strong) !important;
   background: var(--surface) !important;
   color: var(--text-muted) !important;
 }
 
-.debug-toggle:hover:not(:disabled) {
+.debug-toggle:hover:not(:disabled),
+.open-window-btn:hover:not(:disabled) {
   background: var(--hover) !important;
   color: var(--text) !important;
 }
