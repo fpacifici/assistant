@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors
 
 # Default target
 help:
@@ -19,6 +19,7 @@ help:
 	@echo "  make db-migrate          - Apply all pending database migrations"
 	@echo "  make db-rollback         - Revert the most recent database migration"
 	@echo "  make reindex-search      - Rebuild the search index for stale notes"
+	@echo "  make reindex-vectors     - Embed stale notes into the vector index (needs OPENAI_API_KEY)"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -126,6 +127,11 @@ reindex-search:
 	@echo "Reindexing notes for search..."
 	@.venv/bin/python -m assistant.cli.reindex_search --stale-only
 	@echo "✅ Search index up to date"
+
+# Embed notes whose embeddings are missing or outdated
+reindex-vectors:
+	@echo "Embedding stale notes..."
+	@.venv/bin/python -m assistant.cli.reindex_search --vectors --stale-only
 
 # Clean generated files and cache
 clean:

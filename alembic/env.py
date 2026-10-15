@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+# Registers the `vector` type for reflection (note_chunk_embedding.embedding);
+# without it autogenerate warns that it does not recognize the type.
+import pgvector.sqlalchemy  # noqa: F401
 from alembic import context
 from sqlalchemy import create_engine, pool, text
 

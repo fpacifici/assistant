@@ -63,6 +63,10 @@ def _clear_credential_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "GOOGLE_REDIRECT_PATH",
         "GOOGLE_REQUIRE_AUTH_TIME",
         "MAILGUN_APIKEY",
+        # A real key would turn AI features on and send notes to OpenAI.
+        "OPENAI_API_KEY",
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_TRACING",
     ):
         monkeypatch.delenv(key, raising=False)
 

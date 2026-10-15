@@ -68,6 +68,20 @@ class GoogleConfig(TypedDict):
     require_auth_time: bool
 
 
+class AIConfig(TypedDict):
+    """AI features configuration (embeddings, the Ask agent).
+
+    `enabled` is not configured: AI is on exactly when an OpenAI API key is
+    available (`OPENAI_API_KEY`, read by the OpenAI client itself).
+    """
+
+    enabled: bool
+    embedding_model: str
+
+
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+
+
 class SentryConfig(TypedDict):
     """Sentry SDK configuration. A `None` dsn means Sentry is disabled."""
 
@@ -93,6 +107,7 @@ class AssistantConfig(TypedDict, total=False):
     registration: RegistrationConfig
     google: GoogleConfig
     sentry: SentryConfig
+    ai: AIConfig
 
 
 T = TypeVar("T")
@@ -642,6 +657,24 @@ class Config:
             "traces_sample_rate": self._get_sample_rate("sentry.traces_sample_rate"),
             "profile_session_sample_rate": self._get_sample_rate(
                 "sentry.profile_session_sample_rate"
+            ),
+        }
+
+    def get_ai_config(self) -> AIConfig:
+        """Get the effective AI configuration.
+
+        Env var overrides follow the module convention:
+            - `ai.embedding_model` -> `AI_EMBEDDING_MODEL`
+
+        Returns:
+            An `AIConfig` mapping. `enabled` is true when `OPENAI_API_KEY` is
+            set and non-empty; `embedding_model` defaults to
+            `text-embedding-3-small`.
+        """
+        return {
+            "enabled": bool(os.getenv("OPENAI_API_KEY")),
+            "embedding_model": str(
+                self.get("ai.embedding_model", DEFAULT_EMBEDDING_MODEL),
             ),
         }
 

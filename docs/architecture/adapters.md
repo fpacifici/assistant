@@ -6,7 +6,10 @@ Evernote HTML export.
 
 > The original adapter layer (an `ExternalSource` plugin registry that synced
 > Evernote into `documents` tables and a separate vector store) was removed;
-> embeddings are built from the notes system itself.
+> embeddings are built from the notes system itself, see
+> [Vector search](./vectors.md). Notes imported through the web UI are
+> embedded by the API server's worker; after a CLI import run
+> `make reindex-vectors`.
 
 ## ImportSource
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -24,9 +25,23 @@ from assistant.api.routes.users import router as users_router
 from assistant.attachments.storage import FileStorage, LocalFileStorage
 from assistant.config import Config
 from assistant.observability import init_sentry
+from assistant.vectors.indexer import create_vector_indexer
+from assistant.vectors.worker import VectorIndexWorker
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from sqlalchemy.orm import Session, sessionmaker
+
+
+def _default_vector_worker(
+    session_factory: sessionmaker[Session],
+) -> VectorIndexWorker | None:
+    """The worker embedding notes after each write, or `None` if AI is off."""
+    indexer = create_vector_indexer()
+    if indexer is None:
+        return None
+    return VectorIndexWorker(session_factory, indexer.index_note)
 
 
 def create_app(
@@ -34,18 +49,43 @@ def create_app(
     file_storage: FileStorage | None = None,
     file_storage_path: Path | None = None,
     import_settings: ImportSettings | None = None,
+    vector_worker: VectorIndexWorker | None = None,
 ) -> FastAPI:
+    """Build the API application.
+
+    Args:
+        session_factory: Database sessions; defaults to the configured database.
+        file_storage: Attachment storage; defaults to local files.
+        file_storage_path: Root of the default local file storage.
+        import_settings: Note-import upload settings; defaults to config.
+        vector_worker: Embeds notes after their writes commit, started and
+            stopped with the app. Defaults to one built from config, or none
+            when AI is disabled (no `OPENAI_API_KEY`).
+    """
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
     init_sentry()
-
-    app = FastAPI(title="Assistant API", version="0.1.0")
 
     if session_factory is None:
         from assistant.models.database import get_session_factory  # noqa: PLC0415
 
         session_factory = get_session_factory()
+
+    worker = vector_worker or _default_vector_worker(session_factory)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if worker is not None:
+            worker.start()
+        try:
+            yield
+        finally:
+            if worker is not None:
+                worker.stop()
+
+    app = FastAPI(title="Assistant API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
+    app.state.vector_worker = worker
 
     if file_storage is None:
         storage_path = file_storage_path or Config().get_file_storage_path()

@@ -43,3 +43,4 @@ ADRs should be named: `XXXX-short-title.md` where XXXX is a sequential number (e
 
 - `0001-session-ownership.md` - Session ownership and dependency injection
 - `0002-postgres-fts-search.md` - Keyword search on Postgres full text search behind a search service
+- `0003-pgvector-note-embeddings.md` - Note embeddings in pgvector, written after commit by a background worker

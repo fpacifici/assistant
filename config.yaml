@@ -56,3 +56,11 @@ sentry:
   environment: development
   # traces_sample_rate: 1.0            # optional, this is the default
   # profile_session_sample_rate: 1.0   # optional, this is the default
+
+# AI features: embedding notes for the Ask AI tab. They are enabled only when
+# the OPENAI_API_KEY env var is set; without it nothing is embedded.
+ai:
+  # Changing the model of the same dimension (1536) needs a reindex:
+  # bump VECTOR_INDEX_VERSION in assistant/vectors/indexer.py and run
+  # `make reindex-vectors`. A different dimension needs a migration.
+  embedding_model: text-embedding-3-small

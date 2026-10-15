@@ -8,12 +8,22 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from langchain_core.embeddings import DeterministicFakeEmbedding
 from sqlalchemy import delete, update
 
 from assistant.cli.reindex_search import main
-from assistant.models.schema import NodeSearchIndex, Note, NoteSearchIndex, User
+from assistant.models.schema import (
+    NodeSearchIndex,
+    Note,
+    NoteSearchIndex,
+    NoteVectorIndex,
+    User,
+)
 from assistant.notes.service import add_markdown_node, create_note, create_notebook
 from assistant.search.service import search
+from assistant.vectors.indexer import VectorIndexer
+from assistant.vectors.staleness import stale_note_ids
+from assistant.vectors.store import EMBEDDING_DIMENSIONS
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -130,3 +140,68 @@ def test_stale_only_reindexes_notes_indexed_with_an_older_version(
     assert _run(pg_session, "--stale-only") == 0
 
     assert _found(pg_session, alice, "berlin")
+
+
+# --- Vectors ---
+
+
+class _FlakyEmbeddings(DeterministicFakeEmbedding):
+    """Fake embeddings failing for texts containing a marker word."""
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if any("unlucky" in text for text in texts):
+            msg = "insufficient_quota"
+            raise RuntimeError(msg)
+        return super().embed_documents(texts)
+
+
+def _run_vectors(session: Session, *args: str) -> int:
+    indexer = VectorIndexer(_FlakyEmbeddings(size=EMBEDDING_DIMENSIONS), "fake")
+    with patch(
+        "assistant.cli.reindex_search.create_vector_indexer", return_value=indexer
+    ):
+        return _run(session, "--vectors", *args)
+
+
+def _stale(session: Session) -> set[uuid.UUID]:
+    return set(session.scalars(stale_note_ids()))
+
+
+def test_vectors_embeds_every_note(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    notes = [_make_note(pg_session, alice, text) for text in ("Berlin", "Paris")]
+
+    assert _run_vectors(pg_session) == 0
+
+    assert not _stale(pg_session) & {note.id for note in notes}
+
+
+def test_vectors_stale_only_skips_fresh_notes(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    fresh = _make_note(pg_session, alice, "Berlin")
+    assert _run_vectors(pg_session) == 0
+    fresh_entry = pg_session.get(NoteVectorIndex, fresh.id)
+    assert fresh_entry is not None
+    indexed_at = fresh_entry.indexed_at
+    stale = _make_note(pg_session, alice, "Paris")
+
+    assert _run_vectors(pg_session, "--stale-only") == 0
+
+    pg_session.refresh(fresh_entry)
+    assert fresh_entry.indexed_at == indexed_at
+    assert stale.id not in _stale(pg_session)
+
+
+def test_vectors_failures_are_skipped_and_reported(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    broken = _make_note(pg_session, alice, "unlucky")
+    fine = _make_note(pg_session, alice, "Paris")
+
+    assert _run_vectors(pg_session) == 1
+
+    assert broken.id in _stale(pg_session)
+    assert fine.id not in _stale(pg_session)
+
+
+def test_vectors_need_an_api_key(pg_session: Session) -> None:
+    assert _run(pg_session, "--vectors") == 1

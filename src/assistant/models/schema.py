@@ -501,6 +501,42 @@ class NodeSearchIndex(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
 
+class NoteVectorIndex(Base):
+    """Tracks whether a note's embeddings are up to date.
+
+    The embeddings themselves live in `assistant.note_chunk_embedding`, a
+    Postgres-only table (pgvector) created by the add_vector_index migration
+    and not mapped here; see `assistant.vectors`. One row per note, deleted
+    with it by the database (ON DELETE CASCADE). There is deliberately no
+    ORM relationship from `Note`.
+
+    A note needs (re)embedding when it has no row, `indexed_at` is null,
+    `index_version` is older than `VECTOR_INDEX_VERSION`, or it was marked
+    stale after it was last indexed (`stale_since > indexed_at`).
+    """
+
+    __tablename__ = "note_vector_index"
+    __table_args__ = {"schema": "assistant"}  # noqa: RUF012
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # SHA-256 of the embedded chunk texts; equal hashes skip the embedding call.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # `assistant.vectors.indexer.VECTOR_INDEX_VERSION` this entry was built with.
+    index_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # When the indexer read the note it embedded (not when it finished).
+    indexed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Last time a write changed what the note's embeddings should contain.
+    stale_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class Tag(Base):
     """A user's tag. Each user has their own tag vocabulary.
 

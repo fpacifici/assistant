@@ -115,6 +115,7 @@ from assistant.notes.permissions import (
 )
 from assistant.notes.positions import generate_position_between
 from assistant.search.indexer import index_note
+from assistant.vectors.staleness import mark_notebook_stale, mark_notes_stale
 
 if TYPE_CHECKING:
     import uuid
@@ -241,8 +242,10 @@ def update_notebook(
         caller,
         PermissionName.UPDATE_NOTEBOOK,
     )
-    if name is not None:
+    if name is not None and name != notebook.name:
         notebook.name = name
+        # The notebook name is part of every chunk embedded for its notes.
+        mark_notebook_stale(session, notebook_id)
     session.flush()
     return notebook
 
@@ -287,6 +290,7 @@ def create_note(
     session.flush()
     _grant_owner_entitlement(session, owner, RoleName.NOTE_OWNER, note_id=note.id)
     index_note(session, note.id)
+    mark_notes_stale(session, [note.id])
     return note
 
 
@@ -377,12 +381,14 @@ def _touch_note(session: Session, note_id: uuid.UUID) -> None:
     """Mark a note as changed: bump its timestamp and reindex it for search.
 
     Every note mutation goes through here, which is what keeps the search
-    index in step with the content (see `assistant.search.indexer`).
+    index in step with the content (see `assistant.search.indexer`), and
+    marks its embeddings stale (see `assistant.vectors.staleness`).
     """
     session.execute(
         update(Note).where(Note.id == note_id).values(update_timestamp=datetime.now(UTC)),
     )
     index_note(session, note_id)
+    mark_notes_stale(session, [note_id])
 
 
 def _last_position(

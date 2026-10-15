@@ -16,7 +16,8 @@ assistant/
 │       ├── evals/              # Evaluation framework
 │       ├── models/             # SQLAlchemy ORM models & DB schema
 │       ├── notes/              # Notes service layer (CRUD, positions, users)
-│       └── tui/                # Terminal UI (Textual chat app)
+│       ├── tui/                # Terminal UI (Textual chat app)
+│       └── vectors/            # Note embeddings (pgvector), indexer, worker
 ├── frontend/                   # React/TypeScript web UI (Vite)
 │   └── src/
 │       ├── api/                # API client layer
