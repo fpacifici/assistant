@@ -10,8 +10,11 @@ from typing import TYPE_CHECKING
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from assistant.agents.rag import AskAgent, create_ask_agent
+from assistant.agents.tracing import configure_tracing
 from assistant.api.dependencies import ImportSettings
 from assistant.api.exceptions import register_exception_handlers
+from assistant.api.routes.ask import router as ask_router
 from assistant.api.routes.auth import router as auth_router
 from assistant.api.routes.files import router as files_router
 from assistant.api.routes.imports import router as imports_router
@@ -44,12 +47,13 @@ def _default_vector_worker(
     return VectorIndexWorker(session_factory, indexer.index_note)
 
 
-def create_app(
+def create_app(  # noqa: PLR0913
     session_factory: sessionmaker[Session] | None = None,
     file_storage: FileStorage | None = None,
     file_storage_path: Path | None = None,
     import_settings: ImportSettings | None = None,
     vector_worker: VectorIndexWorker | None = None,
+    ask_agent: AskAgent | None = None,
 ) -> FastAPI:
     """Build the API application.
 
@@ -61,6 +65,8 @@ def create_app(
         vector_worker: Embeds notes after their writes commit, started and
             stopped with the app. Defaults to one built from config, or none
             when AI is disabled (no `OPENAI_API_KEY`).
+        ask_agent: The Ask AI agent. Defaults to one built from config, or
+            none when AI is disabled (the /ask routes then answer 503).
     """
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
@@ -72,6 +78,7 @@ def create_app(
         session_factory = get_session_factory()
 
     worker = vector_worker or _default_vector_worker(session_factory)
+    configure_tracing()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -86,6 +93,7 @@ def create_app(
     app = FastAPI(title="Assistant API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
     app.state.vector_worker = worker
+    app.state.ask_agent = ask_agent or create_ask_agent(session_factory)
 
     if file_storage is None:
         storage_path = file_storage_path or Config().get_file_storage_path()
@@ -130,5 +138,6 @@ def create_app(
     app.include_router(imports_router, prefix="/imports", tags=["imports"])
     app.include_router(tags_router, prefix="/tag", tags=["tags"])
     app.include_router(search_router, prefix="/search", tags=["search"])
+    app.include_router(ask_router, prefix="/ask", tags=["ask"])
 
     return app

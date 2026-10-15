@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from langsmith import Client
 
-from assistant.agents.infra import init_environment
+from assistant.agents.tracing import configure_tracing
 from assistant.evals.dataset import create_dataset
 from assistant.evals.target import correctness_evaluator
 from assistant.evals.target import target as langsmith_target
@@ -68,7 +68,7 @@ def _create_dataset(yaml_file: Path | None) -> int:
         return 1
 
     try:
-        init_environment()
+        configure_tracing()
         create_dataset(yaml_file)
         logger.info("Dataset created from %s", yaml_file)
     except Exception:
@@ -116,7 +116,7 @@ def main() -> int:
         return _create_dataset(args.yaml_file)
     if args.action == "langsmith-evaluate":
         try:
-            init_environment()
+            configure_tracing()
             run_langsmith_evaluate(
                 data=args.data,
                 experiment_prefix=args.experiment_prefix,

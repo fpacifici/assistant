@@ -162,4 +162,5 @@ the webui.
 - [`Observability (Sentry)`](observability.md)
 - [`Search`](search.md)
 - [`Vector search`](vectors.md)
+- [`Ask AI`](ask.md)
 - [`Adapters (import)`](adapters.md)

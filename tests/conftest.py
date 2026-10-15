@@ -3,13 +3,15 @@
 import logging
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from assistant.config import Config
 from assistant.models import schema as _schema  # noqa: F401
@@ -51,10 +53,10 @@ def _disable_sentry() -> Iterator[None]:
 def _clear_credential_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Hide a developer's `.env` credentials from the tests.
 
-    `load_dotenv()` runs when `assistant.config` is imported (and again in
-    `init_environment()`), and env vars override YAML config. Real credentials
-    would break tests that assert on their own config files, make tests pass
-    locally but fail in CI, and let an unmocked email path hit real Mailgun.
+    `load_dotenv()` runs when `assistant.config` is imported, and env vars
+    override YAML config. Real credentials would break tests that assert on
+    their own config files, make tests pass locally but fail in CI, and let
+    an unmocked email path hit real Mailgun (or a real key reach OpenAI).
     Function-scoped so it also undoes any reload that happens mid-run.
     """
     for key in (
@@ -255,7 +257,15 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
         Database session.
     """
     database_url = "sqlite:///:memory:"
-    engine = create_engine(database_url, echo=False)
+    # One connection shared by every thread: code under test may run work
+    # on other threads (e.g. the agent's tools), and each new connection to
+    # an in-memory database would be a different, empty database.
+    engine = create_engine(
+        database_url,
+        echo=False,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
 
     tables = Base.metadata.sorted_tables
     original_schemas: dict[str, str | None] = {}
@@ -287,3 +297,29 @@ def db_session(tmp_path: Path) -> Iterator[Session]:  # noqa: ARG001
     finally:
         for table in tables:
             table.schema = original_schemas[table.fullname]
+
+
+def _factory_for(session: Session) -> Callable[[], AbstractContextManager[Session]]:
+    """A `sessionmaker` stand-in whose sessions are all `session`, left open."""
+
+    @contextmanager
+    def factory() -> Iterator[Session]:
+        yield session
+
+    return factory
+
+
+@pytest.fixture
+def db_session_factory(
+    db_session: Session,
+) -> Callable[[], AbstractContextManager[Session]]:
+    """For code that opens its own sessions: every session is `db_session`."""
+    return _factory_for(db_session)
+
+
+@pytest.fixture
+def pg_session_factory(
+    pg_session: Session,
+) -> Callable[[], AbstractContextManager[Session]]:
+    """For code that opens its own sessions: every session is `pg_session`."""
+    return _factory_for(pg_session)

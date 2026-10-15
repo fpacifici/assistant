@@ -3,8 +3,6 @@
 import logging
 import sys
 
-from assistant.agents.infra import init_environment
-from assistant.agents.vectors import VectorStore
 from assistant.models.database import drop_database, init_database
 
 logging.basicConfig(
@@ -22,9 +20,6 @@ def main() -> int:
     """
     try:
         logger.info("Initializing database schema...")
-        init_environment()
-        vector_store = VectorStore()
-        vector_store.delete_collection()
         drop_database()
         init_database()
         logger.info("Database schema initialized successfully")

@@ -482,6 +482,52 @@ SearchResponse shape:
 - `unknown_tags` lists `tag:` filters the caller has no tag for, in which
   case `results` is empty.
 
+### Ask AI
+
+Questions answered by the AI agent from the notes the caller can view, in
+per-user threads. The agent is described in [`ask.md`](ask.md). Every
+route except `/ask/status` answers **503** when AI is disabled (no
+`OPENAI_API_KEY` on the server); a thread of another user is a 404.
+
+```
+GET    /ask/status                         -> {"enabled": bool}
+GET    /ask/threads?offset=0&limit=20      -> ChatThreadResponse[] (most recently used first)
+POST   /ask/threads                        -> 201 ChatThreadResponse (title "")
+GET    /ask/threads/{id}                   -> {"thread": ChatThreadResponse, "messages": ChatMessage[]}
+DELETE /ask/threads/{id}                   -> 204 (also deletes the conversation)
+POST   /ask/threads/{id}/messages          -> 200 text/event-stream
+       {"question": "..."}                    (1-4000 characters)
+```
+
+ChatThreadResponse is `{"id", "title", "created_at", "updated_at"}`; the
+first question becomes the title. ChatMessage is
+`{"role": "user"|"assistant", "content": "markdown", "sources": Source[]}`,
+and a Source is `{"note_id", "notebook_id", "title", "notebook_name"}`.
+
+Asking streams server-sent events:
+
+```
+event: tool
+data: {"name": "search_notes", "status": "start", "input": {"query": "rome trip"}}
+
+event: tool
+data: {"name": "search_notes", "status": "end", "input": {}}
+
+event: token
+data: {"text": "You visited "}
+
+event: sources
+data: {"sources": [{"note_id": "uuid", "notebook_id": "uuid", "title": "Rome", "notebook_name": "Travel"}]}
+
+event: done
+data: {}
+```
+
+If the model fails (no credits, rate limit, outage) the stream ends with
+`event: error` / `data: {"message": "..."}` (a user-facing message) and
+`done`, instead of an HTTP error. The request is a POST, so browsers read
+it with `fetch` rather than `EventSource`.
+
 ### Error Responses
 
 All error responses follow the format:
@@ -501,6 +547,7 @@ Status codes:
 - 409: Conflict (duplicate email, version conflict)
 - 413: Upload too large
 - 422: Validation error (missing/invalid fields or headers)
+- 503: AI features are disabled on this server (`/ask` routes)
 
 ## Websocket
 

@@ -57,10 +57,15 @@ sentry:
   # traces_sample_rate: 1.0            # optional, this is the default
   # profile_session_sample_rate: 1.0   # optional, this is the default
 
-# AI features: embedding notes for the Ask AI tab. They are enabled only when
-# the OPENAI_API_KEY env var is set; without it nothing is embedded.
+# AI features: embedding notes and the Ask AI tab. They are enabled only when
+# the OPENAI_API_KEY env var is set; without it nothing is embedded and the
+# Ask AI tab is hidden. LangSmith tracing is enabled only when
+# LANGSMITH_API_KEY is set.
 ai:
   # Changing the model of the same dimension (1536) needs a reindex:
   # bump VECTOR_INDEX_VERSION in assistant/vectors/indexer.py and run
   # `make reindex-vectors`. A different dimension needs a migration.
   embedding_model: text-embedding-3-small
+  # A langchain "provider:model" string.
+  chat_model: openai:gpt-4.1
+  # langsmith_project: Assistant  # optional, this is the default
