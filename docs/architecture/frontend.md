@@ -83,6 +83,7 @@ Routes are declared in `src/routes.tsx`.
 | `/notebooks/:notebookId/notes` | `Layout`: notebook list + note list |
 | `/notebooks/:notebookId/notes/:noteId` | `Layout`: lists + note editor |
 | `/search?q=…` | `SearchPage`: note search results (see Search below) |
+| `/ask?thread=…` | `AskPage`: questions to the AI agent about the notes (see Ask AI below) |
 | `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
 | `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
@@ -310,6 +311,19 @@ Holds a `ServerRegistry` and a block snapshot in refs that persist across render
 - Highlights are rendered from API segments as `<mark>` text nodes, never as HTML.
 - The empty state, unknown-tag messages and a syntax hint (when there is no query) are text lines.
 
+### Ask AI
+
+The agent and its API are in [`ask.md`](ask.md).
+
+- `useAskEnabled()` reads `GET /ask/status` once (key `['ask', 'status']`). The "Ask AI" link in `DesktopHeader`, the mobile `⋯` menu and the TUI File menu only appear when it is true; `AskPage` says the feature is unavailable otherwise.
+- `AskPage` keeps the open thread in the URL (`?thread=<id>`; `thread=new`, or no parameter on desktop, is a new chat).
+  - **Desktop**: `DesktopHeader` above `AskThreadList` (sidebar: New chat, threads most recent first, delete with confirmation) and `AskConversation`.
+  - **Mobile**: `/ask` is the thread list; with `?thread=` the conversation is full screen and Back returns to the list.
+  - **TUI**: the desktop page (File > Ask AI… navigates to it).
+- `AskConversation` shows the stored messages (`['ask', 'thread', id]`) and a question box (Enter sends, Shift+Enter is a newline). A new chat creates its thread on the first question and moves the URL to it once the answer is complete.
+- Answers stream from `streamAnswer()` (`api/ask.ts`), which POSTs with `fetch` and parses the server-sent events (`parseSse`). While answering, the page shows the text so far and the running tool ("Searching your notes…", "Reading a note…"); an `error` event is shown in place of the answer. When done, the exchange is written into the query cache, then refetched.
+- Answers are markdown shown as plain text (`white-space: pre-wrap`). Sources are links to the notes (`/notebooks/:notebookId/notes/:noteId`).
+
 ## Markdown Engine
 
 The `src/markdown/` module is the core data layer of the editor. Three files work together to bridge BlockNote's document model with the server's node-per-block API.
@@ -353,7 +367,7 @@ All API modules live in `src/api/` and use a shared `apiFetch()` wrapper (`api/c
 - Sets `Content-Type: application/json` when there is a body and sends cookies (`credentials: 'include'`)
 - Throws `ApiError` (with HTTP status) on non-OK responses
 
-Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`, `tags.ts`, `search.ts`.
+Modules: `auth.ts`, `users.ts`, `notebooks.ts`, `notes.ts`, `nodes.ts`, `files.ts`, `invites.ts`, `imports.ts`, `tags.ts`, `search.ts`, `ask.ts`. `ask.ts` also reads the streamed answers with `fetch` directly (`streamAnswer`), since `apiFetch` only handles JSON responses.
 
 ## Data Flow Summary
 

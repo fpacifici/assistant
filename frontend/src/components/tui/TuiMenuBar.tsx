@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchInvitesConfig } from '../../api/invites';
+import { useAskEnabled } from '../../hooks/useAskEnabled';
 import { useTheme } from '../../theme/ThemeContext';
 import { THEME_LABELS, THEME_PREFERENCES } from '../../theme/theme';
 import ImportDialog from '../ImportDialog';
@@ -57,6 +58,7 @@ export default function TuiMenuBar() {
     queryKey: ['invites', 'config'],
     queryFn: fetchInvitesConfig,
   });
+  const askEnabled = useAskEnabled();
 
   const menus = useMemo<Menu[]>(() => {
     const notebooksShown = tui.visiblePanes.includes('notebooks');
@@ -71,29 +73,33 @@ export default function TuiMenuBar() {
     }
     options.push({ id: 'settings', label: 'Settings…', onSelect: () => navigate('/settings') });
 
-    return [
+    const fileItems: MenuItem[] = [
       {
-        title: 'File',
-        items: [
-          {
-            id: 'new-notebook',
-            label: 'New notebook…',
-            hint: 'F7',
-            disabled: !notebooksShown,
-            onSelect: () => tui.runList('notebooks', 'new'),
-          },
-          {
-            id: 'new-note',
-            label: 'New note…',
-            hint: 'F7',
-            disabled: !notebookId,
-            onSelect: () => tui.runList('notes', 'new'),
-          },
-          { id: 'search', label: 'Search notes…', hint: '/', onSelect: () => tui.openSearch() },
-          { id: 'import', label: 'Import from Evernote…', onSelect: () => setImporting(true) },
-          { id: 'logout', label: 'Log out', onSelect: () => void logout() },
-        ],
+        id: 'new-notebook',
+        label: 'New notebook…',
+        hint: 'F7',
+        disabled: !notebooksShown,
+        onSelect: () => tui.runList('notebooks', 'new'),
       },
+      {
+        id: 'new-note',
+        label: 'New note…',
+        hint: 'F7',
+        disabled: !notebookId,
+        onSelect: () => tui.runList('notes', 'new'),
+      },
+      { id: 'search', label: 'Search notes…', hint: '/', onSelect: () => tui.openSearch() },
+    ];
+    if (askEnabled) {
+      fileItems.push({ id: 'ask', label: 'Ask AI…', onSelect: () => navigate('/ask') });
+    }
+    fileItems.push(
+      { id: 'import', label: 'Import from Evernote…', onSelect: () => setImporting(true) },
+      { id: 'logout', label: 'Log out', onSelect: () => void logout() },
+    );
+
+    return [
+      { title: 'File', items: fileItems },
       {
         title: 'Note',
         items: [
@@ -141,7 +147,19 @@ export default function TuiMenuBar() {
         items: [{ id: 'keys', label: 'Keys', hint: 'F1', onSelect: () => tui.setHelpOpen(true) }],
       },
     ];
-  }, [tui, pane, focus, notebookId, noteId, preference, setPreference, invitesConfig, navigate, logout]);
+  }, [
+    tui,
+    pane,
+    focus,
+    notebookId,
+    noteId,
+    preference,
+    setPreference,
+    invitesConfig,
+    askEnabled,
+    navigate,
+    logout,
+  ]);
 
   const openMenu = (index: number) => {
     setMenuIndex(index);

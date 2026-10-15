@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useMemo } from 'react';
 import OverflowMenu from './OverflowMenu';
@@ -19,6 +19,10 @@ vi.mock('../api/invites', () => ({
     invites_enabled: false,
   }),
 }));
+
+vi.mock('../api/ask', () => ({ fetchAskStatus: vi.fn() }));
+
+import { fetchAskStatus } from '../api/ask';
 
 const onExtra = vi.fn();
 
@@ -41,6 +45,7 @@ function renderMenu({ withRegistrar = false } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: false });
 });
 
 // --- Open / close ---
@@ -108,5 +113,25 @@ describe('OverflowMenu', () => {
     expect(screen.getByRole('menuitemradio', { name: 'System' })).toHaveAttribute('aria-checked', 'false');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(screen.getByRole('menu')).toBeInTheDocument();
+  });
+
+  it('links Ask AI only when AI is enabled on the server', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
+    renderMenu();
+
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+
+    expect(await screen.findByRole('menuitem', { name: 'Ask AI' })).toHaveAttribute('href', '/ask');
+  });
+
+  it('hides Ask AI when AI is disabled', async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByRole('button', { name: 'Menu' }));
+
+    await waitFor(() => expect(fetchAskStatus).toHaveBeenCalled());
+    expect(screen.queryByRole('menuitem', { name: 'Ask AI' })).not.toBeInTheDocument();
   });
 });
