@@ -185,6 +185,13 @@ python -m assistant.cli.chat --email user@example.com [--thread-id <uuid>]
 
 Exit with **Ctrl+Q**. See [`docs/modules/tui.md`](docs/modules/tui.md) for details.
 
+### Ask AI evals
+
+`make eval` loads the eval corpus, syncs the LangSmith dataset and runs an
+experiment (see [`Ask AI`](docs/architecture/ask.md#evals)). It needs real
+`OPENAI_API_KEY` and `LANGSMITH_API_KEY` keys: run it by hand only, never
+in CI or as part of `make check`.
+
 ### REST API Server
 
 Start the API server (requires Postgres to be running, see below):

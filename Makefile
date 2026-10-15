@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors eval
 
 # Default target
 help:
@@ -20,6 +20,7 @@ help:
 	@echo "  make db-rollback         - Revert the most recent database migration"
 	@echo "  make reindex-search      - Rebuild the search index for stale notes"
 	@echo "  make reindex-vectors     - Embed stale notes into the vector index (needs OPENAI_API_KEY)"
+	@echo "  make eval                - Run the Ask AI evals on LangSmith (real API keys; never in CI)"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -132,6 +133,13 @@ reindex-search:
 reindex-vectors:
 	@echo "Embedding stale notes..."
 	@.venv/bin/python -m assistant.cli.reindex_search --vectors --stale-only
+
+# Ask AI evals against LangSmith. Calls OpenAI and LangSmith with real keys
+# (OPENAI_API_KEY, LANGSMITH_API_KEY): run by hand, never in CI.
+eval:
+	@.venv/bin/python -m assistant.cli.eval load-corpus
+	@.venv/bin/python -m assistant.cli.eval sync-dataset
+	@.venv/bin/python -m assistant.cli.eval evaluate
 
 # Clean generated files and cache
 clean:
