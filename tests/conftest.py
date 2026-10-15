@@ -115,10 +115,7 @@ def test_config(tmp_path: Path) -> Config:
         "  user: test\n"
         "  password: test\n"
         "  name: test\n"
-        "document_storage_path: " + str(tmp_path / "documents") + "\n"
-        "external_sources:\n"
-        "  fake:\n"
-        "    enabled: true\n",
+        "document_storage_path: " + str(tmp_path / "documents") + "\n",
     )
 
     return Config(config_path=config_file)

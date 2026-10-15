@@ -6,42 +6,9 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from assistant.models.content import DocumentContent
 from assistant.models.database import get_database_url
 
 logger = getLogger(__name__)
-
-
-def embedding_content_and_metadata(
-    doc_content: DocumentContent,
-    *,
-    extra_metadata: dict[str, Any] | None = None,
-) -> tuple[str, dict[str, Any]]:
-    """Build content string and metadata dict for the vector store embedding.
-
-    Args:
-        doc_content: Document content with optional title and metadata.
-        extra_metadata: Additional keys to merge into the metadata dict (e.g. external_id,
-            source_id, format, uuid). These take precedence over doc_content.metadata.
-
-    Returns:
-        A tuple (embedding_text, metadata). embedding_text is the body decoded as UTF-8,
-        optionally prefixed with the document title. metadata is a flat dict suitable
-        for the vector store, with string values.
-    """
-    body_text = doc_content.bytes.decode("utf-8")
-    title = doc_content.title
-    embedding_text = f"{title}\n\n{body_text}" if title else body_text
-    metadata: dict[str, Any] = {}
-    if doc_content.metadata:
-        for k, v in doc_content.metadata.items():
-            metadata[k] = str(v)
-    if title:
-        metadata["title"] = title
-    if extra_metadata:
-        for k, v in extra_metadata.items():
-            metadata[k] = str(v)
-    return embedding_text, metadata
 
 
 class VectorResult(NamedTuple):
@@ -131,12 +98,3 @@ def init_vector_store(model: str = "text-embedding-3-small") -> VectorStore:
     if _default_store is None:
         _default_store = VectorStore(model=model)
     return _default_store
-
-
-def embed(content: str, metadata: dict[str, Any]) -> list[list[float]]:
-    """Convenience function used by CLI code to generate embeddings.
-
-    Uses the shared :class:`VectorStore` and delegates to its
-    :meth:`VectorStore.embed` method.
-    """
-    return init_vector_store().embed(content, metadata)

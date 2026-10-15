@@ -23,15 +23,6 @@ import_storage_path: data/imports
 # Largest import zip accepted, in bytes (IMPORT_MAX_UPLOAD_BYTES env var)
 import_max_upload_bytes: 524288000  # 500 MB
 
-# External source configurations
-external_sources:
-  fake:
-    # Fake provider configuration for testing
-    enabled: true
-    # Add any fake-specific configuration here
-  evernote:
-    # Nothing to be configured here
-
 # The assistant's own domain (also used as the Mailgun sending domain)
 domain: mynotes.my
 

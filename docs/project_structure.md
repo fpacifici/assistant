@@ -4,8 +4,8 @@
 assistant/
 ├── src/                        # The backend code
 │   └── assistant/              # Main Python package
-│       ├── adapters/           # Data source adapters & plugin system
-│       │   └── plugins/        # Adapter plugins (e.g. fake for testing)
+│       ├── adapters/           # Note import (Evernote HTML export)
+│       │   └── plugins/        # Import sources (HTML directory)
 │       ├── agents/             # RAG agent, vector search, infra
 │       ├── api/                # FastAPI REST API
 │       │   ├── routes/         # Route handlers (users, notebooks, notes)
@@ -39,7 +39,6 @@ assistant/
 │   ├── adr/                    # Architecture Decision Records
 │   ├── specs/                  # Specifications
 │   └── modules/                # Module documentation
-│       └── registry/
 ├── .claude/                    # Claude AI configuration
 ├── config.yaml                 # Application configuration
 ├── docker-compose.yml          # Dev services (Postgres)

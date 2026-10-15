@@ -16,8 +16,8 @@ _CONFIG_ENV_KEYS: tuple[str, ...] = (
     "DATABASE_USER",
     "DATABASE_PASSWORD",
     "DATABASE_NAME",
-    "EXTERNAL_SOURCES_FAKE_ENABLED",
-    "EXTERNAL_SOURCES_FAKE_TIMEOUT",
+    "SECTION_SAMPLE_ENABLED",
+    "SECTION_SAMPLE_TIMEOUT",
     "DOMAIN",
     "MAILGUN_APIURL",
     "MAILGUN_APIKEY",
@@ -49,16 +49,13 @@ def test_config_loads_from_file(tmp_path: Path) -> None:
     """Test loading configuration from YAML file."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "document_storage_path: /test/path\n"
-        "external_sources:\n"
-        "  fake:\n"
-        "    enabled: true\n",
+        "document_storage_path: /test/path\nsection:\n  sample:\n    enabled: true\n",
     )
 
     config = Config(config_path=config_file)
 
     assert config.get("document_storage_path") == "/test/path"
-    assert config.get("external_sources.fake.enabled") is True
+    assert config.get("section.sample.enabled") is True
 
 
 def test_config_handles_missing_file(tmp_path: Path) -> None:
@@ -74,13 +71,13 @@ def test_config_get_with_dot_notation(tmp_path: Path) -> None:
     """Test getting nested config values with dot notation."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "external_sources:\n  fake:\n    enabled: true\n    timeout: 30\n",
+        "section:\n  sample:\n    enabled: true\n    timeout: 30\n",
     )
 
     config = Config(config_path=config_file)
 
-    assert config.get("external_sources.fake.enabled") is True
-    assert config.get("external_sources.fake.timeout") == 30
+    assert config.get("section.sample.enabled") is True
+    assert config.get("section.sample.timeout") == 30
 
 
 def test_config_get_document_storage_path(tmp_path: Path) -> None:
@@ -146,31 +143,6 @@ def test_config_get_import_max_upload_bytes_default(tmp_path: Path) -> None:
         limit = Config(config_path=config_file).get_import_max_upload_bytes()
 
     assert limit == 500 * 1024 * 1024
-
-
-def test_config_get_external_source_config(tmp_path: Path) -> None:
-    """Test getting external source configuration."""
-    config_file = tmp_path / "test_config.yaml"
-    config_file.write_text(
-        "external_sources:\n"
-        "  fake:\n"
-        "    enabled: true\n"
-        "    timeout: 30\n"
-        "  other:\n"
-        "    enabled: false\n",
-    )
-
-    config = Config(config_path=config_file)
-
-    fake_config = config.get_external_source_config("fake")
-    assert fake_config["enabled"] is True
-    assert fake_config["timeout"] == 30
-
-    other_config = config.get_external_source_config("other")
-    assert other_config["enabled"] is False
-
-    missing_config = config.get_external_source_config("nonexistent")
-    assert missing_config == {}
 
 
 def test_config_get_database_config_from_components(tmp_path: Path) -> None:
@@ -250,21 +222,21 @@ def test_config_get_env_override_even_when_key_exists(tmp_path: Path) -> None:
         assert config.get("document_storage_path") == "/env/path"
 
 
-def test_config_get_external_sources_env_override_type_coercion(tmp_path: Path) -> None:
+def test_config_get_nested_env_override_type_coercion(tmp_path: Path) -> None:
     """Test type coercion for env overrides (bool/int)."""
     config_file = tmp_path / "test_config.yaml"
     config_file.write_text(
-        "external_sources:\n  fake:\n    enabled: true\n    timeout: 30\n",
+        "section:\n  sample:\n    enabled: true\n    timeout: 30\n",
     )
 
     config = Config(config_path=config_file)
 
     with patch.dict(
         os.environ,
-        {"EXTERNAL_SOURCES_FAKE_ENABLED": "false", "EXTERNAL_SOURCES_FAKE_TIMEOUT": "31"},
+        {"SECTION_SAMPLE_ENABLED": "false", "SECTION_SAMPLE_TIMEOUT": "31"},
     ):
-        assert config.get("external_sources.fake.enabled") is False
-        assert config.get("external_sources.fake.timeout") == 31
+        assert config.get("section.sample.enabled") is False
+        assert config.get("section.sample.timeout") == 31
 
 
 def test_config_get_database_config_from_database_url_key(tmp_path: Path) -> None:

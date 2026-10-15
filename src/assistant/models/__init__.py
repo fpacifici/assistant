@@ -3,8 +3,6 @@
 from assistant.models.database import Base, get_engine, get_session_factory
 from assistant.models.schema import (
     Chunk,
-    Document,
-    ExternalSource,
     File,
     FileState,
     Node,
@@ -17,8 +15,6 @@ from assistant.models.schema import (
 __all__ = [
     "Base",
     "Chunk",
-    "Document",
-    "ExternalSource",
     "File",
     "FileState",
     "Node",

@@ -1,11 +1,9 @@
 """Notes-import source interface definition.
 
-A sibling to `ExternalSource` (`adapters/source.py`), for one-shot bulk
-imports of external content directly into the notes system rather than
-incremental RAG sync. Deliberately narrower than `ExternalSource`: no `since`
-cursor (a directory import is not incremental), and no
-`build()`/`ExternalSourceInstanceConfig`/`Registry` machinery — there is
-exactly one implementation this iteration, constructed directly by its CLI.
+For one-shot bulk imports of external content directly into the notes
+system. There is no `since` cursor (a directory import is not incremental)
+and no registry: the single implementation (`HTMLFileImportSource`) is
+constructed directly by its callers.
 """
 
 from __future__ import annotations
@@ -29,8 +27,8 @@ class ImportedNote:
 class ImportSource(ABC):
     """Abstract base class for one-shot notes-import sources.
 
-    Mirrors ExternalSource's list-then-fetch shape, but for bulk import into
-    the notes system rather than incremental RAG document sync.
+    List the documents, then fetch and parse each one for import into the
+    notes system.
     """
 
     @abstractmethod

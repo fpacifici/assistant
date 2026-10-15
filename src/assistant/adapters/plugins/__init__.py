@@ -1,5 +1,5 @@
-"""External source plugin implementations."""
+"""Import source implementations."""
 
-from assistant.adapters.plugins.fake import FakeExternalSource
+from assistant.adapters.plugins.html_file import HTMLFileImportSource
 
-__all__ = ["FakeExternalSource"]
+__all__ = ["HTMLFileImportSource"]
