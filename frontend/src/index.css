@@ -2684,3 +2684,246 @@ ul {
 .app-shell.tui .save-state {
   color: var(--text-muted);
 }
+
+/*
+ * Ask AI (/ask): a thread sidebar and the conversation on desktop; the
+ * thread list or the conversation full screen on mobile.
+ */
+.ask-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ask-page > .search-status {
+  padding: 24px;
+}
+
+.ask-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.ask-threads {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 260px;
+  flex-shrink: 0;
+  padding: 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
+}
+
+.ask-threads ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ask-new-chat {
+  display: block;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ask-new-chat:hover {
+  background: var(--hover);
+}
+
+.ask-thread {
+  display: flex;
+  align-items: center;
+  padding: 6px 4px 6px 10px;
+  border-radius: 4px;
+}
+
+.ask-thread:hover {
+  background: var(--hover);
+}
+
+.ask-thread.active {
+  background: var(--active);
+}
+
+.ask-thread .item-name {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ask-conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ask-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.ask-message {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-message-user {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--active);
+  color: var(--text);
+}
+
+.ask-message-assistant {
+  color: var(--text);
+}
+
+.ask-message-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.ask-tool {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.ask-error {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.ask-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.ask-sources-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ask-sources ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.ask-sources li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.ask-sources a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.ask-sources a:hover {
+  text-decoration: underline;
+}
+
+.ask-source-notebook {
+  color: var(--text-faint);
+}
+
+.ask-composer {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 12px 24px 24px;
+}
+
+.ask-composer textarea {
+  flex: 1;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.ask-composer textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ask-send {
+  padding: 0 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ask-send:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.ask-send:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+[data-layout="mobile"] .ask-threads {
+  width: auto;
+  flex: 1;
+  border-right: none;
+  background: transparent;
+}
+
+[data-layout="mobile"] .ask-thread {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+[data-layout="mobile"] .ask-messages {
+  padding: 12px;
+}
+
+[data-layout="mobile"] .ask-composer {
+  padding: 8px 12px 12px;
+}
+
+[data-layout="mobile"] .ask-composer textarea {
+  font-size: 16px; /* >= 16px stops iOS zooming into the field */
+}

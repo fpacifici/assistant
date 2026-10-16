@@ -1,5 +1,5 @@
-/** Mobile `⋯` menu: account details, Invites, Settings, theme, Logout, plus
- * view-specific entries. */
+/** Mobile `⋯` menu: account details, Ask AI (when enabled), Invites, Settings, theme,
+ * Logout, plus view-specific entries. */
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { fetchInvitesConfig } from '../api/invites';
 import { useRegisteredMenuItems } from './TopBarMenuContext';
 import { ThemeMenuItems } from './ThemeSwitcher';
+import { useAskEnabled } from '../hooks/useAskEnabled';
 
 export default function OverflowMenu({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -19,6 +20,7 @@ export default function OverflowMenu({ children }: { children?: React.ReactNode 
     queryKey: ['invites', 'config'],
     queryFn: fetchInvitesConfig,
   });
+  const askEnabled = useAskEnabled();
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +68,7 @@ export default function OverflowMenu({ children }: { children?: React.ReactNode 
             </button>
           ))}
           {children}
+          {askEnabled && <Link role="menuitem" to="/ask">Ask AI</Link>}
           {invitesConfig?.invites_enabled && (
             <Link role="menuitem" to="/invites">Invites</Link>
           )}

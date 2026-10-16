@@ -21,6 +21,10 @@ vi.mock('../../api/invites', () => ({
   }),
 }));
 
+vi.mock('../../api/ask', () => ({ fetchAskStatus: vi.fn() }));
+
+import { fetchAskStatus } from '../../api/ask';
+
 function notebook(id: string, name: string): Notebook {
   return { id, name, owner_id: 'u1', permissions: ['delete_notebook', 'share_notebook'] };
 }
@@ -83,6 +87,7 @@ beforeEach(() => {
     notebook('nb-3', 'Ideas'),
   ]);
   vi.mocked(fetchNotes).mockResolvedValue([note('n-1', 'Groceries'), note('n-2', 'Plans')]);
+  vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: false });
 });
 
 // --- Rendering ---
@@ -280,5 +285,27 @@ describe('TUI layout', () => {
     expect(screen.getByRole('menuitemradio', { name: /System/ })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('File > Ask AI opens the Ask AI page when AI is enabled', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
+    const { router } = renderTui('/notebooks');
+    await waitFor(() => expect(fetchAskStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'File' }));
+    await user.click(await screen.findByRole('menuitem', { name: /Ask AI/ }));
+
+    expect(router.state.location.pathname).toBe('/ask');
+  });
+
+  it('File has no Ask AI entry when AI is disabled', async () => {
+    const user = userEvent.setup();
+    renderTui('/notebooks');
+    await waitFor(() => expect(fetchAskStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'File' }));
+
+    expect(screen.queryByRole('menuitem', { name: /Ask AI/ })).not.toBeInTheDocument();
   });
 });
