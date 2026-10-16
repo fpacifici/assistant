@@ -1,6 +1,6 @@
 """Admin CLI for permanently deleting a user and everything they own.
 
-Direct-DB-session script, same shape as manage_invites.py/add_evernote.py —
+Direct-DB-session script, same shape as manage_invites.py/setup_database.py —
 authorized purely by shell access. This is the highest-blast-radius
 operation in the invites subsystem: deleting a user cascades through their
 owned notebooks/notes and every entitlement on them, including entitlements

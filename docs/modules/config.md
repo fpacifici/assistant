@@ -18,11 +18,6 @@ database:
   # url: postgresql://assistant:assistant@localhost:5432/assistant
 
 document_storage_path: data/documents
-
-external_sources:
-  fake:
-    enabled: true
-    timeout: 30
 ```
 
 ## Environment-variable override mechanism
@@ -34,7 +29,7 @@ Any config key can be overridden by setting an environment variable derived from
   - `document_storage_path` → `DOCUMENT_STORAGE_PATH`
   - `database.url` → `DATABASE_URL`
   - `database.host` → `DATABASE_HOST`
-  - `external_sources.fake.enabled` → `EXTERNAL_SOURCES_FAKE_ENABLED`
+  - `sentry.environment` → `SENTRY_ENVIRONMENT`
 
 Overrides are **checked first**, before reading from the YAML file.
 

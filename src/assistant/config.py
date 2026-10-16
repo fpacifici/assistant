@@ -35,19 +35,6 @@ class DatabaseComponentsConfig(TypedDict):
 DatabaseConfig = DatabaseUrlConfig | DatabaseComponentsConfig
 
 
-class ExternalSourceProviderConfig(TypedDict, total=False):
-    """External source provider configuration.
-
-    Provider configurations are plugin-specific; this type captures common fields.
-    """
-
-    enabled: bool
-    timeout: int
-
-
-ExternalSourcesConfig = dict[str, ExternalSourceProviderConfig]
-
-
 class MailgunConfig(TypedDict):
     """Mailgun API configuration."""
 
@@ -98,7 +85,6 @@ class AssistantConfig(TypedDict, total=False):
     file_storage_path: str
     import_storage_path: str
     import_max_upload_bytes: int
-    external_sources: ExternalSourcesConfig
     domain: str
     port: int
     omit_port: bool
@@ -117,7 +103,7 @@ def _env_var_name(key: str) -> str:
 
     Examples:
         - "database.url" -> "DATABASE_URL"
-        - "external_sources.fake.enabled" -> "EXTERNAL_SOURCES_FAKE_ENABLED"
+        - "sentry.environment" -> "SENTRY_ENVIRONMENT"
     """
 
     return key.upper().replace(".", "_")
@@ -297,7 +283,7 @@ class Config:
             - Examples: `database.url` -> `DATABASE_URL`
 
         Args:
-            key: Config key (dot notation, e.g. "external_sources.fake.enabled").
+            key: Config key (dot notation, e.g. "sentry.environment").
             default: Default value if key is not found.
 
         Returns:
@@ -359,21 +345,6 @@ class Config:
             The limit, defaulting to 500 MB.
         """
         return int(self.get("import_max_upload_bytes", 500 * 1024 * 1024))
-
-    def get_external_source_config(self, provider: str) -> dict[str, object]:
-        """Get configuration for a specific external source provider.
-
-        Args:
-            provider: Provider identifier.
-
-        Returns:
-            Configuration dictionary for the provider.
-        """
-        config_key = f"external_sources.{provider}"
-        result: object = self.get(config_key, {})
-        if not isinstance(result, dict):
-            return {}
-        return result
 
     def get_database_config(self) -> DatabaseConfig:
         """Get the effective database configuration with env-var overrides applied.

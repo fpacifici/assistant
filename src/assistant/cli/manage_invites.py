@@ -1,6 +1,6 @@
 """Admin CLI for managing invites and invite quotas.
 
-Direct-DB-session script, same shape as add_evernote.py/setup_database.py —
+Direct-DB-session script, same shape as delete_user.py/setup_database.py —
 authorized purely by shell access to run it. There is no in-app admin role
 or HTTP-reachable admin identity to authenticate as (see docs/specs/0005-invites.md).
 """

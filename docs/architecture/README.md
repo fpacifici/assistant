@@ -52,7 +52,7 @@ flowchart LR
   end
 
   subgraph external ["External Sources"]
-    evernote["Evernote"]
+    evernote["Evernote export (zip)"]
   end
 
   model["Models"]
@@ -100,8 +100,8 @@ We run three storage systems, two of which are colocated:
 
 - Postgres with pgVector installed. This runs the overall data model.
 
-We can import notes from external systems via the `Importer` which talks to
-external system.
+We can import notes from an Evernote HTML export via the `Importer`, which
+writes them through the `Notes Service` (see [Adapters](adapters.md)).
 
 ## Deployment system
 
@@ -161,3 +161,4 @@ the webui.
 - [`Authentication`](authentication.md)
 - [`Observability (Sentry)`](observability.md)
 - [`Search`](search.md)
+- [`Adapters (import)`](adapters.md)

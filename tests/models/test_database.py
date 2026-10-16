@@ -1,6 +1,5 @@
 """Tests for database connection and session management."""
 
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 from sqlalchemy import create_engine, inspect, text
@@ -17,11 +16,7 @@ from assistant.models.database import (
     init_database,
     upgrade_database,
 )
-from assistant.models.schema import (
-    Document,
-    DocumentFormat,
-    ExternalSource,
-)
+from assistant.models.schema import User
 
 
 def _strip_schemas_for_sqlite() -> dict[str, str | None]:
@@ -124,9 +119,6 @@ def test_init_database_with_in_memory_db() -> None:
             init_database(engine)
 
             inspector = inspect(engine)
-            assert inspector.has_table("documents")
-            assert inspector.has_table("external_sources")
-            assert inspector.has_table("document_metadata")
             assert inspector.has_table("users")
             assert inspector.has_table("notebooks")
             assert inspector.has_table("notes")
@@ -155,28 +147,12 @@ def test_init_database_creates_tables(db_session: Session) -> None:
     """Test that init_database creates all required tables."""
 
     # Verify we can create and query models
-    source = ExternalSource(provider="test", provider_query="{}")
-    db_session.add(source)
-    db_session.flush()
-
-    doc = Document(
-        external_id="test1",
-        creation_datetime=datetime.now(UTC),
-        last_update_datetime=datetime.now(UTC),
-        title="Test",
-        format=DocumentFormat.TEXT,
-        source_id=source.id,
-    )
-    db_session.add(doc)
+    db_session.add(User(email="test@example.com", firstname="Test", lastname="User"))
     db_session.commit()
 
-    # Verify we can query
-    sources = db_session.query(ExternalSource).all()
-    assert len(sources) == 1
-
-    documents = db_session.query(Document).all()
-    assert len(documents) == 1
-    assert documents[0].external_id == "test1"
+    users = db_session.query(User).all()
+    assert len(users) == 1
+    assert users[0].email == "test@example.com"
 
 
 def test_drop_database_with_sqlite() -> None:
@@ -187,14 +163,12 @@ def test_drop_database_with_sqlite() -> None:
     try:
         with patch("assistant.models.database.PostgresSaver"):
             init_database(engine)
-        assert inspect(engine).has_table("documents")
-        assert inspect(engine).has_table("external_sources")
+        assert inspect(engine).has_table("users")
         assert inspect(engine).has_table("nodes")
 
         drop_database(engine)
 
-        assert not inspect(engine).has_table("documents")
-        assert not inspect(engine).has_table("external_sources")
+        assert not inspect(engine).has_table("users")
         assert not inspect(engine).has_table("nodes")
     finally:
         _restore_schemas(original)
