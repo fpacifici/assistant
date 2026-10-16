@@ -168,6 +168,11 @@ class User(Base):
         back_populates="owner",
         cascade="all, delete-orphan",
     )
+    chat_threads: Mapped[list[ChatThread]] = relationship(
+        "ChatThread",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Credential(Base):
@@ -803,3 +808,44 @@ class Entitlement(Base):
         "Notebook",
         back_populates="entitlements",
     )
+
+
+class ChatThread(Base):
+    """One Ask AI conversation of a user.
+
+    Only the listing data lives here: the messages are langgraph checkpoints
+    (`PostgresSaver`, in the `public` schema) keyed by this row's id as the
+    thread id. See `assistant.chat.service`.
+    """
+
+    __tablename__ = "chat_threads"
+    __table_args__ = (
+        Index("ix_chat_threads_user_id_updated_at", "user_id", "updated_at"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Empty until the first question, which becomes the title.
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    # Last question asked; threads are listed most recent first.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="chat_threads")

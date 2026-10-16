@@ -1,30 +1,25 @@
 # `assistant.tui`
 
-The `assistant.tui` package provides a **chat TUI** (text user interface) for sending queries to the RAG agent and streaming responses in the terminal.
+The `assistant.tui` package provides a **chat TUI** (text user interface) to ask the Ask AI agent about a user's notes in the terminal. The agent is described in [`docs/architecture/ask.md`](../architecture/ask.md).
 
 ## Public API
 
-- **`ChatApp`** – Textual app that shows a scrollable conversation log and an input line. Accepts `thread_id` and `agent` (a `SearchAgent` instance) in the constructor. Run with `app.run()`.
+- **`ChatApp(thread_id, user_id, agent, *, on_question=None)`** – Textual app that shows a scrollable conversation log and an input line. `agent` is an `AskAgent`; `on_question` is called with each question before it is asked (the CLI uses it to title the thread). Run with `app.run()`.
 
 ## Usage
 
-Start the chat TUI via the CLI with a conversation thread ID:
-
 ```bash
-python -m assistant.cli.chat <thread_id>
+# Start a new thread
+python -m assistant.cli.chat --email user@example.com
+# Resume one (its id is printed when the TUI exits)
+python -m assistant.cli.chat --email user@example.com --thread-id <uuid>
 ```
 
-Example:
+Needs `OPENAI_API_KEY`. The CLI configures LangSmith tracing (when `LANGSMITH_API_KEY` is set), builds the agent, finds or creates the user's `ChatThread` and launches `ChatApp`. Inside the TUI:
 
-```bash
-python -m assistant.cli.chat my-conversation-1
-```
-
-The CLI calls `init_environment()`, creates a `SearchAgent`, and launches `ChatApp`. Inside the TUI:
-
-1. Type a query and press Enter.
-2. The query is sent to `SearchAgent.query(thread_id, query)`; yielded messages are streamed into the log.
-3. When streaming finishes, the input is re-enabled for the next query.
+1. The stored conversation of the thread is shown.
+2. Type a question and press Enter.
+3. Tool calls are shown as they happen (`→ search_notes(query='...')`), then the answer and the notes it used.
 4. Exit with **Ctrl+Q**.
 
 Long lines in the message log wrap at the container width. Use **Up**/**Down** and **Page Up**/**Page Down** to scroll the message area (works even when the input line has focus). Mouse handling is disabled so you can select text with the mouse and copy as in a normal terminal (e.g. drag to select, then Cmd+C or your terminal’s copy shortcut).
@@ -32,11 +27,10 @@ Long lines in the message log wrap at the container width. Use **Up**/**Down** a
 ## Dependencies
 
 - **Textual** – UI framework (layout, `Input`, `RichLog`, workers).
-- **`assistant.agents.rag`** – `SearchAgent` and its `query(thread_id, query)` generator.
-- **`assistant.agents.infra`** – `init_environment()` (used by the CLI only).
+- **`assistant.agents.rag`** – `AskAgent.stream(thread_id, user_id, question)` and `AskAgent.history(thread_id)`.
 
 ## Architecture
 
-- **`app.py`** – Defines `ChatApp`, message types (`StreamChunk`, `QueryDone`, `QueryError`), and `_format_message()` for `BaseMessage` display. The agent’s generator runs in a **thread worker**; each chunk is posted to the app and appended to the log; errors are shown and the input is re-enabled.
+- **`app.py`** – Defines `ChatApp`, message types (`StreamChunk`, `QueryDone`, `QueryError`), and formatters for stored messages, tool events and sources. The agent's event stream runs in a **thread worker**; lines are posted to the app and appended to the log; errors are shown and the input is re-enabled.
 - **`chat.css`** – Styles the log container and docks the input at the bottom.
-- The **CLI** (`assistant.cli.chat`) parses `thread_id`, initializes the environment and agent, and runs `ChatApp(thread_id=..., agent=...).run()`.
+- The **CLI** (`assistant.cli.chat`) resolves the user and thread and runs the app.

@@ -1,135 +1,112 @@
-import ast
-import json
-import uuid
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+"""LangSmith evaluation target and evaluators for the Ask AI agent.
+
+The target asks each dataset question as the eval user (`EVAL_USER_EMAIL`,
+default `eval@assistant.invalid`), in a throwaway thread, and returns the
+answer plus the titles and notebooks of the notes the agent's tools
+returned.
+
+Evals call the real models: run them by hand (`make eval`), never in CI.
+"""
+
+from __future__ import annotations
+
+import functools
+import os
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from openevals.llm import create_llm_as_judge
 from openevals.prompts import CORRECTNESS_PROMPT
 
-from assistant.agents.rag import SearchAgent
+from assistant.agents.rag import (
+    AskAgent,
+    ErrorEvent,
+    SourcesEvent,
+    TokenEvent,
+    create_ask_agent,
+)
+from assistant.chat.service import create_thread, delete_thread, record_question
+from assistant.models.database import get_session_factory
+from assistant.notes.user_service import get_user, get_user_by_email
 
 if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
+    import uuid
+
+    from sqlalchemy.orm import Session, sessionmaker
+
+DEFAULT_EVAL_USER_EMAIL = "eval@assistant.invalid"
+JUDGE_MODEL = "openai:o3-mini"
 
 
-def _iter_sources(content: str | Sequence[Any]) -> list[Mapping[str, object]]:
-    """Return the `source` mappings found in a tool message payload.
-
-    Strings are parsed as JSON (a list of `{"source": ..., "content": ...}` items)
-    and, failing that, as legacy `Source: {...}` lines. Malformed entries are skipped.
-    """
-    items: Sequence[Any]
-    if isinstance(content, str):
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
-            return _parse_legacy_source_lines(content)
-        items = parsed if isinstance(parsed, list) else []
-    else:
-        items = content
-
-    sources: list[Mapping[str, object]] = []
-    for item in items:
-        if isinstance(item, Mapping):
-            source = item.get("source")
-            if isinstance(source, Mapping):
-                sources.append(source)
-    return sources
+def eval_user_email() -> str:
+    """The user whose notes the evals ask about."""
+    return os.getenv("EVAL_USER_EMAIL", DEFAULT_EVAL_USER_EMAIL)
 
 
-def _parse_legacy_source_lines(content: str) -> list[Mapping[str, object]]:
-    """Parse `Source: {...}` lines (Python dict literals) from a string payload."""
-    sources: list[Mapping[str, object]] = []
-    for line in content.splitlines():
-        if not line.startswith("Source:"):
-            continue
-        try:
-            source = ast.literal_eval(line.removeprefix("Source:").strip())
-        except (ValueError, SyntaxError):
-            continue
-        if isinstance(source, Mapping):
-            sources.append(source)
-    return sources
+@dataclass(frozen=True, slots=True)
+class EvalContext:
+    """What the target needs, built once per process."""
+
+    session_factory: sessionmaker[Session]
+    agent: AskAgent
+    user_id: uuid.UUID
 
 
-def _extract_source_fields(content: str | Sequence[Any]) -> tuple[list[str], list[str]]:
-    """Extract `external_id` and `notebook` values from retrieved sources.
+@functools.cache
+def _context() -> EvalContext:
+    session_factory = get_session_factory()
+    agent = create_ask_agent(session_factory)
+    if agent is None:
+        msg = "AI is disabled: set OPENAI_API_KEY to run the evals"
+        raise RuntimeError(msg)
+    with session_factory() as session:
+        user_id = get_user_by_email(session, eval_user_email()).uid
+    return EvalContext(session_factory=session_factory, agent=agent, user_id=user_id)
 
-    Supports:
-    - Legacy string tool payload containing lines like `Source: {...}`.
-    - Dict-based payload from `retrieve_documents()`, where `content` is a list of items
-      containing a `source` mapping with `external_id` and `notebook` keys.
 
-    Args:
-        content: Tool message content.
+def ask(context: EvalContext, question: str) -> dict[str, object]:
+    """Ask one question in a new thread, then delete the thread.
 
     Returns:
-        A tuple ``(external_ids, notebooks)`` with first-seen order.
+        `answer` (the text, or the error message), `sources` (note titles
+        in the order the tools returned them), `notebooks` and `error`.
     """
+    with context.session_factory() as session:
+        user = get_user(session, context.user_id)
+        thread_id = create_thread(session, user).id
+        record_question(session, user, thread_id, question)
+        session.commit()
 
-    external_ids: list[str] = []
+    answer: list[str] = []
+    titles: list[str] = []
     notebooks: list[str] = []
-    seen_external_ids: set[str] = set()
-    seen_notebooks: set[str] = set()
+    error: str | None = None
+    try:
+        for event in context.agent.stream(thread_id, context.user_id, question):
+            if isinstance(event, TokenEvent):
+                answer.append(event.text)
+            elif isinstance(event, SourcesEvent):
+                titles = [source["title"] for source in event.sources]
+                notebooks = list(dict.fromkeys(s["notebook_name"] for s in event.sources))
+            elif isinstance(event, ErrorEvent):
+                error = event.message
+    finally:
+        with context.session_factory() as session:
+            delete_thread(session, get_user(session, context.user_id), thread_id)
+            session.commit()
+        context.agent.delete_history(thread_id)
 
-    for source in _iter_sources(content):
-        external_id = source.get("external_id")
-        notebook = source.get("notebook")
-
-        if isinstance(external_id, str) and external_id not in seen_external_ids:
-            seen_external_ids.add(external_id)
-            external_ids.append(external_id)
-        if isinstance(notebook, str) and notebook not in seen_notebooks:
-            seen_notebooks.add(notebook)
-            notebooks.append(notebook)
-
-    return external_ids, notebooks
+    return {
+        "answer": error or "".join(answer).strip(),
+        "sources": titles,
+        "notebooks": notebooks,
+        "error": error,
+    }
 
 
 def target(inputs: dict[str, object]) -> dict[str, object]:
-    """LangSmith/OpenEvals target function.
-
-    Args:
-        inputs: Inputs dictionary provided by the evaluation harness. Expected to include
-            `question` (list-like) and uses the first element as the query string.
-
-    Returns:
-        A dict with the assistant `answer` plus extracted `notes_ids` and `notebooks`.
-    """
-
-    store = SearchAgent()
-    response: BaseMessage | None = None
-    note_ids: list[str] = []
-    notebooks: list[str] = []
-    topics: list[str] = []
-    thread_id = f"eval_{uuid.uuid4()}"
-
-    question: str = str(inputs.get("question"))
-
-    for event in store.query(thread_id, question):
-        if event.type == "tool":
-            content = event.content
-            if isinstance(content, str | Sequence):
-                extracted_note_ids, extracted_notebooks = _extract_source_fields(content)
-                note_ids.extend(extracted_note_ids)
-                notebooks.extend(extracted_notebooks)
-
-        elif event.type == "ai":
-            response = event
-
-    answer: str = ""
-    if response is not None:
-        content = response.content
-        answer = content.strip() if isinstance(content, str) else str(content).strip()
-
-    ret: dict[str, object] = {
-        "answer": answer,
-        "notes_ids": note_ids,
-        "topics": topics,
-        "notebooks": notebooks,
-    }
-    return ret
+    """LangSmith target: answer `inputs["question"]` as the eval user."""
+    return ask(_context(), str(inputs["question"]))
 
 
 def correctness_evaluator(
@@ -137,15 +114,14 @@ def correctness_evaluator(
     outputs: dict[str, object],
     reference_outputs: dict[str, object],
 ) -> object:
-    """Evaluate correctness using OpenEvals judge."""
-
+    """LLM-as-judge: is the answer correct given the reference answer?"""
     evaluator = create_llm_as_judge(
         prompt=CORRECTNESS_PROMPT,
-        model="openai:o3-mini",
+        model=JUDGE_MODEL,
         feedback_key="correctness",
     )
     return evaluator(
         inputs=inputs,
-        outputs=outputs,
-        reference_outputs=reference_outputs,
+        outputs={"answer": outputs.get("answer")},
+        reference_outputs={"answer": reference_outputs.get("answer")},
     )

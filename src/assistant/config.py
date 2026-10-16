@@ -72,14 +72,20 @@ class AIConfig(TypedDict):
     """AI features configuration (embeddings, the Ask agent).
 
     `enabled` is not configured: AI is on exactly when an OpenAI API key is
-    available (`OPENAI_API_KEY`, read by the OpenAI client itself).
+    available (`OPENAI_API_KEY`, read by the OpenAI client itself). Likewise
+    LangSmith tracing is on exactly when `LANGSMITH_API_KEY` is set.
     """
 
     enabled: bool
     embedding_model: str
+    chat_model: str
+    langsmith_enabled: bool
+    langsmith_project: str
 
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+DEFAULT_CHAT_MODEL = "openai:gpt-4.1"
+DEFAULT_LANGSMITH_PROJECT = "Assistant"
 
 
 class SentryConfig(TypedDict):
@@ -664,17 +670,26 @@ class Config:
         """Get the effective AI configuration.
 
         Env var overrides follow the module convention:
-            - `ai.embedding_model` -> `AI_EMBEDDING_MODEL`
+            - `ai.embedding_model`   -> `AI_EMBEDDING_MODEL`
+            - `ai.chat_model`        -> `AI_CHAT_MODEL`
+            - `ai.langsmith_project` -> `AI_LANGSMITH_PROJECT`
 
         Returns:
             An `AIConfig` mapping. `enabled` is true when `OPENAI_API_KEY` is
-            set and non-empty; `embedding_model` defaults to
-            `text-embedding-3-small`.
+            set and non-empty, `langsmith_enabled` when `LANGSMITH_API_KEY`
+            is. Models default to `text-embedding-3-small` and
+            `openai:gpt-4.1` (a langchain `provider:model` string), the
+            LangSmith project to `Assistant`.
         """
         return {
             "enabled": bool(os.getenv("OPENAI_API_KEY")),
             "embedding_model": str(
                 self.get("ai.embedding_model", DEFAULT_EMBEDDING_MODEL),
+            ),
+            "chat_model": str(self.get("ai.chat_model", DEFAULT_CHAT_MODEL)),
+            "langsmith_enabled": bool(os.getenv("LANGSMITH_API_KEY")),
+            "langsmith_project": str(
+                self.get("ai.langsmith_project", DEFAULT_LANGSMITH_PROJECT),
             ),
         }
 

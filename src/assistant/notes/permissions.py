@@ -18,6 +18,7 @@ without a notebook-level grant (see `can_view_notebook`).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import exists, or_, select
@@ -208,6 +209,47 @@ def viewable_note_filter(principal: User) -> ColumnElement[bool]:
     return or_(direct, via_notebook)
 
 
+@dataclass(frozen=True, slots=True)
+class ViewableScope:
+    """Everything a principal can view, as notebook and note id sets.
+
+    A note is viewable if its notebook is in `notebook_ids` (VIEW_NOTES or
+    OWN_NOTES on the notebook) or it is in `note_ids` (a direct VIEW_NOTE
+    grant). The same rule as `viewable_note_filter`, for filtering data
+    stored outside the notes tables (e.g. note embeddings).
+    """
+
+    notebook_ids: frozenset[uuid.UUID]
+    note_ids: frozenset[uuid.UUID]
+
+    @property
+    def is_empty(self) -> bool:
+        """True when the principal can view no note at all."""
+        return not self.notebook_ids and not self.note_ids
+
+
+def viewable_scope(session: Session, principal: User) -> ViewableScope:
+    """The notebooks and individually shared notes the principal can view."""
+    notebook_ids = session.scalars(
+        select(Entitlement.notebook_id).where(
+            Entitlement.principal_id == principal.uid,
+            Entitlement.notebook_id.is_not(None),
+            _grants_any(frozenset({PermissionName.VIEW_NOTES, PermissionName.OWN_NOTES})),
+        ),
+    )
+    note_ids = session.scalars(
+        select(Entitlement.note_id).where(
+            Entitlement.principal_id == principal.uid,
+            Entitlement.note_id.is_not(None),
+            _grants_any(frozenset({PermissionName.VIEW_NOTE})),
+        ),
+    )
+    return ViewableScope(
+        notebook_ids=frozenset(i for i in notebook_ids if i is not None),
+        note_ids=frozenset(i for i in note_ids if i is not None),
+    )
+
+
 def require_notebook_access(
     session: Session,
     notebook_id: uuid.UUID,
@@ -276,10 +318,13 @@ def require_note_delete_access(
 
 __all__ = [
     "ROLE_PERMISSIONS",
+    "ViewableScope",
     "can_view_notebook",
     "note_permissions",
     "notebook_permissions",
     "require_note_access",
     "require_note_delete_access",
     "require_notebook_access",
+    "viewable_note_filter",
+    "viewable_scope",
 ]

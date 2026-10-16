@@ -29,6 +29,7 @@ When working on the backend:
 - The [`API`](docs/architecture/api.md)
 - Keyword search: [`Search`](docs/architecture/search.md)
 - Embeddings for the AI agent: [`Vector search`](docs/architecture/vectors.md)
+- The AI agent and its API: [`Ask AI`](docs/architecture/ask.md)
 
 When working on the frontend:
 
@@ -175,10 +176,11 @@ make frontend-dev
 
 ### Chat TUI
 
-To run the interactive chat TUI that sends queries to the RAG agent and streams responses:
+To chat with the Ask AI agent about a user's notes in the terminal (needs
+`OPENAI_API_KEY`):
 
 ```bash
-python -m assistant.cli.chat <thread_id>
+python -m assistant.cli.chat --email user@example.com [--thread-id <uuid>]
 ```
 
 Exit with **Ctrl+Q**. See [`docs/modules/tui.md`](docs/modules/tui.md) for details.

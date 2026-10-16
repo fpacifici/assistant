@@ -14,6 +14,7 @@ from assistant.auth.exceptions import (
     ConfirmationNotFoundError,
     ConfirmationTokenInvalidError,
 )
+from assistant.chat.exceptions import AIDisabledError, ChatThreadNotFoundError
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
     InviteNotUsableError,
@@ -38,6 +39,20 @@ logger = logging.getLogger(__name__)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ChatThreadNotFoundError)
+    async def chat_thread_not_found_handler(
+        request: Request,  # noqa: ARG001
+        exc: ChatThreadNotFoundError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "Thread not found"})
+
+    @app.exception_handler(AIDisabledError)
+    async def ai_disabled_handler(
+        request: Request,  # noqa: ARG001
+        exc: AIDisabledError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
     @app.exception_handler(UserNotFoundError)
     async def user_not_found_handler(
         request: Request,  # noqa: ARG001

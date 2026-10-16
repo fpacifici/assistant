@@ -53,8 +53,9 @@ notes need embeddings for semantic retrieval. Constraints:
   - The queue lives in memory: jobs pending when the server stops are
     lost (the notes stay stale, so a reindex recovers them).
   - Changing to a model with another dimension needs a migration.
-  - Filtered HNSW queries can return fewer than `k` results for users who
-    can see only a small part of a large corpus.
+  - Filtered HNSW queries need pgvector ≥ 0.8 iterative scans
+    (`hnsw.iterative_scan`, set on the search connections) to keep returning
+    `k` results for users who can see only a small part of a large corpus.
 
 ## Alternatives Considered
 - **Embed inside the write transaction**: simplest, but every autosave
@@ -70,4 +71,5 @@ notes need embeddings for semantic retrieval. Constraints:
 
 ## References
 - `docs/architecture/vectors.md`
+- `docs/architecture/ask.md`
 - `docs/plans/vector_search.md`

@@ -1,50 +1,55 @@
-"""Chat TUI application for the RAG agent."""
+"""Chat TUI application for the Ask AI agent."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from rich.markup import escape
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.message import Message
 from textual.widgets import Input, RichLog
 
+from assistant.agents.rag import ErrorEvent, SourcesEvent, TokenEvent, ToolEvent
+
 if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
+    import uuid
+    from collections.abc import Callable
+
     from textual._path import CSSPathType
 
-    from assistant.agents.rag import SearchAgent
+    from assistant.agents.rag import AskAgent, AskEvent, ChatMessage
+    from assistant.agents.tools import Source
 
 
-def _format_message(msg: "BaseMessage") -> str | None:  # noqa: UP037
-    """Format a BaseMessage for display in the chat log.
-
-    Args:
-        msg: A langchain BaseMessage (e.g. AIMessage, HumanMessage).
-
-    Returns:
-        A string with a short role label and the message content.
-    """
-    content = getattr(msg, "content", str(msg))
-    if not isinstance(content, str):
-        content = str(content)
-    type_name = type(msg).__name__
-    if "Human" in type_name or "user" in type_name.lower():
-        label = "User"
-    elif "AI" in type_name or "assistant" in type_name.lower():
-        label = "Assistant"
-    elif "ToolMessage" in type_name:
-        tool_call_id = getattr(msg, "tool_call_id", None)
-        if tool_call_id is None:
-            return "Tool message"
-        return f"Tool message: {tool_call_id}"
-    else:
+def format_sources(sources: list[Source]) -> str | None:
+    """A dim line listing the notes an answer used, or None if there are none."""
+    if not sources:
         return None
-    return f"[bold]{label}:[/bold] {content}"
+    titles = ", ".join(escape(f"{s['title']} ({s['notebook_name']})") for s in sources)
+    return f"[dim]Sources: {titles}[/dim]"
+
+
+def format_history_message(message: ChatMessage) -> list[str]:
+    """Log lines for one stored message."""
+    label = "User" if message.role == "user" else "Assistant"
+    lines = [f"[bold]{label}:[/bold] {escape(message.content)}"]
+    sources = format_sources(message.sources)
+    if sources:
+        lines.append(sources)
+    return lines
+
+
+def format_tool_event(event: ToolEvent) -> str | None:
+    """A dim line for a tool call starting; finished calls are not shown."""
+    if event.status != "start":
+        return None
+    args = ", ".join(f"{key}={value!r}" for key, value in event.input.items())
+    return f"[dim]→ {escape(event.name)}({escape(args)})[/dim]"
 
 
 class StreamChunk(Message):
-    """Message sent from the worker when a streamed message chunk is ready."""
+    """Message sent from the worker when a line of output is ready."""
 
     def __init__(self, text: str) -> None:
         self.text = text
@@ -64,14 +69,14 @@ class QueryError(Message):
 
 
 class ChatApp(App[None]):
-    """Textual chat app that sends user queries to the RAG agent and streams responses.
+    """Textual chat app that asks the Ask AI agent and shows its answers.
 
     The app shows a scrollable log for the conversation and an input at the bottom.
     Long lines in the log wrap at the container width. Use Up/Down and Page Up/Down
     to scroll the message area (works regardless of focus). The chat CLI runs with
     mouse=False so the terminal handles the mouse for text selection and copy.
-    Submit a query to stream agent messages; when done, you can send another.
-    Exit with Ctrl+Q.
+    Tool calls are shown as they happen; the answer is shown once complete,
+    followed by the notes it used. Exit with Ctrl+Q.
     """
 
     CSS_PATH: ClassVar[CSSPathType | None] = "chat.css"
@@ -82,22 +87,33 @@ class ChatApp(App[None]):
         Binding("ctrl+l", "toggle_focus", "Toggle focus", show=False),
     ]
 
-    def __init__(self, thread_id: str, agent: SearchAgent) -> None:
+    def __init__(
+        self,
+        thread_id: uuid.UUID,
+        user_id: uuid.UUID,
+        agent: AskAgent,
+        *,
+        on_question: Callable[[str], None] | None = None,
+    ) -> None:
         """Initialize the chat app.
 
         Args:
-            thread_id: Conversation thread ID passed to the agent.
-            agent: RAG SearchAgent used for query().
+            thread_id: The conversation thread (a `ChatThread` of the user).
+            user_id: The user asking.
+            agent: The Ask AI agent.
+            on_question: Called with each question before it is asked (e.g.
+                to record it on the thread).
         """
         super().__init__()
-        self._rag_thread_id = thread_id
-        self._rag_agent = agent
-        self._textlog: RichLog | None = None
+        self._chat_thread_id = thread_id
+        self._chat_user_id = user_id
+        self._agent = agent
+        self._on_question = on_question
 
     def compose(self) -> ComposeResult:
         """Compose the layout: log area and input."""
         yield RichLog(id="log", highlight=True, markup=True, wrap=True)
-        yield Input(id="input", placeholder="Send a query...")
+        yield Input(id="input", placeholder="Ask about your notes...")
 
     def action_log_scroll_up(self) -> None:
         """Scroll the chat log up by one line."""
@@ -120,11 +136,10 @@ class ChatApp(App[None]):
             self.query_one("#log", RichLog).focus()
 
     def on_mount(self) -> None:
-        """Focus the input when the app mounts."""
-        for msg in self._rag_agent.load(self._rag_thread_id):
-            text = _format_message(msg)
-            if text:
-                self.post_message(StreamChunk(text))
+        """Show the stored conversation and focus the input."""
+        for message in self._agent.history(self._chat_thread_id):
+            for line in format_history_message(message):
+                self.post_message(StreamChunk(line))
         self.query_one("#input", Input).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -136,7 +151,7 @@ class ChatApp(App[None]):
         input_widget = self.query_one("#input", Input)
         log_widget = self.query_one("#log", RichLog)
         input_widget.disabled = True
-        log_widget.write(f"[bold]User:[/bold] {value}", expand=True)
+        log_widget.write(f"[bold]User:[/bold] {escape(value)}", expand=True)
         self.run_worker(
             lambda: self._stream_query(value),
             thread=True,
@@ -144,19 +159,38 @@ class ChatApp(App[None]):
         )
 
     def _stream_query(self, query: str) -> None:
-        """Run in a worker: call agent.query and post each message to the app."""
+        """Run in a worker: ask the agent and post its output to the app."""
         try:
-            for msg in self._rag_agent.query(self._rag_thread_id, query):
-                text = _format_message(msg)
-                if text:
-                    self.post_message(StreamChunk(text))
-            self.post_message(QueryDone())
+            if self._on_question is not None:
+                self._on_question(query)
+            answer: list[str] = []
+            for event in self._agent.stream(
+                self._chat_thread_id, self._chat_user_id, query
+            ):
+                self._handle(event, answer)
         except Exception as e:
             self.post_message(QueryError(str(e)))
-            self.post_message(QueryDone())
+        self.post_message(QueryDone())
+
+    def _handle(self, event: AskEvent, answer: list[str]) -> None:
+        if isinstance(event, TokenEvent):
+            answer.append(event.text)
+        elif isinstance(event, ToolEvent):
+            line = format_tool_event(event)
+            if line:
+                self.post_message(StreamChunk(line))
+        elif isinstance(event, SourcesEvent):
+            text = "".join(answer).strip()
+            if text:
+                self.post_message(StreamChunk(f"[bold]Assistant:[/bold] {escape(text)}"))
+            sources = format_sources(event.sources)
+            if sources:
+                self.post_message(StreamChunk(sources))
+        elif isinstance(event, ErrorEvent):
+            self.post_message(QueryError(event.message))
 
     def on_stream_chunk(self, event: StreamChunk) -> None:
-        """Append a streamed message chunk to the log."""
+        """Append a line to the log."""
         self.query_one("#log", RichLog).write(event.text, expand=True)
 
     def on_query_done(self, _event: QueryDone) -> None:
@@ -168,4 +202,4 @@ class ChatApp(App[None]):
     def on_query_error(self, event: QueryError) -> None:
         """Append an error line to the log."""
         log = self.query_one("#log", RichLog)
-        log.write(f"[red]Error:[/red] {event.error}", expand=True)
+        log.write(f"[red]Error:[/red] {escape(event.error)}", expand=True)

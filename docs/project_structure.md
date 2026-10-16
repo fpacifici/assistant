@@ -6,10 +6,11 @@ assistant/
 │   └── assistant/              # Main Python package
 │       ├── adapters/           # Note import (Evernote HTML export)
 │       │   └── plugins/        # Import sources (HTML directory)
-│       ├── agents/             # RAG agent, vector search, infra
+│       ├── agents/             # Ask AI agent, its tools, LangSmith tracing
 │       ├── api/                # FastAPI REST API
 │       │   ├── routes/         # Route handlers (users, notebooks, notes)
 │       │   └── schemas/        # Pydantic request/response schemas
+│       ├── chat/               # Ask AI threads
 │       ├── cli/                # CLI entry points (server, client, db tools, chat)
 │       ├── data/               # Static data assets
 │       │   └── documents/

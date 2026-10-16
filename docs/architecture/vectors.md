@@ -87,6 +87,12 @@ sequenceDiagram
 - `content_hash` covers the embedding model name and every chunk text, so
   an unchanged note costs no model call, and a model change re-embeds.
 
+## Retrieval
+
+The Ask AI agent searches the chunks with `vectors/search.NoteSearcher`, a
+langchain `PGVectorStore` over the same table (cosine distance), filtered
+to the notes the asking user can view. See [Ask AI](ask.md#permissions-in-semantic-search).
+
 ## Reindexing
 
 ```bash
