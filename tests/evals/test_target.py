@@ -15,6 +15,7 @@ from assistant.evals.target import (
     ask,
     correctness_evaluator,
     eval_user_email,
+    retrieval_evaluator,
 )
 from assistant.models.schema import ChatThread, User
 from assistant.notes.service import create_note, create_notebook
@@ -135,3 +136,30 @@ def test_correctness_evaluator_compares_answers() -> None:
         outputs={"answer": "a"},
         reference_outputs={"answer": "b"},
     )
+
+
+def test_retrieval_evaluator_scores_the_share_of_expected_notes() -> None:
+    result = retrieval_evaluator(
+        outputs={"sources": ["Rome", "Other"]},
+        reference_outputs={"sources": ["Rome", "Paris"]},
+    )
+
+    assert result == {"key": "retrieval_hit", "score": 0.5, "comment": "Missing: Paris"}
+
+
+def test_retrieval_evaluator_all_found() -> None:
+    result = retrieval_evaluator(
+        outputs={"sources": ["Rome"]},
+        reference_outputs={"sources": ["Rome"]},
+    )
+
+    assert result["score"] == 1.0
+
+
+def test_retrieval_evaluator_skips_questions_without_expected_notes() -> None:
+    result = retrieval_evaluator(
+        outputs={"sources": ["Rome"]},
+        reference_outputs={"sources": []},
+    )
+
+    assert result["score"] is None

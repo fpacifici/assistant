@@ -129,3 +129,36 @@ python -m assistant.cli.query --email user@example.com "What did I plan for Rome
 ```
 
 Both create threads that also show up in the web UI.
+
+## Evals
+
+Run by hand against LangSmith, **never in CI**: they call OpenAI and
+LangSmith with real keys, which are not in the repository (`cli.eval`
+refuses to run when `CI` is set).
+
+```bash
+# Needs OPENAI_API_KEY and LANGSMITH_API_KEY, and the database up
+make eval
+```
+
+`make eval` runs three steps of `python -m assistant.cli.eval`:
+
+1. **`load-corpus`** — loads `data/evals/notes/` (one directory per
+   notebook, one markdown file per note, `# Title` first) into the
+   notebooks of the eval user (`EVAL_USER_EMAIL`, default
+   `eval@assistant.invalid`, created without a credential), named
+   `Eval: <directory>`, replacing what was there, and embeds them.
+2. **`sync-dataset`** — makes the LangSmith dataset "Assistant notes eval"
+   match `data/evals/dataset.yaml`: each example has a `question`, a
+   reference `answer` and the titles of the notes that answer it
+   (`sources`, empty for questions the notes can't answer).
+3. **`evaluate`** — asks every question as the eval user (in a throwaway
+   thread) and scores the experiment (prefix `ask-ai`) with:
+   - `correctness`: LLM-as-judge (openevals `CORRECTNESS_PROMPT`, o3-mini)
+     against the reference answer, including saying "not in the notes"
+     when appropriate;
+   - `retrieval_hit`: the share of the expected notes the tools returned
+     (not scored for unanswerable questions).
+
+A unit test checks that every note title the dataset expects exists in the
+corpus. When adding questions, add the notes they need too.

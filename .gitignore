@@ -78,8 +78,10 @@ docs/.doctrees/
 # Pre-commit
 .pre-commit-config-local.yaml
 
-# Data downloaded
-data/
+# Data downloaded (except the eval fixtures)
+/data/*
+!/data/evals/
+src/assistant/data/
 # Frontend
 frontend/node_modules/
 frontend/dist/

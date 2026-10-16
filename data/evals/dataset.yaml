@@ -1,0 +1,91 @@
+# Ask AI eval dataset, over the notes in data/evals/notes/ (see
+# docs/architecture/ask.md#evals). Each example has the question, the
+# reference answer the LLM judge compares with, and the titles of the notes
+# the agent should retrieve (empty when the notes don't have the answer).
+
+- inputs:
+    question: At what temperature and for how long do I bake the lasagna?
+  outputs:
+    answer: At 190°C for 40 minutes, then let it rest for 15 minutes before cutting.
+    sources: ["Grandmother's lasagna"]
+
+- inputs:
+    question: What caused the payment outage in March and how long did it last?
+  outputs:
+    answer: >-
+      The TLS certificate of the payment gateway's internal endpoint expired;
+      it had been issued by hand and was not covered by automatic renewal.
+      Card payments failed for 47 minutes (09:12 to 09:59 CET on 12 March 2026).
+    sources: ["Postmortem: payment outage of 12 March 2026"]
+
+- inputs:
+    question: Which hotel did we stay at in Lisbon?
+  outputs:
+    answer: Hotel Casa das Janelas Verdes in Lapa, room 204.
+    sources: ["Lisbon trip, April 2025"]
+
+- inputs:
+    question: When is the boiler due for its next service, and who should I call?
+  outputs:
+    answer: >-
+      The next service is due in November 2026 (book it in September). Call
+      Marco Ferri from Ferri Termoidraulica at 0341 555 0192.
+    sources: ["Boiler maintenance"]
+
+- inputs:
+    question: When does Project Heron launch and who owns the mobile app?
+  outputs:
+    answer: >-
+      The public launch is on 15 September 2026 (after a closed beta for 200
+      customers in June). Aiko owns the mobile app.
+    sources: ["Project Heron kickoff"]
+
+- inputs:
+    question: Which tomato varieties am I growing this year, and when do I plant them out?
+  outputs:
+    answer: >-
+      San Marzano (for sauce) and Black Krim (for salads), planted out after
+      10 May when nights stay above 10°C.
+    sources: ["Garden plan 2026"]
+
+- inputs:
+    question: When does my passport expire?
+  outputs:
+    answer: On 22 August 2029; renew it at least six months before.
+    sources: ["Passport and visas"]
+
+- inputs:
+    question: How much is the JR Pass in my Japan plan, and where do I stay in Kyoto?
+  outputs:
+    answer: >-
+      The 14-day JR Pass costs 80,000 yen per person. In Kyoto I stay at the
+      ryokan Yoshida-sanso near Ginkakuji.
+    sources: ["Japan itinerary, November 2026"]
+
+- inputs:
+    question: Which antibiotic must I avoid, and what worked instead?
+  outputs:
+    answer: >-
+      Penicillins such as amoxicillin (it caused hives in 2019);
+      clarithromycin was fine as an alternative.
+    sources: ["Health notes"]
+
+- inputs:
+    question: What is my half marathon target time?
+  outputs:
+    answer: >-
+      1 hour 45 minutes (about 4:58 per kilometre) at the Bergamo half
+      marathon on 18 October 2026.
+    sources: ["Health notes"]
+
+- inputs:
+    question: What is the license plate of my car?
+  outputs:
+    answer: The notes do not contain the car's license plate.
+    sources: []
+
+- inputs:
+    question: What did we decide about renewing the office lease?
+  outputs:
+    answer: The notes do not say anything about renewing the office lease.
+    sources: []

@@ -3,7 +3,11 @@
 The target asks each dataset question as the eval user (`EVAL_USER_EMAIL`,
 default `eval@assistant.invalid`), in a throwaway thread, and returns the
 answer plus the titles and notebooks of the notes the agent's tools
-returned.
+returned. Two evaluators score it:
+
+- `correctness`: an LLM judge comparing the answer with the reference one
+  (for questions the notes can't answer, the reference says so).
+- `retrieval_hit`: the share of the expected notes the tools returned.
 
 Evals call the real models: run them by hand (`make eval`), never in CI.
 """
@@ -13,7 +17,7 @@ from __future__ import annotations
 import functools
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from openevals.llm import create_llm_as_judge
 from openevals.prompts import CORRECTNESS_PROMPT
@@ -125,3 +129,27 @@ def correctness_evaluator(
         outputs={"answer": outputs.get("answer")},
         reference_outputs={"answer": reference_outputs.get("answer")},
     )
+
+
+def retrieval_evaluator(
+    outputs: dict[str, object],
+    reference_outputs: dict[str, object],
+) -> dict[str, object]:
+    """The share of the expected notes (by title) that the tools returned.
+
+    Questions with no expected notes are not scored.
+    """
+    expected = [
+        str(t) for t in cast("list[object]", reference_outputs.get("sources") or [])
+    ]
+    if not expected:
+        return {"key": "retrieval_hit", "score": None, "comment": "No notes expected"}
+    found = {str(t) for t in cast("list[object]", outputs.get("sources") or [])}
+    missing = [title for title in expected if title not in found]
+    return {
+        "key": "retrieval_hit",
+        "score": (len(expected) - len(missing)) / len(expected),
+        "comment": f"Missing: {', '.join(missing)}"
+        if missing
+        else "All expected notes found",
+    }
