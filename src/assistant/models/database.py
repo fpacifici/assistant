@@ -106,6 +106,10 @@ _UNMAPPED_SEARCH_OBJECTS = frozenset(
     {"search_vector", "ix_note_search_index_vector", "ix_node_search_index_vector"},
 )
 
+# Postgres-only pgvector table, created by hand in the add_vector_index
+# migration and not mapped in the ORM (see `assistant.vectors.store`).
+_UNMAPPED_TABLES = frozenset({"note_chunk_embedding"})
+
 
 def include_object_for_migrations(
     obj: SchemaItem,
@@ -127,9 +131,13 @@ def include_object_for_migrations(
     if type_ in ("column", "index") and name in _UNMAPPED_SEARCH_OBJECTS:
         return False
     if type_ == "table":
-        return getattr(obj, "schema", None) == "assistant"
+        return (
+            getattr(obj, "schema", None) == "assistant" and name not in _UNMAPPED_TABLES
+        )
     table = getattr(obj, "table", None)
-    return table is None or table.schema == "assistant"
+    return table is None or (
+        table.schema == "assistant" and table.name not in _UNMAPPED_TABLES
+    )
 
 
 def drop_database(engine: Engine | None = None) -> None:

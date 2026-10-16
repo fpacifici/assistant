@@ -161,4 +161,5 @@ the webui.
 - [`Authentication`](authentication.md)
 - [`Observability (Sentry)`](observability.md)
 - [`Search`](search.md)
+- [`Vector search`](vectors.md)
 - [`Adapters (import)`](adapters.md)
