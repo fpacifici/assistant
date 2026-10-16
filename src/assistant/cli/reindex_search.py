@@ -8,7 +8,7 @@ credits left) or that were written while the API server was not running.
 
 Usage:
     python -m assistant.cli.reindex_search [--vectors] [--user-id UID]
-        [--stale-only] [--batch-size N]
+        [--stale-only] [--batch-size N] [--delay-ms MS]
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 import uuid
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 200
+# Pause between two embedded notes, to stay under the embedding API's rate limit.
+DEFAULT_DELAY_MS = 250
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -59,6 +62,13 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_BATCH_SIZE,
         help="Keyword index only: notes per commit",
+    )
+    parser.add_argument(
+        "--delay-ms",
+        type=int,
+        default=DEFAULT_DELAY_MS,
+        help="--vectors only: milliseconds to wait between two notes "
+        f"(default {DEFAULT_DELAY_MS}, 0 to disable)",
     )
     return parser.parse_args(argv)
 
@@ -94,8 +104,12 @@ def _reindex_keywords(args: argparse.Namespace, stmt: Select[tuple[uuid.UUID]]) 
     return 0
 
 
-def _reindex_vectors(stmt: Select[tuple[uuid.UUID]]) -> int:
-    """Embed each note in its own transaction; failures are logged and skipped."""
+def _reindex_vectors(stmt: Select[tuple[uuid.UUID]], delay_ms: int) -> int:
+    """Embed each note in its own transaction; failures are logged and skipped.
+
+    Waits `delay_ms` between two notes, so a large reindex does not hit the
+    embedding API's rate limit.
+    """
     indexer = create_vector_indexer()
     if indexer is None:
         logger.error("AI is disabled: set OPENAI_API_KEY to embed notes")
@@ -106,6 +120,8 @@ def _reindex_vectors(stmt: Select[tuple[uuid.UUID]]) -> int:
     logger.info("Embedding %d notes", len(note_ids))
     failed = 0
     for done, note_id in enumerate(note_ids, start=1):
+        if done > 1 and delay_ms > 0:
+            time.sleep(delay_ms / 1000)
         try:
             with session_factory() as session:
                 indexer.index_note(session, note_id)
@@ -137,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         stmt = stmt.where(Note.owner_id == args.user_id)
     stmt = stmt.order_by(Note.id)
     if args.vectors:
-        return _reindex_vectors(stmt)
+        return _reindex_vectors(stmt, args.delay_ms)
     return _reindex_keywords(args, stmt)
 
 

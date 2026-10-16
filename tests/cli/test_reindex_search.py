@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
@@ -155,10 +155,11 @@ class _FlakyEmbeddings(DeterministicFakeEmbedding):
         return super().embed_documents(texts)
 
 
-def _run_vectors(session: Session, *args: str) -> int:
+def _run_vectors(session: Session, *args: str, sleep: MagicMock | None = None) -> int:
     indexer = VectorIndexer(_FlakyEmbeddings(size=EMBEDDING_DIMENSIONS), "fake")
-    with patch(
-        "assistant.cli.reindex_search.create_vector_indexer", return_value=indexer
+    with (
+        patch("assistant.cli.reindex_search.create_vector_indexer", return_value=indexer),
+        patch("assistant.cli.reindex_search.time.sleep", sleep or MagicMock()),
     ):
         return _run(session, "--vectors", *args)
 
@@ -201,6 +202,49 @@ def test_vectors_failures_are_skipped_and_reported(pg_session: Session) -> None:
 
     assert broken.id in _stale(pg_session)
     assert fine.id not in _stale(pg_session)
+
+
+def test_vectors_wait_between_two_notes(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    for text in ("Berlin", "Paris", "Rome"):
+        _make_note(pg_session, alice, text)
+    sleep = MagicMock()
+
+    assert _run_vectors(pg_session, "--user-id", str(alice.uid), sleep=sleep) == 0
+
+    assert sleep.call_args_list == [call(0.25), call(0.25)]
+
+
+def test_vectors_delay_is_configurable(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    for text in ("Berlin", "Paris"):
+        _make_note(pg_session, alice, text)
+    sleep = MagicMock()
+
+    assert (
+        _run_vectors(
+            pg_session, "--user-id", str(alice.uid), "--delay-ms", "1000", sleep=sleep
+        )
+        == 0
+    )
+
+    assert sleep.call_args_list == [call(1.0)]
+
+
+def test_vectors_delay_zero_does_not_wait(pg_session: Session) -> None:
+    alice = _make_user(pg_session, "alice@test.com")
+    for text in ("Berlin", "Paris"):
+        _make_note(pg_session, alice, text)
+    sleep = MagicMock()
+
+    assert (
+        _run_vectors(
+            pg_session, "--user-id", str(alice.uid), "--delay-ms", "0", sleep=sleep
+        )
+        == 0
+    )
+
+    sleep.assert_not_called()
 
 
 def test_vectors_need_an_api_key(pg_session: Session) -> None:
