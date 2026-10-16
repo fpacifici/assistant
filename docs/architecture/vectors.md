@@ -99,7 +99,7 @@ to the notes the asking user can view. See [Ask AI](ask.md#permissions-in-semant
 # Embed notes that are missing or outdated (needs OPENAI_API_KEY)
 make reindex-vectors
 # Everything, or one user's notes
-python -m assistant.cli.reindex_search --vectors [--user-id UID]
+python -m assistant.cli.reindex_search --vectors [--user-id UID] [--delay-ms MS]
 ```
 
 Run it after the migration that adds the tables, after bumping
@@ -107,6 +107,8 @@ Run it after the migration that adds the tables, after bumping
 to retry notes whose embedding failed or that were written by a process
 without a worker (e.g. `cli.import_html_notes`). Each note is embedded in
 its own transaction; failures are logged and the command exits with 1.
+The command waits `--delay-ms` (default 250) between two notes to stay
+under the embedding API's rate limit; pass `0` to disable it.
 
 ## Configuration
 
