@@ -11,6 +11,8 @@ import InvitesPage from './pages/InvitesPage';
 import SettingsPage from './pages/SettingsPage';
 import SearchPage from './pages/SearchPage';
 import AskPage from './pages/AskPage';
+import BlogsPage from './pages/BlogsPage';
+import BlogSourcesPage from './pages/BlogSourcesPage';
 import SwitchToGooglePage from './pages/SwitchToGooglePage';
 import NoteWindow from './pages/NoteWindow';
 import {
@@ -41,6 +43,10 @@ export const routes: RouteObject[] = [
           { path: '/notebooks/:notebookId/notes/:noteId', element: <Layout /> },
           { path: '/search', element: <SearchPage /> },
           { path: '/ask', element: <AskPage /> },
+          { path: '/blogs', element: <BlogsPage view="all" /> },
+          { path: '/blogs/relevant', element: <BlogsPage view="relevant" /> },
+          { path: '/blogs/review', element: <BlogsPage view="new" /> },
+          { path: '/blogs/sources', element: <BlogSourcesPage /> },
           { path: '/notebooks/:notebookId/notes/:noteId/window', element: <NoteWindow /> },
           { path: '/invites', element: <InvitesPage /> },
           { path: '/settings', element: <SettingsPage /> },
