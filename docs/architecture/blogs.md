@@ -55,3 +55,74 @@ sitemaps are parsed with `defusedxml`, with DTDs refused.
 when the guid is a URL, of the URL path. The domain is ignored, so a blog can
 move. Tracking parameters (`utm_*`, `fbclid`, ...) are dropped and any other
 query parameter counts, which errs on the side of keeping two posts apart.
+
+## The job
+
+```bash
+make process-blogs
+python -m assistant.cli.process_blogs [--user-id UID] [--source-id ID] [--dry-run]
+```
+
+Run it from cron; the system does not schedule it. It needs `OPENAI_API_KEY`,
+except for `--dry-run`, which fetches sources and prints what it would collect
+without writing or calling a model. It exits with 1 if anything failed, and
+with 0 at once if another run holds the advisory lock.
+
+```mermaid
+flowchart TD
+    lock["Advisory lock"] --> collect
+    collect["Collect each enabled source"] --> analyze["Analyze each pending post"]
+    analyze --> sweep["Sweep text files of deleted posts"]
+```
+
+No transaction stays open across a network or model call. Each step reads what
+it needs, works, then reloads the row to write and gives up if it is gone,
+because the user can delete a source at any moment. A failure is logged with
+its exception, which sends it to Sentry, and never stops the run.
+
+**Collect**, one source at a time, with a short delay between requests:
+
+1. Conditional GET of `feed_url`. On a 304, go to the next source.
+2. Parse, compute each `post_key`, drop what is stored and what is older than
+   `collect_since`. A feed entry with no date counts as published now.
+3. For a sitemap, respect `robots.txt` (one that can't be read fails the source
+   for this run). An entry with no `lastmod` is fetched for its date, at most
+   `max_posts_per_run` of them per run. A `skipped` row remembers a page with no
+   date, or too old, so it is not fetched again.
+4. Insert up to `max_posts_per_run`, oldest first, as `pending`. Feed text is
+   held in memory for the analysis.
+5. Save `etag` and `last_modified` only if nothing was left out by the cap.
+   Otherwise the next run would get a 304 and never see the rest.
+
+Page dates are only those the page states. `trafilatura`'s extensive date search
+is off, because it guesses (a copyright year becomes January 1st), and a post
+with no date has to be skipped, not misdated.
+
+**Analyze** each `pending` post: if it has no text file, fetch the page, extract,
+fall back to the feed's text when the page yields less, and write the file. Then
+call the model. Writing the file first means a retry needs no new fetch and
+keeps feed-only text. Under 200 characters the post is `failed` with no call, so
+a summary is never invented from a title. On any other failure `attempts` goes
+up, and at 3 the post is `failed`. Failed posts stay visible.
+
+The model call is one `with_structured_output(PostAnalysis)`, with no tools,
+because post text is untrusted. Text is cut at 20 000 characters, and runs are
+traced in LangSmith, named and tagged `blog_process`, with `source_id` and
+`post_id` metadata. A source with no preferences gets no match level or
+motivation, whatever the model answers. The title comes from the feed, then the
+page, and only then the model.
+
+**Sweep** deletes each file in `blog_posts/` whose post no longer exists. This is
+the only code that removes text files, see
+[ADR-0004](../adr/0004-blog-post-text-in-documents.md).
+
+## Configuration
+
+```yaml
+ai:
+  blog_model: openai:gpt-6-luna  # AI_BLOG_MODEL
+
+blogs:
+  summary_words: 50      # BLOGS_SUMMARY_WORDS
+  max_posts_per_run: 50  # BLOGS_MAX_POSTS_PER_RUN
+```

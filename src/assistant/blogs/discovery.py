@@ -134,6 +134,9 @@ def parse_robots(content: bytes) -> RobotFileParser:
     """Parse a robots.txt. Parsing it ourselves keeps its fetch safe."""
     robots = RobotFileParser()
     robots.parse(content.decode("utf-8", errors="replace").splitlines())
+    # `can_fetch` refuses everything until this is set, which `parse` only
+    # does when it sees a rule, so an empty file would block the whole site.
+    robots.modified()
     return robots
 
 

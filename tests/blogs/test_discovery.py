@@ -16,8 +16,8 @@ from assistant.blogs.discovery import (
     resolve_source,
 )
 from assistant.blogs.exceptions import BlockedUrlError, FetchError, SourceResolutionError
-from assistant.blogs.fetch import FetchResult
 from assistant.models.schema import BlogSourceKind
+from tests.blogs.fakes import FakeWeb
 
 SITE = "https://blog.example.com"
 
@@ -49,23 +49,6 @@ SITEMAP_INDEX = b"""<?xml version="1.0"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap><loc>https://blog.example.com/posts.xml</loc></sitemap>
 </sitemapindex>"""
-
-
-class FakeWeb:
-    """A `fetch` answering from a dict of URL -> body, or raising for others."""
-
-    def __init__(self, pages: dict[str, bytes | Exception]) -> None:
-        self.pages = pages
-        self.requested: list[str] = []
-
-    def __call__(self, url: str, **_kwargs: object) -> FetchResult:
-        self.requested.append(url)
-        page = self.pages.get(url)
-        if page is None:
-            return FetchResult(url=url, status=404, content=b"")
-        if isinstance(page, Exception):
-            raise page
-        return FetchResult(url=url, status=200, content=page)
 
 
 @pytest.fixture

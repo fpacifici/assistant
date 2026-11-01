@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
 
 # Default target
 help:
@@ -20,6 +20,7 @@ help:
 	@echo "  make db-rollback         - Revert the most recent database migration"
 	@echo "  make reindex-search      - Rebuild the search index for stale notes"
 	@echo "  make reindex-vectors     - Embed stale notes into the vector index (needs OPENAI_API_KEY)"
+	@echo "  make process-blogs       - Collect and summarize blog posts (needs OPENAI_API_KEY)"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -132,6 +133,10 @@ reindex-search:
 reindex-vectors:
 	@echo "Embedding stale notes..."
 	@.venv/bin/python -m assistant.cli.reindex_search --vectors --stale-only
+
+# Collect new blog posts and summarize them (needs OPENAI_API_KEY)
+process-blogs:
+	@.venv/bin/python -m assistant.cli.process_blogs
 
 # Clean generated files and cache
 clean:

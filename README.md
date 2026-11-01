@@ -64,6 +64,20 @@ make pre-commit-install
 make pre-commit-run
 ```
 
+## Blogs
+
+Users add blogs and feeds in the Blogs tab. This job, which the system does not
+schedule, collects new posts and summarizes them (needs `OPENAI_API_KEY`). Run
+it from cron:
+
+```bash
+make process-blogs
+# Or, for one user or source, or to see what would be collected
+python -m assistant.cli.process_blogs [--user-id UID] [--source-id ID] [--dry-run]
+```
+
+See `docs/architecture/blogs.md`.
+
 ## Frontend
 
 The web UI is a React app in the `frontend/` directory.
