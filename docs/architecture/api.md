@@ -35,42 +35,21 @@ between password and Google sign-in — see
 
 ### User
 
-`POST /user`
-
-Create a user. Returns the created user with a generated UUID.
-
-Request body:
-```json
-{
-    "email": "user@example.com",
-    "firstname": "Jane",
-    "lastname": "Doe"
-}
-```
-
-Response (201):
-```json
-{
-    "uid": "uuid",
-    "email": "user@example.com",
-    "firstname": "Jane",
-    "lastname": "Doe"
-}
-```
-
-`GET /user`
-
-List users. Supports pagination via query parameters:
-- `offset` (default: 0)
-- `limit` (default: 20, max: 100)
+A user's profile (email, name, invite quota) is personal data. Every route
+here requires authentication and only ever touches the caller's own row.
+There is no list route and no create route: accounts are created through
+`POST /auth/register`, and the user directory cannot be enumerated.
 
 `GET /user/{uid}`
 
-Retrieve a user by UUID. Returns 404 if not found.
+Retrieve the caller's own profile. `uid` must be the caller's own id;
+any other id (whether or not it exists) returns 403, so this never confirms
+another account or exposes its data. 401 without authentication.
 
 `PATCH /user/{uid}`
 
-Partial update of a user. All fields are optional.
+Partial update of the caller's own profile. All fields are optional. Same
+authorization as above: another user's id is 403, unauthenticated is 401.
 
 Request body:
 ```json

@@ -1,15 +1,15 @@
-"""Tests for User API endpoints."""
+"""Tests for User API endpoints.
+
+Every route requires authentication and only exposes or changes the caller's
+own profile. There is no list or create route: account creation is
+`POST /auth/register`, and the user directory cannot be enumerated.
+"""
 
 from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
-from unittest.mock import patch
 
-import pytest
-
-from assistant.invites.service import create_invite
-from assistant.models.schema import InviteState
 from assistant.models.schema import User as UserModel
 
 if TYPE_CHECKING:
@@ -19,148 +19,79 @@ if TYPE_CHECKING:
     from assistant.models.schema import User
 
 
-class TestListUsers:
-    def test_list_users_empty(self, client: TestClient) -> None:
+class TestNoDirectoryAccess:
+    """The list and create routes are gone; nothing may enumerate users."""
+
+    def test_list_route_is_gone_unauthenticated(self, client: TestClient) -> None:
         response = client.get("/user")
-        assert response.status_code == 200
-        assert response.json() == []
+        assert response.status_code != 200
+        assert response.status_code in (404, 405)
 
-    def test_list_users(
-        self,
-        client: TestClient,
-        test_user: User,
+    def test_list_route_is_gone_authenticated(
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
-        response = client.get("/user")
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 1
-        assert data[0]["uid"] == str(test_user.uid)
+        # Even a logged-in caller cannot list the directory.
+        response = client.get("/user", headers=auth_headers)
+        assert response.status_code != 200
+        assert response.status_code in (404, 405)
 
-    def test_list_users_pagination(
-        self,
-        client: TestClient,
-        test_user: User,  # noqa: ARG002
-        db_session: Session,
-    ) -> None:
-        for i in range(4):
-            other = UserModel(
-                email=f"other{i}@example.com",
-                firstname="O",
-                lastname="U",
-            )
-            db_session.add(other)
-        db_session.flush()
-
-        response = client.get("/user", params={"limit": 2})
-        assert response.status_code == 200
-        assert len(response.json()) == 2
-
-
-class TestCreateUser:
-    def test_create_user(self, client: TestClient) -> None:
+    def test_create_route_is_gone(self, client: TestClient) -> None:
         response = client.post(
             "/user",
-            json={
-                "email": "new@example.com",
-                "firstname": "New",
-                "lastname": "User",
-            },
+            json={"email": "new@example.com", "firstname": "New", "lastname": "User"},
         )
-        assert response.status_code == 201
-        data = response.json()
-        assert data["email"] == "new@example.com"
-        assert data["firstname"] == "New"
-        assert data["lastname"] == "User"
-        assert "uid" in data
+        assert response.status_code != 201
+        assert response.status_code in (404, 405)
 
-    def test_create_user_duplicate_email(
-        self,
-        client: TestClient,
-        test_user: User,  # noqa: ARG002
+    def test_create_route_is_gone_even_authenticated(
+        self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         response = client.post(
             "/user",
-            json={
-                "email": "test@example.com",
-                "firstname": "Dup",
-                "lastname": "User",
-            },
+            json={"email": "new@example.com", "firstname": "New", "lastname": "User"},
+            headers=auth_headers,
         )
-        assert response.status_code == 409
-
-    def test_create_user_registration_disabled_without_invite_rejected(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
-        response = client.post(
-            "/user",
-            json={
-                "email": "new@example.com",
-                "firstname": "New",
-                "lastname": "User",
-            },
-        )
-        assert response.status_code == 403
-
-    def test_create_user_registration_disabled_with_valid_invite_succeeds(
-        self,
-        client: TestClient,
-        db_session: Session,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        inviter = UserModel(
-            email="inviter@example.com",
-            firstname="I",
-            lastname="N",
-            invite_quota_remaining=5,
-        )
-        db_session.add(inviter)
-        db_session.flush()
-        with patch("assistant.email.service.send_email"):
-            invite, _ = create_invite(
-                db_session,
-                inviter,
-                "invitee@example.com",
-                {
-                    "registration_enabled": True,
-                    "invites_enabled": True,
-                    "default_quota": 5,
-                    "expiry_days": 1,
-                },
-            )
-        db_session.commit()
-
-        monkeypatch.setenv("REGISTRATION_REGISTRATION_ENABLED", "false")
-        response = client.post(
-            "/user",
-            json={
-                "email": "invitee@example.com",
-                "firstname": "New",
-                "lastname": "User",
-                "invite_id": str(invite.id),
-            },
-        )
-        assert response.status_code == 201
-
-        db_session.refresh(invite)
-        assert invite.state == InviteState.CONVERTED.value
+        assert response.status_code != 201
+        assert response.status_code in (404, 405)
 
 
 class TestGetUser:
-    def test_get_user(
+    def test_get_own_profile(
         self,
         client: TestClient,
         test_user: User,
+        auth_headers: dict[str, str],
     ) -> None:
-        response = client.get(f"/user/{test_user.uid}")
+        response = client.get(f"/user/{test_user.uid}", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert data["email"] == "test@example.com"
         assert data["uid"] == str(test_user.uid)
 
-    def test_get_user_not_found(self, client: TestClient) -> None:
-        response = client.get(f"/user/{uuid.uuid4()}")
-        assert response.status_code == 404
+    def test_get_user_unauthenticated(self, client: TestClient, test_user: User) -> None:
+        # No email or any other field leaks without authentication.
+        response = client.get(f"/user/{test_user.uid}")
+        assert response.status_code == 401
+        assert "test@example.com" not in response.text
+
+    def test_get_other_real_user_forbidden(
+        self,
+        client: TestClient,
+        test_user: User,  # noqa: ARG002
+        other_user: User,
+        auth_headers: dict[str, str],
+    ) -> None:
+        response = client.get(f"/user/{other_user.uid}", headers=auth_headers)
+        assert response.status_code == 403
+        assert "other@example.com" not in response.text
+
+    def test_get_nonexistent_uid_forbidden_not_found(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        # A missing id and another user's id are indistinguishable: both 403,
+        # so existence of an account is never confirmed.
+        response = client.get(f"/user/{uuid.uuid4()}", headers=auth_headers)
+        assert response.status_code == 403
 
 
 class TestUpdateUser:
