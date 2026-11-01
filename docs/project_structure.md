@@ -10,6 +10,7 @@ assistant/
 │       ├── api/                # FastAPI REST API
 │       │   ├── routes/         # Route handlers (users, notebooks, notes)
 │       │   └── schemas/        # Pydantic request/response schemas
+│       ├── blogs/              # Blog sources, safe fetcher, collection job
 │       ├── chat/               # Ask AI threads
 │       ├── cli/                # CLI entry points (server, client, db tools, chat)
 │       ├── data/               # Static data assets

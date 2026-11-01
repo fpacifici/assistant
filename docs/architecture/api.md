@@ -528,6 +528,35 @@ If the model fails (no credits, rate limit, outage) the stream ends with
 `done`, instead of an HTTP error. The request is a POST, so browsers read
 it with `fetch` rather than `EventSource`.
 
+### Blogs
+
+Directories and sources of the caller. Another user's item is a 404. See
+[`blogs.md`](blogs.md).
+
+```
+GET    /blog/directory                     -> DirectoryResponse[] (by name)
+POST   /blog/directory        {"name"}     -> 201 DirectoryResponse
+PATCH  /blog/directory/{id}   {"name"}     -> DirectoryResponse
+DELETE /blog/directory/{id}                -> 204 (sources move to Unfiled)
+GET    /blog/source?archived=false         -> SourceResponse[] (by title)
+POST   /blog/source                        -> 201 SourceResponse
+GET    /blog/source/{id}                   -> SourceResponse with useful_post_count
+PATCH  /blog/source/{id}                   -> SourceResponse
+DELETE /blog/source/{id}?keep_useful=false -> 204
+```
+
+- A directory name already in use is a 409.
+- `POST /blog/source` takes `url`, and optionally `title`, `remarks`,
+  `preferences`, `directory_id` and `lookback_days` (default 7). It resolves
+  the URL before answering. A URL with nothing to collect, or a single post, is
+  a 422 with a message to show; a feed the caller already registered is a 409.
+- `PATCH /blog/source/{id}` takes `title`, `remarks`, `preferences`,
+  `directory_id` (`null` moves to Unfiled) and `enabled`. `collect_since` can't
+  be changed.
+- `archived=true` lists the archived sources that still have useful posts.
+  An archived source is otherwise a 404.
+- `keep_useful=true` archives the source, or deletes it if nothing is useful.
+
 ### Error Responses
 
 All error responses follow the format:
@@ -544,7 +573,7 @@ Status codes:
 - 404: Resource not found, or the caller cannot even view it (a subject
   that exists but is invisible to the caller is indistinguishable from one
   that doesn't exist)
-- 409: Conflict (duplicate email, version conflict)
+- 409: Conflict (duplicate email, version conflict, duplicate directory or source)
 - 413: Upload too large
 - 422: Validation error (missing/invalid fields or headers)
 - 503: AI features are disabled on this server (`/ask` routes)

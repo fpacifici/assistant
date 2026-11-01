@@ -79,13 +79,22 @@ class AIConfig(TypedDict):
     enabled: bool
     embedding_model: str
     chat_model: str
+    blog_model: str
     langsmith_enabled: bool
     langsmith_project: str
 
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_CHAT_MODEL = "openai:gpt-4.1"
+DEFAULT_BLOG_MODEL = "openai:gpt-6-luna"
 DEFAULT_LANGSMITH_PROJECT = "Assistant"
+
+
+class BlogsConfig(TypedDict):
+    """Blog collection settings, the same for all users."""
+
+    summary_words: int
+    max_posts_per_run: int
 
 
 class SentryConfig(TypedDict):
@@ -114,6 +123,7 @@ class AssistantConfig(TypedDict, total=False):
     google: GoogleConfig
     sentry: SentryConfig
     ai: AIConfig
+    blogs: BlogsConfig
 
 
 T = TypeVar("T")
@@ -672,14 +682,16 @@ class Config:
         Env var overrides follow the module convention:
             - `ai.embedding_model`   -> `AI_EMBEDDING_MODEL`
             - `ai.chat_model`        -> `AI_CHAT_MODEL`
+            - `ai.blog_model`        -> `AI_BLOG_MODEL`
             - `ai.langsmith_project` -> `AI_LANGSMITH_PROJECT`
 
         Returns:
             An `AIConfig` mapping. `enabled` is true when `OPENAI_API_KEY` is
             set and non-empty, `langsmith_enabled` when `LANGSMITH_API_KEY`
-            is. Models default to `text-embedding-3-small` and
-            `openai:gpt-4.1` (a langchain `provider:model` string), the
-            LangSmith project to `Assistant`.
+            is. Models default to `text-embedding-3-small`,
+            `openai:gpt-4.1` and `openai:gpt-6-luna` (the last two are
+            langchain `provider:model` strings), the LangSmith project to
+            `Assistant`.
         """
         return {
             "enabled": bool(os.getenv("OPENAI_API_KEY")),
@@ -687,10 +699,27 @@ class Config:
                 self.get("ai.embedding_model", DEFAULT_EMBEDDING_MODEL),
             ),
             "chat_model": str(self.get("ai.chat_model", DEFAULT_CHAT_MODEL)),
+            "blog_model": str(self.get("ai.blog_model", DEFAULT_BLOG_MODEL)),
             "langsmith_enabled": bool(os.getenv("LANGSMITH_API_KEY")),
             "langsmith_project": str(
                 self.get("ai.langsmith_project", DEFAULT_LANGSMITH_PROJECT),
             ),
+        }
+
+    def get_blogs_config(self) -> BlogsConfig:
+        """Get the effective blog collection configuration.
+
+        Env var overrides follow the module convention:
+            - `blogs.summary_words`     -> `BLOGS_SUMMARY_WORDS`
+            - `blogs.max_posts_per_run` -> `BLOGS_MAX_POSTS_PER_RUN`
+
+        Returns:
+            A `BlogsConfig` mapping, defaulting to 50 words and 50 posts per
+            source per run.
+        """
+        return {
+            "summary_words": int(self.get("blogs.summary_words", 50)),
+            "max_posts_per_run": int(self.get("blogs.max_posts_per_run", 50)),
         }
 
     def _get_sample_rate(self, key: str, default: float = 1.0) -> float:

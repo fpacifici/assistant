@@ -856,3 +856,23 @@ def test_config_get_sentry_config_invalid_yaml_rate_raises(tmp_path: Path) -> No
     config = Config(config_path=config_file)
     with pytest.raises(ValueError, match=r"between 0\.0 and 1\.0"):
         config.get_sentry_config()
+
+
+def test_blog_defaults(tmp_path: Path) -> None:
+    config = Config(config_path=tmp_path / "missing.yaml")
+    assert config.get_ai_config()["blog_model"] == "openai:gpt-6-luna"
+    assert config.get_blogs_config() == {"summary_words": 50, "max_posts_per_run": 50}
+
+
+def test_blog_settings_from_yaml_and_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "ai:\n  blog_model: openai:other\n"
+        "blogs:\n  summary_words: 30\n  max_posts_per_run: 5\n",
+    )
+    monkeypatch.setenv("BLOGS_MAX_POSTS_PER_RUN", "7")
+    config = Config(config_path=path)
+    assert config.get_ai_config()["blog_model"] == "openai:other"
+    assert config.get_blogs_config() == {"summary_words": 30, "max_posts_per_run": 7}

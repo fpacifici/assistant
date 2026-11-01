@@ -14,6 +14,13 @@ from assistant.auth.exceptions import (
     ConfirmationNotFoundError,
     ConfirmationTokenInvalidError,
 )
+from assistant.blogs.exceptions import (
+    BlogNotFoundError,
+    DuplicateDirectoryError,
+    DuplicateSourceError,
+    InvalidPostQueryError,
+    SourceResolutionError,
+)
 from assistant.chat.exceptions import AIDisabledError, ChatThreadNotFoundError
 from assistant.invites.exceptions import (
     InviteEmailMismatchError,
@@ -39,6 +46,29 @@ logger = logging.getLogger(__name__)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(BlogNotFoundError)
+    async def blog_not_found_handler(
+        request: Request,  # noqa: ARG001
+        exc: BlogNotFoundError,  # noqa: ARG001
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+    @app.exception_handler(DuplicateDirectoryError)
+    @app.exception_handler(DuplicateSourceError)
+    async def blog_duplicate_handler(
+        request: Request,  # noqa: ARG001
+        exc: Exception,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(SourceResolutionError)
+    @app.exception_handler(InvalidPostQueryError)
+    async def blog_invalid_handler(
+        request: Request,  # noqa: ARG001
+        exc: Exception,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
     @app.exception_handler(ChatThreadNotFoundError)
     async def chat_thread_not_found_handler(
         request: Request,  # noqa: ARG001

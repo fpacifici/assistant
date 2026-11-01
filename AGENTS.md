@@ -30,6 +30,7 @@ When working on the backend:
 - Keyword search: [`Search`](docs/architecture/search.md)
 - Embeddings for the AI agent: [`Vector search`](docs/architecture/vectors.md)
 - The AI agent and its API: [`Ask AI`](docs/architecture/ask.md)
+- Blog sources and the job that collects them: [`Blogs`](docs/architecture/blogs.md)
 
 When working on the frontend:
 
