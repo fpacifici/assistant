@@ -18,12 +18,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
-from xml.etree.ElementTree import ParseError
 
 import feedparser
 from bs4 import BeautifulSoup
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import ParseError
 
 from assistant.blogs.exceptions import FetchError, SourceResolutionError
 from assistant.blogs.fetch import fetch
@@ -31,7 +31,8 @@ from assistant.blogs.identity import canonical_path
 from assistant.models.schema import BlogSourceKind
 
 if TYPE_CHECKING:
-    from xml.etree.ElementTree import Element
+    # Only a type: all parsing goes through defusedxml.
+    from xml.etree.ElementTree import Element  # nosec B405
 
 logger = logging.getLogger(__name__)
 
