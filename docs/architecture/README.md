@@ -163,4 +163,5 @@ the webui.
 - [`Search`](search.md)
 - [`Vector search`](vectors.md)
 - [`Ask AI`](ask.md)
+- [`Blogs`](blogs.md)
 - [`Adapters (import)`](adapters.md)

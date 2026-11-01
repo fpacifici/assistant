@@ -68,4 +68,11 @@ ai:
   embedding_model: text-embedding-3-small
   # A langchain "provider:model" string.
   chat_model: openai:gpt-4.1
+  # Summarizes and scores blog posts in `make process-blogs`.
+  blog_model: openai:gpt-6-luna
   # langsmith_project: Assistant  # optional, this is the default
+
+# Blog collection (see docs/architecture/blogs.md), the same for all users.
+blogs:
+  summary_words: 50      # approximate length of a post's summary
+  max_posts_per_run: 50  # per source, oldest first; the rest wait for the next run

@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -102,6 +103,51 @@ class UserStatus(str, Enum):
     ACTIVE = "active"
 
 
+class BlogSourceKind(str, Enum):
+    """How a blog source is read."""
+
+    FEED = "feed"
+    SITEMAP = "sitemap"
+
+
+class BlogPostStatus(str, Enum):
+    """Where a post is in the pipeline.
+
+    `SKIPPED` rows only remember a dateless or too-old sitemap URL so it is
+    not fetched again; the API never returns them.
+    """
+
+    PENDING = "pending"
+    PROCESSED = "processed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class BlogPostState(str, Enum):
+    """The user's verdict on a post."""
+
+    NEW = "new"
+    USEFUL = "useful"
+    NOT_USEFUL = "not_useful"
+
+
+class BlogMatchLevel(str, Enum):
+    """How well a post fits its source's preferences."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class BlogEmbedStatus(str, Enum):
+    """Whether a post's embeddings exist. Only useful posts have them."""
+
+    NONE = "none"
+    PENDING = "pending"
+    DONE = "done"
+    FAILED = "failed"
+
+
 class User(Base):
     """User model."""
 
@@ -171,6 +217,16 @@ class User(Base):
     chat_threads: Mapped[list[ChatThread]] = relationship(
         "ChatThread",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    blog_directories: Mapped[list[BlogDirectory]] = relationship(
+        "BlogDirectory",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+    blog_sources: Mapped[list[BlogSource]] = relationship(
+        "BlogSource",
+        back_populates="owner",
         cascade="all, delete-orphan",
     )
 
@@ -849,3 +905,167 @@ class ChatThread(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="chat_threads")
+
+
+class BlogDirectory(Base):
+    """A user's folder of blog sources. Directories are a single level."""
+
+    __tablename__ = "blog_directories"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_blog_directory_owner_name"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="blog_directories")
+
+
+class BlogSource(Base):
+    """A blog or feed one user collects posts from.
+
+    Nothing is shared: two users registering the same blog get two sources.
+    `collect_since` is set at creation and never edited. A source with
+    `archived_at` set no longer collects and only keeps its useful posts; the
+    partial unique index lets its feed be registered again.
+    `kind` is validated in the service layer, like `Node.node_type`.
+    """
+
+    __tablename__ = "blog_sources"
+    __table_args__ = (
+        Index(
+            "uq_blog_source_owner_feed_url",
+            "owner_id",
+            "feed_url",
+            unique=True,
+            postgresql_where=text("archived_at IS NULL"),
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        nullable=False,
+    )
+    directory_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_directories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # What the user typed, and what it resolved to.
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    feed_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferences: Mapped[str | None] = mapped_column(Text, nullable=True)
+    collect_since: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    etag: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    last_modified: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="blog_sources")
+    directory: Mapped[BlogDirectory | None] = relationship("BlogDirectory")
+    posts: Mapped[list[BlogPost]] = relationship(
+        "BlogPost",
+        back_populates="source",
+        cascade="all, delete-orphan",
+    )
+
+
+class BlogPost(Base):
+    """One post of a source: metadata and analysis.
+
+    The full text is not here: it is a file in the documents directory, see
+    `assistant.blogs.text_store`. `status` is the pipeline's progress and
+    `state` the user's verdict; `status`, `state`, `match_level` and
+    `embed_status` are validated in the service layer.
+    """
+
+    __tablename__ = "blog_posts"
+    __table_args__ = (
+        UniqueConstraint("source_id", "post_key", name="uq_blog_post_source_key"),
+        Index(
+            "ix_blog_posts_source_state_published", "source_id", "state", "published_at"
+        ),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    source_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_sources.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # See `assistant.blogs.identity.post_key`.
+    post_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    match_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    motivation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=BlogPostStatus.PENDING.value
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=BlogPostState.NEW.value
+    )
+    evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    embed_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=BlogEmbedStatus.NONE.value
+    )
+    embed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    source: Mapped[BlogSource] = relationship("BlogSource", back_populates="posts")
