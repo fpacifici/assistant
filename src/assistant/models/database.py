@@ -106,9 +106,9 @@ _UNMAPPED_SEARCH_OBJECTS = frozenset(
     {"search_vector", "ix_note_search_index_vector", "ix_node_search_index_vector"},
 )
 
-# Postgres-only pgvector table, created by hand in the add_vector_index
-# migration and not mapped in the ORM (see `assistant.vectors.store`).
-_UNMAPPED_TABLES = frozenset({"note_chunk_embedding"})
+# Postgres-only pgvector tables, created by hand in migrations and not mapped
+# in the ORM (see `assistant.vectors.store` and `assistant.blogs.store`).
+_UNMAPPED_TABLES = frozenset({"note_chunk_embedding", "post_chunk_embedding"})
 
 
 def include_object_for_migrations(

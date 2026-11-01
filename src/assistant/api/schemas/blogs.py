@@ -8,7 +8,9 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from assistant.blogs.service import DEFAULT_LOOKBACK_DAYS
+from assistant.api.schemas.tags import TagResponse
+from assistant.blogs.service import DEFAULT_LOOKBACK_DAYS, MAX_BULK_POSTS
+from assistant.models.schema import BlogPostState
 
 DirectoryName = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)
@@ -88,3 +90,39 @@ class SourceResponse(BaseModel):
     consecutive_failures: int
     created_at: datetime
     useful_post_count: int | None = None
+
+
+class PostResponse(BaseModel):
+    """A post. A failed one has no summary, and possibly no title either."""
+
+    id: uuid.UUID
+    source_id: uuid.UUID
+    source_title: str
+    url: str
+    title: str | None
+    published_at: datetime
+    summary: str | None
+    match_level: str | None
+    motivation: str | None
+    status: str
+    state: str
+    evaluated_at: datetime | None
+    tags: list[TagResponse]
+
+
+class PostListResponse(BaseModel):
+    posts: list[PostResponse]
+    next_cursor: str | None
+
+
+class PostStateUpdate(BaseModel):
+    state: BlogPostState
+
+
+class BulkPostStateUpdate(BaseModel):
+    post_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=MAX_BULK_POSTS)]
+    state: BlogPostState
+
+
+class BulkPostStateResponse(BaseModel):
+    updated: int
