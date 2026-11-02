@@ -38,6 +38,7 @@ dependencies = [
     "trafilatura>=2.0.0",
     "feedparser>=6.0.11",
     "defusedxml>=0.7.1",
+    "assistant-rust",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +53,12 @@ dev = [
     "types-requests>=2.31.0",
     "types-defusedxml>=0.7.0",
 ]
+
+[tool.uv.workspace]
+members = ["rust"]
+
+[tool.uv.sources]
+assistant-rust = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

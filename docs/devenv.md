@@ -21,6 +21,12 @@ uv pip install -e ".[dev]"
 pre-commit install
 ```
 
+## Rust toolchain
+
+`uv sync` compiles the Rust extension, so it needs
+[rustup](https://rustup.rs). rustup installs the pinned version from
+`rust/rust-toolchain.toml` on first use.
+
 ## Code quality checks
 
 #### Manual Commands

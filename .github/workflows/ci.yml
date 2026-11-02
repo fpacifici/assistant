@@ -37,11 +37,28 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Sync dependencies
+      # rustup on the runner installs the version in rust/rust-toolchain.toml
+      - name: Set up Rust
+        run: rustup toolchain install --no-self-update
+        working-directory: rust
+
+      - name: Sync dependencies and build the Rust extension
         run: uv sync --all-extras
 
       - name: Run pre-commit
         run: .venv/bin/pre-commit run --all-files
 
+      - name: Run Rust tests
+        run: make rust-test
+
       - name: Run tests
         run: uv run pytest tests
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Dockerfile fails if the image cannot call into the Rust extension.
+      - name: Build API image
+        run: make docker-build

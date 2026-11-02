@@ -20,6 +20,8 @@ assistant/
 │       ├── notes/              # Notes service layer (CRUD, positions, users)
 │       ├── tui/                # Terminal UI (Textual chat app)
 │       └── vectors/            # Note embeddings (pgvector), indexer, worker
+├── rust/                       # Rust crate, the assistant_rust extension module
+│   └── src/                    # PyO3 bindings (lib.rs) and logic modules
 ├── frontend/                   # React/TypeScript web UI (Vite)
 │   └── src/
 │       ├── api/                # API client layer

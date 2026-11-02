@@ -17,6 +17,9 @@ docs
 !README.md
 .env
 .env.*
+rust/target
+# The rust-builder image already pins the toolchain, without clippy or rustfmt
+rust/rust-toolchain.toml
 __pycache__
 **/__pycache__
 *.pyc

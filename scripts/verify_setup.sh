@@ -13,6 +13,13 @@ python3 --version 2>/dev/null | grep -E "3\.(13|14|15)" || {
     exit 1
 }
 
+# Check Rust
+echo "✓ Checking Rust..."
+cargo --version 2>/dev/null || {
+    echo "❌ Rust required (see rust/rust-toolchain.toml for the version)"
+    exit 1
+}
+
 # Check if in project root
 echo "✓ Checking project structure..."
 if [ ! -f "pyproject.toml" ]; then
