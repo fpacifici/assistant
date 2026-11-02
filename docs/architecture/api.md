@@ -33,6 +33,13 @@ Google sign-in (OpenID Connect) is also supported, and a user can swap
 between password and Google sign-in — see
 [`Authentication`](authentication.md).
 
+### Rust
+
+`GET /rustcore/greeting?name=Ada`
+
+Toy endpoint proving the path from FastAPI to [Rust code](rust.md). Returns
+`{"message": "Hello, Ada!"}`. Requires authentication; an empty `name` is 422.
+
 ### User
 
 A user's profile (email, name, invite quota) is personal data. Every route

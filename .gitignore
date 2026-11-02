@@ -80,6 +80,9 @@ docs/.doctrees/
 
 # Data downloaded
 data/
+# Rust
+rust/target/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
