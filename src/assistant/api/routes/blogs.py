@@ -9,26 +9,41 @@ from fastapi import APIRouter, Query
 
 from assistant.api.dependencies import CurrentUser, SessionDep
 from assistant.api.schemas.blogs import (
+    BulkPostStateResponse,
+    BulkPostStateUpdate,
     DirectoryCreate,
     DirectoryResponse,
     DirectoryUpdate,
+    PostListResponse,
+    PostResponse,
+    PostStateUpdate,
     SourceCreate,
     SourceResponse,
     SourceUpdate,
 )
+from assistant.api.schemas.tags import NoteTagAdd, TagResponse
 from assistant.blogs.service import (
+    PostFilters,
+    PostView,
     SourceChanges,
+    add_tag_to_post,
     create_directory,
     delete_directory,
     delete_source,
     get_source,
     list_directories,
+    list_posts,
     list_sources,
     register_source,
+    remove_tag_from_post,
     rename_directory,
+    set_post_state,
+    set_posts_state,
+    tags_for_posts,
     update_source,
     useful_post_count,
 )
+from assistant.models.schema import BlogPost, Tag
 
 router = APIRouter()
 
@@ -131,3 +146,103 @@ def delete_source_endpoint(
 ) -> None:
     """Delete a source and all its posts, or with `keep_useful` archive it."""
     delete_source(session, user, source_id, keep_useful=keep_useful)
+
+
+# --- Posts ---
+
+
+def _post_response(post: BlogPost, tags: list[Tag]) -> PostResponse:
+    return PostResponse(
+        id=post.id,
+        source_id=post.source_id,
+        source_title=post.source.title,
+        url=post.url,
+        title=post.title,
+        published_at=post.published_at,
+        summary=post.summary,
+        match_level=post.match_level,
+        motivation=post.motivation,
+        status=post.status,
+        state=post.state,
+        evaluated_at=post.evaluated_at,
+        tags=[TagResponse.model_validate(tag) for tag in tags],
+    )
+
+
+@router.get("/post", response_model=PostListResponse)
+def list_posts_endpoint(  # noqa: PLR0913
+    session: SessionDep,
+    user: CurrentUser,
+    view: Annotated[PostView, Query()] = PostView.ALL,
+    directory_id: Annotated[uuid.UUID | None, Query()] = None,
+    unfiled: Annotated[bool, Query()] = False,
+    source_id: Annotated[uuid.UUID | None, Query()] = None,
+    tag: Annotated[uuid.UUID | None, Query()] = None,
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PostListResponse:
+    """List posts. Pass `next_cursor` back as `cursor` for the next page."""
+    page = list_posts(
+        session,
+        user,
+        view=view,
+        filters=PostFilters(
+            directory_id=directory_id,
+            unfiled=unfiled,
+            source_id=source_id,
+            tag_id=tag,
+        ),
+        cursor=cursor,
+        limit=limit,
+    )
+    return PostListResponse(
+        posts=[_post_response(p, page.tags.get(p.id, [])) for p in page.posts],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.post("/post/bulk-state", response_model=BulkPostStateResponse)
+def bulk_post_state_endpoint(
+    body: BulkPostStateUpdate, session: SessionDep, user: CurrentUser
+) -> BulkPostStateResponse:
+    """Set the verdict of the listed posts: the ones the user has on screen."""
+    updated = set_posts_state(session, user, body.post_ids, body.state)
+    return BulkPostStateResponse(updated=updated)
+
+
+@router.patch("/post/{post_id}", response_model=PostResponse)
+def set_post_state_endpoint(
+    post_id: uuid.UUID,
+    body: PostStateUpdate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> PostResponse:
+    """Set a post's verdict. Undo sets it back."""
+    post = set_post_state(session, user, post_id, body.state)
+    return _post_response(post, tags_for_posts(session, [post.id]).get(post.id, []))
+
+
+@router.post("/post/{post_id}/tag", response_model=list[TagResponse])
+def add_post_tag_endpoint(
+    post_id: uuid.UUID,
+    body: NoteTagAdd,
+    session: SessionDep,
+    user: CurrentUser,
+) -> list[TagResponse]:
+    """Tag a post by id, or by name (creating the tag if needed).
+
+    Returns the post's tags after the change.
+    """
+    add_tag_to_post(session, user, post_id, tag_id=body.tag_id, name=body.name)
+    tags = tags_for_posts(session, [post_id]).get(post_id, [])
+    return [TagResponse.model_validate(tag) for tag in tags]
+
+
+@router.delete("/post/{post_id}/tag/{tag_id}", status_code=204)
+def remove_post_tag_endpoint(
+    post_id: uuid.UUID,
+    tag_id: uuid.UUID,
+    session: SessionDep,
+    user: CurrentUser,
+) -> None:
+    remove_tag_from_post(session, user, post_id, tag_id)

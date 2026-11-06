@@ -1,8 +1,9 @@
 """The job that collects posts and processes them.
 
 `BlogPipeline.run` goes through the sources one at a time: it collects what is
-new, analyzes every pending post, and sweeps the text files of deleted posts.
-A failure is logged (Sentry picks it up), counted, and never stops the run.
+new, analyzes every pending post, embeds the posts marked useful, and sweeps
+the text files of deleted posts. A failure is logged (Sentry picks it up),
+counted, and never stops the run.
 
 No transaction stays open across a network or model call: each step reads what
 it needs, works, then reloads the row to write, and gives up if the row is
@@ -20,12 +21,13 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from sqlalchemy import select, text
 
 from assistant.blogs.analysis import MIN_TEXT_CHARS, PostToAnalyze
+from assistant.blogs.chunking import PostInfo, chunk_post
 from assistant.blogs.discovery import (
     SitemapEntry,
     parse_feed,
@@ -36,9 +38,12 @@ from assistant.blogs.exceptions import FetchError
 from assistant.blogs.extraction import extract_page, html_to_text
 from assistant.blogs.fetch import fetch
 from assistant.blogs.identity import is_http_url, post_key
+from assistant.blogs.store import replace_post_chunks
 from assistant.models.schema import (
+    BlogEmbedStatus,
     BlogMatchLevel,
     BlogPost,
+    BlogPostState,
     BlogPostStatus,
     BlogSource,
     BlogSourceKind,
@@ -49,6 +54,7 @@ if TYPE_CHECKING:
     from contextlib import AbstractContextManager
     from urllib.robotparser import RobotFileParser
 
+    from langchain_core.embeddings import Embeddings
     from sqlalchemy import Engine, Select
     from sqlalchemy.orm import Session
 
@@ -107,6 +113,7 @@ class RunReport:
     posts_collected: int = 0
     posts_analyzed: int = 0
     posts_too_short: int = 0
+    posts_embedded: int = 0
     files_swept: int = 0
     failures: int = 0
     would_collect: list[tuple[str, str]] = field(default_factory=list)
@@ -181,6 +188,15 @@ class _PostJob:
     preferences: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class _EmbedJob:
+    """What embedding a post needs, readable with no session open."""
+
+    info: PostInfo
+    source_id: uuid.UUID
+    owner_id: uuid.UUID
+
+
 def _entry_date(entry: Any) -> datetime | None:  # noqa: ANN401
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
     if not parsed:
@@ -238,10 +254,11 @@ def _oldest_first(candidate: _Candidate) -> datetime:
 class BlogPipeline:
     """Collects and processes the posts of every enabled source."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         session_factory: SessionFactory,
         analyzer: PostAnalyzer | None,
+        embeddings: Embeddings | None,
         text_store: TextStore,
         *,
         max_posts_per_run: int,
@@ -252,12 +269,14 @@ class BlogPipeline:
         Args:
             session_factory: Opens database sessions.
             analyzer: The model. Only a dry run can go without it.
+            embeddings: The embedding model. Likewise.
             text_store: Where post text is saved.
             max_posts_per_run: Most posts collected per source per run.
             request_delay_seconds: Pause before every request after the first.
         """
         self._sessions = session_factory
         self._analyzer = analyzer
+        self._embeddings = embeddings
         self._text_store = text_store
         self._max_posts = max_posts_per_run
         self._delay = request_delay_seconds
@@ -289,6 +308,7 @@ class BlogPipeline:
         if dry_run:
             return report
         self._analyze_pending(user_id, source_id, report)
+        self._embed_pending(user_id, source_id, report)
         self._sweep(report)
         return report
 
@@ -691,6 +711,83 @@ class BlogPipeline:
                 report.posts_analyzed += 1
             session.commit()
 
+    # --- Embed ---
+
+    def _embed_pending(
+        self,
+        user_id: uuid.UUID | None,
+        source_id: uuid.UUID | None,
+        report: RunReport,
+    ) -> None:
+        stmt = (
+            select(BlogPost.id)
+            .join(BlogSource, BlogSource.id == BlogPost.source_id)
+            .where(BlogPost.embed_status == BlogEmbedStatus.PENDING.value)
+            .order_by(BlogPost.evaluated_at, BlogPost.id)
+        )
+        with self._sessions() as session:
+            post_ids = list(session.scalars(_scoped(stmt, user_id, source_id)))
+        for post_id in post_ids:
+            self._embed_post(post_id, report)
+
+    def _embed_post(self, post_id: uuid.UUID, report: RunReport) -> None:
+        job = self._load_embed_job(post_id)
+        if job is None:
+            return
+        try:
+            # Never fetches: with no file, title and summary are all there is.
+            chunks = chunk_post(job.info, self._text_store.read(post_id) or "")
+            if self._embeddings is None:
+                msg = "AI is disabled"
+                raise RuntimeError(msg)  # noqa: TRY301
+            vectors = self._embeddings.embed_documents([c.text for c in chunks])
+            with self._sessions() as session:
+                post = session.get(BlogPost, post_id, with_for_update=True)
+                # The verdict may have changed while OpenAI was answering, and
+                # the user's choice wins.
+                if _wants_embedding(post):
+                    replace_post_chunks(
+                        session,
+                        post_id=post_id,
+                        source_id=job.source_id,
+                        owner_id=job.owner_id,
+                        chunks=chunks,
+                        embeddings=vectors,
+                    )
+                    post.embed_status = BlogEmbedStatus.DONE.value
+                    report.posts_embedded += 1
+                session.commit()
+        except Exception:
+            report.failures += 1
+            logger.exception("Could not embed post %s", post_id)
+            self._record_embed_attempt(post_id)
+
+    def _load_embed_job(self, post_id: uuid.UUID) -> _EmbedJob | None:
+        with self._sessions() as session:
+            post = session.get(BlogPost, post_id)
+            if post is None or not _wants_embedding(post):
+                return None
+            return _EmbedJob(
+                info=PostInfo(
+                    title=post.title or post.url,
+                    source_title=post.source.title,
+                    summary=post.summary,
+                    url=post.url,
+                    published_at=post.published_at,
+                ),
+                source_id=post.source_id,
+                owner_id=post.source.owner_id,
+            )
+
+    def _record_embed_attempt(self, post_id: uuid.UUID) -> None:
+        with self._sessions() as session:
+            post = session.get(BlogPost, post_id, with_for_update=True)
+            if post is not None and _wants_embedding(post):
+                post.embed_attempts += 1
+                if post.embed_attempts >= MAX_ATTEMPTS:
+                    post.embed_status = BlogEmbedStatus.FAILED.value
+            session.commit()
+
     # --- Sweep ---
 
     def _sweep(self, report: RunReport) -> None:
@@ -715,6 +812,14 @@ def _scoped[T: Select[Any]](
     if source_id is not None:
         stmt = stmt.where(BlogSource.id == source_id)
     return stmt
+
+
+def _wants_embedding(post: BlogPost | None) -> TypeGuard[BlogPost]:
+    return (
+        post is not None
+        and post.state == BlogPostState.USEFUL.value
+        and post.embed_status == BlogEmbedStatus.PENDING.value
+    )
 
 
 def _bounded(value: str | None, limit: int) -> str | None:

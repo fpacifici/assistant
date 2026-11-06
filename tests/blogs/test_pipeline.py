@@ -11,7 +11,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import Engine, select
+from langchain_core.embeddings import DeterministicFakeEmbedding
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from assistant.blogs import pipeline as pipeline_module
@@ -24,8 +25,11 @@ from assistant.blogs.pipeline import (
     RunReport,
     advisory_lock,
 )
+from assistant.blogs.service import set_post_state
+from assistant.blogs.store import post_chunk_embedding
 from assistant.blogs.text_store import TextStore
 from assistant.models.schema import (
+    BlogEmbedStatus,
     BlogPost,
     BlogPostState,
     BlogPostStatus,
@@ -33,6 +37,7 @@ from assistant.models.schema import (
     BlogSourceKind,
     User,
 )
+from assistant.vectors.store import EMBEDDING_DIMENSIONS
 from tests.blogs.fakes import FakeAnalyzer, FakeWeb
 
 pytestmark = pytest.mark.postgres
@@ -104,6 +109,7 @@ class Job:
     analyzer: FakeAnalyzer
     store: TextStore
     factory: Callable[[], AbstractContextManager[Session]]
+    embeddings: DeterministicFakeEmbedding
 
     def source(self, **fields: object) -> BlogSource:
         values: dict[str, object] = {
@@ -124,6 +130,7 @@ class Job:
         pipeline = BlogPipeline(
             self.factory,
             self.analyzer,  # type: ignore[arg-type]
+            self.embeddings,
             self.store,
             max_posts_per_run=max_posts,
             request_delay_seconds=0,
@@ -158,6 +165,7 @@ def job(
             FakeAnalyzer(),
             TextStore(tmp_path),
             pg_session_factory,
+            DeterministicFakeEmbedding(size=EMBEDDING_DIMENSIONS),
         )
 
 
@@ -669,6 +677,153 @@ def test_a_post_deleted_during_analysis_is_left_alone(job: Job) -> None:
         report = job.run()
     assert report.posts_analyzed == 0
     assert report.failures == 0
+
+
+# --- Embed ---
+
+
+def _useful_post(job: Job, *, title: str | None = "One") -> tuple[BlogSource, BlogPost]:
+    """A processed post the user just marked useful."""
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one", title=title))
+    job.web.pages[f"{SITE}/one"] = _page()
+    job.run()
+    [post] = job.posts(source)
+    set_post_state(job.session, job.owner, post.id, BlogPostState.USEFUL)
+    job.session.commit()
+    return source, post
+
+
+def _chunks(job: Job, post: BlogPost) -> list[str]:
+    rows = job.session.execute(
+        select(post_chunk_embedding.c.content)
+        .where(post_chunk_embedding.c.post_id == post.id)
+        .order_by(post_chunk_embedding.c.chunk_index),
+    )
+    return list(rows.scalars())
+
+
+def test_a_useful_post_is_embedded_without_fetching(job: Job) -> None:
+    _, post = _useful_post(job)
+    job.web.requested.clear()
+    job.web.pages[FEED] = 304
+
+    report = job.run()
+
+    assert report.posts_embedded == 1
+    assert f"{SITE}/one" not in job.web.requested
+    job.session.refresh(post)
+    assert post.embed_status == BlogEmbedStatus.DONE.value
+    chunks = _chunks(job, post)
+    assert chunks
+    assert chunks[0].startswith("Title: One\nSource: Blog\nSummary: A summary.")
+    assert "Plenty of words" in chunks[0]
+
+
+def test_owner_and_source_are_stored_with_the_chunks(job: Job) -> None:
+    source, post = _useful_post(job)
+    job.run()
+    row = job.session.execute(
+        select(post_chunk_embedding).where(post_chunk_embedding.c.post_id == post.id),
+    ).first()
+    assert row is not None
+    assert row.owner_id == job.owner.uid
+    assert row.source_id == source.id
+
+
+def test_a_post_with_no_file_embeds_title_and_summary(job: Job) -> None:
+    _, post = _useful_post(job)
+    job.store.path(post.id).unlink()
+    job.run()
+    assert _chunks(job, post) == ["Title: One\nSource: Blog\nSummary: A summary."]
+
+
+def test_a_failed_post_can_be_embedded_with_its_url_as_title(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("short", body="Short."))
+    job.web.pages[f"{SITE}/short"] = 404
+    job.analyzer.error = None
+    job.run()
+    [post] = job.posts(source)
+    post.status = BlogPostStatus.FAILED.value
+    job.session.commit()
+    set_post_state(job.session, job.owner, post.id, BlogPostState.USEFUL)
+    job.session.commit()
+    job.run()
+    assert _chunks(job, post)[0].startswith(f"Title: {SITE}/short\nSource: Blog")
+
+
+def test_a_verdict_changed_during_embedding_wins(job: Job) -> None:
+    _, post = _useful_post(job)
+    real = job.embeddings.embed_documents
+
+    def change_verdict_meanwhile(texts: list[str]) -> list[list[float]]:
+        set_post_state(job.session, job.owner, post.id, BlogPostState.NOT_USEFUL)
+        job.session.commit()
+        return real(texts)
+
+    with patch.object(
+        type(job.embeddings), "embed_documents", lambda _, t: change_verdict_meanwhile(t)
+    ):
+        report = job.run()
+
+    assert report.posts_embedded == 0
+    assert report.failures == 0
+    assert _chunks(job, post) == []
+    job.session.refresh(post)
+    assert post.embed_status == BlogEmbedStatus.NONE.value
+
+
+def test_embedding_failure_retries_until_failed(job: Job) -> None:
+    _, post = _useful_post(job)
+    with patch.object(
+        type(job.embeddings),
+        "embed_documents",
+        side_effect=RuntimeError("no credits"),
+    ):
+        for _ in range(MAX_ATTEMPTS):
+            assert job.run().failures == 1
+        assert job.run().failures == 0
+    job.session.refresh(post)
+    assert post.embed_status == BlogEmbedStatus.FAILED.value
+    assert post.embed_attempts == MAX_ATTEMPTS
+
+
+def test_wrong_dimension_is_a_failure_and_writes_nothing(job: Job) -> None:
+    _, post = _useful_post(job)
+    job.embeddings = DeterministicFakeEmbedding(size=8)
+    assert job.run().failures == 1
+    assert _chunks(job, post) == []
+
+
+def test_embedding_again_replaces_the_chunks(job: Job) -> None:
+    _, post = _useful_post(job)
+    job.run()
+    set_post_state(job.session, job.owner, post.id, BlogPostState.NEW)
+    set_post_state(job.session, job.owner, post.id, BlogPostState.USEFUL)
+    job.session.commit()
+    job.run()
+    count = job.session.scalar(
+        select(func.count())
+        .select_from(post_chunk_embedding)
+        .where(post_chunk_embedding.c.post_id == post.id),
+    )
+    assert count == len(_chunks(job, post))
+    assert count == 1
+
+
+def test_a_deleted_post_loses_its_chunks(job: Job) -> None:
+    source, post = _useful_post(job)
+    job.run()
+    post_id = post.id
+    job.session.delete(source)
+    job.session.commit()
+    remaining = job.session.scalar(
+        select(func.count())
+        .select_from(post_chunk_embedding)
+        .where(post_chunk_embedding.c.post_id == post_id),
+    )
+    assert remaining == 0
 
 
 # --- Sweep ---

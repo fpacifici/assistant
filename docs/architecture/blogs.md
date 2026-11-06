@@ -15,6 +15,8 @@ function loads the row filtered by owner, so another user's row is a 404.
 | `blog_directories` | A user's single-level folders. `name` is unique per user. |
 | `blog_sources` | What to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
 | `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict. |
+| `post_tags` | Tags on posts, from the same per-user vocabulary as notes. |
+| `post_chunk_embedding` | Not mapped (Postgres-only, pgvector). One row per chunk of a useful post, same shape as `note_chunk_embedding`, with `post_id`, `source_id`, `owner_id`. HNSW cosine index. No feature reads it yet. |
 
 Deleting a user cascades to all of it.
 
@@ -32,6 +34,23 @@ are generic and never contain anything from the response.
 `keep_useful=true` the source is archived instead: it stops collecting, leaves
 the source list, and only its useful posts stay. Its feed can then be
 registered again, so a useful post can appear twice, once under each source.
+
+## Evaluating posts
+
+`state` is the user's verdict, and `Relevant` only ever means `useful`: the model's
+match level never changes a state or hides a post.
+
+| Change | Effect on `embed_status` |
+| --- | --- |
+| To `useful` | `pending`; the next job run embeds it |
+| Away from `useful` | `none`, and the chunks are deleted in the same transaction |
+
+The list is paged by keyset (a cursor of the sort key), not offset, because
+evaluated cards leave the New list while the user scrolls and an offset would
+skip the posts after them. All and Relevant sort by `published_at DESC, id DESC`,
+New by match rank (high first, unscored last) and then the same.
+
+Posts still `pending`, and `skipped` rows, are never returned and answer 404.
 
 ## Safe fetcher
 
@@ -72,7 +91,8 @@ with 0 at once if another run holds the advisory lock.
 flowchart TD
     lock["Advisory lock"] --> collect
     collect["Collect each enabled source"] --> analyze["Analyze each pending post"]
-    analyze --> sweep["Sweep text files of deleted posts"]
+    analyze --> embed["Embed each post marked useful"]
+    embed --> sweep["Sweep text files of deleted posts"]
 ```
 
 No transaction stays open across a network or model call. Each step reads what
@@ -111,6 +131,13 @@ traced in LangSmith, named and tagged `blog_process`, with `source_id` and
 `post_id` metadata. A source with no preferences gets no match level or
 motivation, whatever the model answers. The title comes from the feed, then the
 page, and only then the model.
+
+**Embed** each post with `embed_status = pending`: read the text file, chunk it
+like a note with a `Title / Source / Summary` header, and embed. It never
+fetches: a post with no file embeds title and summary only. The write locks the
+post and checks it is still `useful` and `pending`, so a verdict changed while
+the job was calling OpenAI wins. On failure `embed_attempts` goes up, and at 3
+the post is `failed` until its verdict changes.
 
 **Sweep** deletes each file in `blog_posts/` whose post no longer exists. This is
 the only code that removes text files, see

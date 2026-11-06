@@ -25,6 +25,7 @@ def pipeline() -> Iterator[MagicMock]:
         patch.object(process_blogs, "BlogPipeline") as cls,
         patch.object(process_blogs, "get_engine"),
         patch.object(process_blogs, "create_post_analyzer", return_value=MagicMock()),
+        patch.object(process_blogs, "create_vector_indexer", return_value=MagicMock()),
         patch.object(process_blogs, "advisory_lock", lambda _engine: _lock(True)),
     ):
         cls.return_value.run.return_value = RunReport()

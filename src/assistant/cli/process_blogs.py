@@ -24,6 +24,7 @@ from assistant.blogs.text_store import create_text_store
 from assistant.config import Config
 from assistant.models.database import get_engine
 from assistant.observability import init_sentry
+from assistant.vectors.indexer import create_vector_indexer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,10 +61,13 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("AI is disabled: set OPENAI_API_KEY to process blogs")
         return 1
 
+    indexer = None if args.dry_run else create_vector_indexer(config)
+
     engine = get_engine()
     pipeline = BlogPipeline(
         sessionmaker(bind=engine, autoflush=False, autocommit=False),
         analyzer,
+        indexer.embeddings if indexer else None,
         create_text_store(config),
         max_posts_per_run=config.get_blogs_config()["max_posts_per_run"],
     )
@@ -78,11 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{source_title}: {url}")  # noqa: T201
     logger.info(
         "Checked %d sources: %d posts collected, %d analyzed, %d too short, "
-        "%d text files swept, %d failures",
+        "%d embedded, %d text files swept, %d failures",
         report.sources_checked,
         report.posts_collected,
         report.posts_analyzed,
         report.posts_too_short,
+        report.posts_embedded,
         report.files_swept,
         report.failures,
     )

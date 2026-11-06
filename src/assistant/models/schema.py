@@ -637,6 +637,11 @@ class Tag(Base):
         back_populates="tag",
         cascade="all, delete-orphan",
     )
+    post_links: Mapped[list[PostTag]] = relationship(
+        "PostTag",
+        back_populates="tag",
+        cascade="all, delete-orphan",
+    )
 
 
 class NoteTag(Base):
@@ -1069,3 +1074,41 @@ class BlogPost(Base):
     embed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     source: Mapped[BlogSource] = relationship("BlogSource", back_populates="posts")
+    tag_links: Mapped[list[PostTag]] = relationship(
+        "PostTag",
+        back_populates="post",
+        cascade="all, delete-orphan",
+    )
+
+
+class PostTag(Base):
+    """Links a BlogPost to a Tag (m:n), from the same vocabulary as notes.
+
+    Posts have one owner, so unlike `NoteTag` a post's links are all from its
+    owner's tags.
+    """
+
+    __tablename__ = "post_tags"
+    __table_args__ = (
+        Index("ix_post_tags_tag_id", "tag_id"),
+        {"schema": "assistant"},
+    )
+
+    post_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tag_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.tags.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+    post: Mapped[BlogPost] = relationship("BlogPost", back_populates="tag_links")
+    tag: Mapped[Tag] = relationship("Tag", back_populates="post_links")
