@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server rust-build rust-lint rust-test rust-check frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
 
 # Default target
 help:
@@ -11,7 +11,11 @@ help:
 	@echo "  make typecheck           - Run mypy type checker"
 	@echo "  make lint                - Run ruff linter"
 	@echo "  make format              - Format code with ruff"
-	@echo "  make check               - Run all checks (typecheck, lint, test)"
+	@echo "  make check               - Run all checks (typecheck, lint, rust-check, test)"
+	@echo "  make rust-build          - Build the Rust extension into the virtual environment"
+	@echo "  make rust-lint           - Check Rust code with rustfmt and clippy"
+	@echo "  make rust-test           - Run the Rust tests"
+	@echo "  make rust-check          - Run all Rust checks (lint, test)"
 	@echo "  make pre-commit-install  - Install pre-commit hooks"
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
 	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
@@ -61,8 +65,28 @@ install:
 	@uv pip install -e ".[dev]"
 	@echo "✅ Package installed"
 
+# Build the Rust extension into .venv. uv rebuilds it only when its sources change.
+rust-build:
+	@echo "Building Rust extension..."
+	@uv sync --all-extras --inexact --quiet
+
+# Check Rust code with rustfmt and clippy
+rust-lint:
+	@echo "Linting Rust code..."
+	@cd rust && cargo fmt --check
+	@cd rust && cargo clippy --all-targets -- -D warnings
+
+# Run the Rust tests
+rust-test:
+	@echo "Running Rust tests..."
+	@cd rust && cargo test
+
+# Run all Rust checks
+rust-check: rust-lint rust-test
+	@echo "✅ Rust checks passed"
+
 # Run all tests
-test:
+test: rust-build
 	@echo "Running tests..."
 	pytest tests
 
@@ -84,7 +108,7 @@ format:
 	@echo "✅ Code formatted"
 
 # Run all checks
-check: typecheck lint test
+check: typecheck lint rust-check test
 	@echo "✅ All checks passed"
 
 # Install pre-commit hooks (uses project .venv)
@@ -150,12 +174,13 @@ clean:
 	@rm -rf .ruff_cache/
 	@rm -rf htmlcov/
 	@rm -rf .coverage
+	@rm -rf rust/target/
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete
 	@echo "✅ Cleanup complete"
 
 # Start the FastAPI API server
-server:
+server: rust-build
 	@echo "Starting API server on http://localhost:8000 ..."
 	@.venv/bin/python -m assistant.cli.api_server
 
@@ -229,7 +254,7 @@ frontend-check: frontend-lint frontend-test
 	@echo "✅ Frontend checks passed"
 
 # Start both backend and frontend dev servers
-dev:
+dev: rust-build
 	@echo "Starting backend and frontend..."
 	@.venv/bin/python -m assistant.cli.api_server & cd frontend && npm run dev
 

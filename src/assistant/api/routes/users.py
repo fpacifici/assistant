@@ -1,4 +1,10 @@
-"""User API routes."""
+"""User API routes.
+
+A user's profile (email, name, invite quota) is personal data, so every route
+here requires authentication and only ever exposes or changes the caller's own
+row. There is deliberately no list route and no create route: account creation
+is `POST /auth/register`, and nothing may enumerate the user directory.
+"""
 
 from __future__ import annotations
 
@@ -7,48 +13,24 @@ import uuid
 from fastapi import APIRouter, HTTPException
 
 from assistant.api.dependencies import CurrentUser, SessionDep
-from assistant.api.schemas.pagination import Pagination
-from assistant.api.schemas.users import UserCreate, UserResponse, UserUpdate
-from assistant.notes.user_service import create_user, get_user, list_users, update_user
+from assistant.api.schemas.users import UserResponse, UserUpdate
+from assistant.notes.user_service import update_user
 
 router = APIRouter()
-
-
-@router.post("", status_code=201, response_model=UserResponse)
-def create_user_endpoint(
-    body: UserCreate,
-    session: SessionDep,
-) -> UserResponse:
-    user = create_user(
-        session,
-        email=body.email,
-        firstname=body.firstname,
-        lastname=body.lastname,
-        invite_quota=body.invite_quota,
-        invite_id=body.invite_id,
-    )
-    return UserResponse.model_validate(user)
-
-
-@router.get("", response_model=list[UserResponse])
-def list_users_endpoint(
-    session: SessionDep,
-    pagination: Pagination,
-) -> list[UserResponse]:
-    users = list_users(
-        session,
-        offset=pagination.offset,
-        limit=pagination.limit,
-    )
-    return [UserResponse.model_validate(u) for u in users]
 
 
 @router.get("/{uid}", response_model=UserResponse)
 def get_user_endpoint(
     uid: uuid.UUID,
-    session: SessionDep,
+    user: CurrentUser,
 ) -> UserResponse:
-    user = get_user(session, uid)
+    """Return the caller's own profile.
+
+    Only the caller's own id is allowed; any other id is a 403, whether or
+    not it exists, so this never confirms another account or leaks its data.
+    """
+    if uid != user.uid:
+        raise HTTPException(status_code=403, detail="Cannot view another user's profile")
     return UserResponse.model_validate(user)
 
 

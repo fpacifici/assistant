@@ -16,6 +16,7 @@ The repo structure is in [`Project Structure`](docs/project_structure.md)
 **Layout**: src layout with the package at `src/assistant/`
 **Python Version**: >= 3.13
 **Package Manager**: uv
+**Rust Code**: crate in `rust/`, a Python extension module built by `uv sync`
 
 ## Architecture
 
@@ -30,6 +31,7 @@ When working on the backend:
 - Keyword search: [`Search`](docs/architecture/search.md)
 - Embeddings for the AI agent: [`Vector search`](docs/architecture/vectors.md)
 - The AI agent and its API: [`Ask AI`](docs/architecture/ask.md)
+- Writing or calling Rust code: [`Rust backend`](docs/architecture/rust.md)
 - Blog sources and the job that collects them: [`Blogs`](docs/architecture/blogs.md)
 
 When working on the frontend:
@@ -110,10 +112,10 @@ make pre-commit-run
 
 Every time you apply a change, run the relevant checks before committing.
 
-**Backend changes** (anything under `src/` or `tests/`):
+**Backend changes** (anything under `src/`, `tests/` or `rust/`):
 
 ```bash
-make check   # runs typecheck + lint + test
+make check   # runs typecheck + lint + rust-check + test
 ```
 
 **Frontend changes** (anything under `frontend/`):
@@ -133,6 +135,11 @@ make frontend-test    # runs vitest
 - Group related tests with comment separators (e.g. `# --- Create node ---`)
 - Aim for high coverage but focus on meaningful tests
 - Mock external dependencies
+
+#### Rust tests
+
+- Place tests in a `#[cfg(test)]` module next to the logic they cover
+- Run with `make rust-test`
 
 #### Frontend tests
 
@@ -279,6 +286,9 @@ cd frontend && npm install <package>
 pytest tests/test_specific.py
 pytest tests/test_specific.py::test_function_name
 ```
+
+Bare `pytest` tests the last build of the Rust extension: run
+`make rust-build` first after changing `rust/`.
 
 ### Updating Documentation
 

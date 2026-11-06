@@ -41,6 +41,16 @@ repos:
         files: ^src/
         pass_filenames: false
 
+  # Rust formatting and static checks
+  - repo: local
+    hooks:
+      - id: rust-lint
+        name: rust-lint
+        entry: make rust-lint
+        language: system
+        files: ^rust/
+        pass_filenames: false
+
   # Check for common security issues
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.10
