@@ -76,6 +76,24 @@ def _sections(markdown: str) -> list[tuple[str, str]]:
     return sections
 
 
+def split_markdown(markdown: str) -> list[tuple[str, str]]:
+    """Split markdown by headings, then by size.
+
+    Returns:
+        (section path, piece) pairs in document order, each piece at most
+        `CHUNK_SIZE` characters; empty for empty markdown.
+    """
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+    )
+    return [
+        (section, piece)
+        for section, content in _sections(markdown)
+        for piece in splitter.split_text(content)
+    ]
+
+
 def chunk_note(note: NoteInfo, markdown: str, *, index_version: int) -> list[NoteChunk]:
     """Split a note into chunks ready to embed.
 
@@ -90,17 +108,7 @@ def chunk_note(note: NoteInfo, markdown: str, *, index_version: int) -> list[Not
     Returns:
         The chunks, in note order.
     """
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-    )
-    pieces: list[tuple[str, str]] = [
-        (section, piece)
-        for section, content in _sections(markdown)
-        for piece in splitter.split_text(content)
-    ]
-    if not pieces:
-        pieces = [("", "")]
+    pieces = split_markdown(markdown) or [("", "")]
 
     chunks: list[NoteChunk] = []
     for index, (section, piece) in enumerate(pieces):

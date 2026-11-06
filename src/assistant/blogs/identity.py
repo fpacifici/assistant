@@ -52,7 +52,8 @@ def canonical_path(url: str) -> str:
     return f"{path}?{urlencode(query)}" if query else path
 
 
-def _is_http_url(value: str) -> bool:
+def is_http_url(value: str) -> bool:
+    """Whether a string is an absolute `http(s)` URL."""
     try:
         parts = urlsplit(value)
     except ValueError:
@@ -71,5 +72,5 @@ def post_key(url: str, guid: str | None = None) -> str:
         A hex SHA-256 digest.
     """
     guid = (guid or "").strip()
-    identity = guid if guid and not _is_http_url(guid) else canonical_path(guid or url)
+    identity = guid if guid and not is_http_url(guid) else canonical_path(guid or url)
     return hashlib.sha256(identity.encode()).hexdigest()

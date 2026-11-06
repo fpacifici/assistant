@@ -299,6 +299,18 @@ describe('TUI layout', () => {
     expect(router.state.location.pathname).toBe('/ask');
   });
 
+  it('File > Blogs opens the Blogs page when AI is enabled', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
+    const { router } = renderTui('/notebooks');
+    await waitFor(() => expect(fetchAskStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: 'File' }));
+    await user.click(await screen.findByRole('menuitem', { name: /Blogs/ }));
+
+    expect(router.state.location.pathname).toBe('/blogs');
+  });
+
   it('File has no Ask AI entry when AI is disabled', async () => {
     const user = userEvent.setup();
     renderTui('/notebooks');

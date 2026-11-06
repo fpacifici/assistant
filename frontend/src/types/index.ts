@@ -94,3 +94,56 @@ export interface SearchResponse {
   offset: number;
   limit: number;
 }
+
+export interface BlogDirectory {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface BlogSource {
+  id: string;
+  directory_id: string | null;
+  url: string;
+  feed_url: string;
+  kind: 'feed' | 'sitemap';
+  title: string;
+  remarks: string | null;
+  preferences: string | null;
+  collect_since: string;
+  enabled: boolean;
+  archived_at: string | null;
+  last_fetched_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  created_at: string;
+  /** Only set when a single source is read. */
+  useful_post_count: number | null;
+}
+
+export type PostState = 'new' | 'useful' | 'not_useful';
+export type MatchLevel = 'high' | 'medium' | 'low';
+export type PostView = 'all' | 'relevant' | 'new';
+
+export interface BlogPost {
+  id: string;
+  source_id: string;
+  source_title: string;
+  url: string;
+  /** Null for a failed post nothing could name. */
+  title: string | null;
+  published_at: string;
+  /** Null for a failed post. */
+  summary: string | null;
+  match_level: MatchLevel | null;
+  motivation: string | null;
+  status: 'processed' | 'failed';
+  state: PostState;
+  evaluated_at: string | null;
+  tags: Tag[];
+}
+
+export interface PostPage {
+  posts: BlogPost[];
+  next_cursor: string | null;
+}

@@ -91,7 +91,10 @@ export default function TuiMenuBar() {
       { id: 'search', label: 'Search notes…', hint: '/', onSelect: () => tui.openSearch() },
     ];
     if (askEnabled) {
-      fileItems.push({ id: 'ask', label: 'Ask AI…', onSelect: () => navigate('/ask') });
+      fileItems.push(
+        { id: 'ask', label: 'Ask AI…', onSelect: () => navigate('/ask') },
+        { id: 'blogs', label: 'Blogs…', onSelect: () => navigate('/blogs') },
+      );
     }
     fileItems.push(
       { id: 'import', label: 'Import from Evernote…', onSelect: () => setImporting(true) },

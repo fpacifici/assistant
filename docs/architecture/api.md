@@ -543,6 +543,30 @@ DELETE /blog/source/{id}?keep_useful=false -> 204
   An archived source is otherwise a 404.
 - `keep_useful=true` archives the source, or deletes it if nothing is useful.
 
+Posts:
+
+```
+GET    /blog/post?view=all|relevant|new&directory_id=&unfiled=&source_id=&tag=&cursor=&limit=
+                                           -> {"posts": PostResponse[], "next_cursor"}
+PATCH  /blog/post/{id}    {"state"}        -> PostResponse
+POST   /blog/post/bulk-state               -> {"updated": n}
+       {"post_ids": [...], "state"}           (at most 500, all or none)
+POST   /blog/post/{id}/tag                 -> TagResponse[] (the post's tags after)
+       {"tag_id"} or {"name"}
+DELETE /blog/post/{id}/tag/{tag_id}        -> 204
+```
+
+- `state` is `new`, `useful` or `not_useful`. Setting `new` is the undo.
+- Pass `next_cursor` back as `cursor`. A cursor only works for its own `view`;
+  a bad one, or `directory_id` together with `unfiled`, is a 422.
+- `source_id` is how an archived source is filtered, see
+  `GET /blog/source?archived=true`.
+- A post waiting for analysis is neither listed nor found. A failed one is
+  listed with `status: "failed"`, `summary: null` and possibly `title: null`.
+- PostResponse is `{"id", "source_id", "source_title", "url", "title",
+  "published_at", "summary", "match_level", "motivation", "status", "state",
+  "evaluated_at", "tags"}`.
+
 ### Error Responses
 
 All error responses follow the format:
