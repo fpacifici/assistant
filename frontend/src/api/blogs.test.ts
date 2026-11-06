@@ -1,0 +1,63 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { apiFetch } from './client';
+import {
+  addPostTag,
+  deleteSource,
+  fetchPosts,
+  fetchSources,
+  setPostsState,
+} from './blogs';
+
+vi.mock('./client', () => ({ apiFetch: vi.fn() }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('fetchPosts', () => {
+  it('sends the view and page size', () => {
+    void fetchPosts('new', {});
+    expect(apiFetch).toHaveBeenCalledWith('/blog/post?view=new&limit=20');
+  });
+
+  it('sends every filter and the cursor', () => {
+    void fetchPosts('all', { directoryId: 'd', sourceId: 's', tagId: 't', unfiled: true }, 'c');
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/blog/post?view=all&limit=20&directory_id=d&unfiled=true&source_id=s&tag=t&cursor=c',
+    );
+  });
+});
+
+describe('sources', () => {
+  it('lists archived sources on request', () => {
+    void fetchSources({ archived: true });
+    expect(apiFetch).toHaveBeenCalledWith('/blog/source?archived=true');
+  });
+
+  it('says whether to keep useful posts', () => {
+    void deleteSource('s1', true);
+    expect(apiFetch).toHaveBeenCalledWith('/blog/source/s1?keep_useful=true', {
+      method: 'DELETE',
+    });
+  });
+});
+
+describe('posts', () => {
+  it('sends bulk verdicts by id', () => {
+    void setPostsState(['a', 'b'], 'not_useful');
+    expect(apiFetch).toHaveBeenCalledWith('/blog/post/bulk-state', {
+      method: 'POST',
+      body: JSON.stringify({ post_ids: ['a', 'b'], state: 'not_useful' }),
+    });
+  });
+
+  it('tags by id or by name', () => {
+    void addPostTag('p', { tagId: 't' });
+    void addPostTag('p', { name: 'Work' });
+    const bodies = vi.mocked(apiFetch).mock.calls.map(([, options]) => options?.body);
+    expect(bodies).toEqual([
+      JSON.stringify({ tag_id: 't' }),
+      JSON.stringify({ name: 'Work' }),
+    ]);
+  });
+});

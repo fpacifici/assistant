@@ -28,6 +28,10 @@ well-known path). A page that declares itself an article (`og:type`, JSON-LD),
 or that the feed lists as an entry, is a single post and is refused. Errors
 are generic and never contain anything from the response.
 
+The request waits for all this, so nginx gives `/blog/` a longer read timeout
+(`docker/frontend/nginx.conf.template`). The API is under `/blog/`, and `/blogs`
+is the SPA.
+
 ## Deleting a source
 
 `DELETE /blog/source/{id}` deletes the source with its posts. With

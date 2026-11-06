@@ -1,5 +1,5 @@
-/** Desktop header: app title, search box, Ask AI (when enabled), Invites, Settings and
- * TUI-layout links, quota, theme picker, user name and Logout. */
+/** Desktop header: app title, search box, Ask AI and Blogs (when AI is enabled), Invites,
+ * Settings and TUI-layout links, quota, theme picker, user name and Logout. */
 
 import { Link, useLocation } from 'react-router';
 import SearchBox from './SearchBox';
@@ -29,6 +29,9 @@ export default function DesktopHeader() {
       <div className="header-user">
         {askEnabled && (
           <Link to="/ask" className="nav-link">Ask AI</Link>
+        )}
+        {askEnabled && (
+          <Link to="/blogs" className="nav-link">Blogs</Link>
         )}
         {invitesConfig?.invites_enabled && (
           <Link to="/invites" className="nav-link">Invites</Link>
