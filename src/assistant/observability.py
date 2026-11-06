@@ -1,7 +1,7 @@
 """Sentry error reporting, tracing, profiling and logs.
 
 `init_sentry()` is called once per process by entrypoints that want to be
-instrumented (currently only the API server, from `create_app()`). Without a
+instrumented (the API server, from `create_app()`, and the blog job). Without a
 configured DSN it is a no-op, so local dev and tests run with Sentry off.
 
 See docs/architecture/observability.md.
