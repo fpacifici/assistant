@@ -41,6 +41,20 @@ class InvalidPostQueryError(BlogsError):
     """A post list was asked for with a bad cursor or conflicting filters."""
 
 
+class CollectionBusyError(BlogsError):
+    """The job, or another refresh, is collecting right now."""
+
+    def __init__(self) -> None:
+        super().__init__("A collection is already running. Try again in a few minutes.")
+
+
+class SourcePausedError(BlogsError):
+    """A paused source can't be refreshed."""
+
+    def __init__(self) -> None:
+        super().__init__("Resume this blog to refresh it")
+
+
 class FetchError(BlogsError):
     """A URL could not be fetched. The message never has response content."""
 

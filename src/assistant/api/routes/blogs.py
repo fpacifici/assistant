@@ -1,16 +1,22 @@
-"""Blog API routes. Everything but HTTP work is in `assistant.blogs.service`."""
+"""Blog API routes.
+
+Everything but HTTP work is in `assistant.blogs.service`, and for the
+collection log in `assistant.blogs.runs`.
+"""
 
 from __future__ import annotations
 
 import uuid
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from assistant.api.dependencies import CurrentUser, SessionDep
 from assistant.api.schemas.blogs import (
     BulkPostStateResponse,
     BulkPostStateUpdate,
+    CollectionRunDetailResponse,
+    CollectionRunResponse,
     DirectoryCreate,
     DirectoryResponse,
     DirectoryUpdate,
@@ -23,6 +29,8 @@ from assistant.api.schemas.blogs import (
     SourceUpdate,
 )
 from assistant.api.schemas.tags import NoteTagAdd, TagResponse
+from assistant.blogs.refresh import BlogRefresher
+from assistant.blogs.runs import get_run, list_runs, refreshable_source, verdict_counts
 from assistant.blogs.service import (
     PostFilters,
     PostView,
@@ -45,6 +53,7 @@ from assistant.blogs.service import (
     update_source,
     useful_post_count,
 )
+from assistant.chat.exceptions import AIDisabledError
 from assistant.models.schema import BlogPost, Tag
 
 router = APIRouter()
@@ -148,6 +157,68 @@ def delete_source_endpoint(
 ) -> None:
     """Delete a source and all its posts, or with `keep_useful` archive it."""
     delete_source(session, user, source_id, keep_useful=keep_useful)
+
+
+# --- Collection log ---
+
+
+def get_blog_refresher(request: Request) -> BlogRefresher:
+    """The app's refresher; 503 (`AIDisabledError`) when AI is disabled."""
+    refresher: BlogRefresher | None = request.app.state.blog_refresher
+    if refresher is None:
+        raise AIDisabledError
+    return refresher
+
+
+BlogRefresherDep = Annotated[BlogRefresher, Depends(get_blog_refresher)]
+
+
+@router.get("/source/{source_id}/run", response_model=list[CollectionRunResponse])
+def list_runs_endpoint(
+    source_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> list[CollectionRunResponse]:
+    """The latest collection runs of a source, newest first."""
+    runs = list_runs(session, user, source_id)
+    counts = verdict_counts(session, [run.id for run in runs])
+    return [
+        CollectionRunResponse.model_validate(run).model_copy(
+            update={"verdicts": counts[run.id]}
+        )
+        for run in runs
+    ]
+
+
+@router.get(
+    "/source/{source_id}/run/{run_id}", response_model=CollectionRunDetailResponse
+)
+def get_run_endpoint(
+    source_id: uuid.UUID, run_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> CollectionRunDetailResponse:
+    """A run with every logged entry and what the analysis did."""
+    run = get_run(session, user, source_id, run_id)
+    return CollectionRunDetailResponse.model_validate(run).model_copy(
+        update={"verdicts": verdict_counts(session, [run.id])[run.id]}
+    )
+
+
+@router.post(
+    "/source/{source_id}/refresh",
+    status_code=202,
+    response_model=CollectionRunResponse,
+)
+def refresh_source_endpoint(
+    source_id: uuid.UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    refresher: BlogRefresherDep,
+) -> CollectionRunResponse:
+    """Collect a source now, in the background. Follow the run it returns.
+
+    409 while the job or another refresh is running, or if the source is paused.
+    """
+    source = refreshable_source(session, user, source_id)
+    run_id = refresher.start(source.id)
+    return CollectionRunResponse.model_validate(get_run(session, user, source.id, run_id))
 
 
 # --- Posts ---

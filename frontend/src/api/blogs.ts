@@ -1,6 +1,8 @@
 import { apiFetch } from './client';
 import type {
   BlogDirectory,
+  CollectionRun,
+  CollectionRunDetail,
   BlogPost,
   BlogSource,
   PostPage,
@@ -86,6 +88,22 @@ export function updateSource(id: string, changes: SourceChanges): Promise<BlogSo
 /** Delete a source and its posts, or with `keepUseful` archive it. */
 export function deleteSource(id: string, keepUseful: boolean): Promise<void> {
   return apiFetch<void>(`/blog/source/${id}?keep_useful=${keepUseful}`, { method: 'DELETE' });
+}
+
+// --- Collection log ---
+
+/** The latest runs of a source, newest first. */
+export function fetchRuns(sourceId: string): Promise<CollectionRun[]> {
+  return apiFetch<CollectionRun[]>(`/blog/source/${sourceId}/run`);
+}
+
+export function fetchRun(sourceId: string, runId: string): Promise<CollectionRunDetail> {
+  return apiFetch<CollectionRunDetail>(`/blog/source/${sourceId}/run/${runId}`);
+}
+
+/** Collect a source now. Answers at once with the run, which fills in as it goes. */
+export function refreshSource(sourceId: string): Promise<CollectionRun> {
+  return apiFetch<CollectionRun>(`/blog/source/${sourceId}/refresh`, { method: 'POST' });
 }
 
 // --- Posts ---

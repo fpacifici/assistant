@@ -25,14 +25,18 @@ from assistant.blogs.pipeline import (
     RunReport,
     advisory_lock,
 )
+from assistant.blogs.runs import MAX_RUNS_PER_SOURCE, start_run
 from assistant.blogs.service import set_post_state
 from assistant.blogs.store import post_chunk_embedding
 from assistant.blogs.text_store import TextStore
 from assistant.models.schema import (
+    BlogCollectionEntry,
+    BlogCollectionRun,
     BlogEmbedStatus,
     BlogPost,
     BlogPostState,
     BlogPostStatus,
+    BlogRunTrigger,
     BlogSource,
     BlogSourceKind,
     User,
@@ -136,6 +140,19 @@ class Job:
             request_delay_seconds=0,
         )
         return pipeline.run(**kwargs)  # type: ignore[arg-type]
+
+    def runs(self, source: BlogSource) -> list[BlogCollectionRun]:
+        """The source's runs, oldest first."""
+        self.session.expire_all()
+        stmt = (
+            select(BlogCollectionRun)
+            .where(BlogCollectionRun.source_id == source.id)
+            .order_by(BlogCollectionRun.started_at, BlogCollectionRun.id)
+        )
+        return list(self.session.scalars(stmt))
+
+    def last_run(self, source: BlogSource) -> BlogCollectionRun:
+        return self.runs(source)[-1]
 
     def posts(self, source: BlogSource) -> list[BlogPost]:
         self.session.expire_all()
@@ -882,6 +899,252 @@ def test_dry_run_does_not_record_failures(job: Job) -> None:
     job.web.pages[FEED] = 500
     assert job.run(dry_run=True).failures == 1
     assert source.consecutive_failures == 0
+
+
+# --- Collection log ---
+
+
+def _verdicts(run: BlogCollectionRun) -> dict[str, str]:
+    return {entry.url: entry.verdict for entry in run.entries}
+
+
+def _entry(run: BlogCollectionRun, url: str) -> BlogCollectionEntry:
+    [entry] = [e for e in run.entries if e.url == url]
+    return entry
+
+
+def test_a_run_logs_every_feed_entry_with_its_verdict(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(
+        _item("kept"),
+        _item("next", date=NOW - timedelta(days=1)),
+        _item("first", date=NOW - timedelta(days=2)),
+        _item("ancient", date=NOW - timedelta(days=30)),
+    )
+    for slug in ("kept", "next", "first"):
+        job.web.pages[f"{SITE}/{slug}"] = _page()
+    job.run(max_posts=1)
+
+    job.web.pages[FEED] = _rss(
+        _item("first", date=NOW - timedelta(days=2)), _item("kept")
+    )
+    job.run(max_posts=1)
+
+    first, second = job.runs(source)
+    assert first.trigger == BlogRunTrigger.JOB.value
+    assert first.outcome == "collected"
+    assert first.finished_at is not None
+    assert first.entries_found == 4
+    assert _verdicts(first) == {
+        f"{SITE}/kept": "over_cap",
+        f"{SITE}/next": "over_cap",
+        f"{SITE}/first": "new",
+        f"{SITE}/ancient": "too_old",
+    }
+    assert first.entries[0].url == f"{SITE}/kept"  # the feed's order
+    assert _verdicts(second) == {f"{SITE}/first": "stored", f"{SITE}/kept": "new"}
+
+
+def test_a_new_entry_links_to_its_post_and_logs_the_analysis(job: Job) -> None:
+    source = job.source(preferences="Databases")
+    job.analyzer.result = PostAnalysis(
+        title=None, summary=" Short. ", match_level="high", motivation="Fits."
+    )
+    job.web.pages[FEED] = _rss(_item("one", title="One"))
+    job.web.pages[f"{SITE}/one"] = _page()
+    job.run()
+
+    [post] = job.posts(source)
+    entry = _entry(job.last_run(source), f"{SITE}/one")
+    assert entry.post_id == post.id
+    assert entry.title == "One"
+    assert entry.feed_text_chars == len(LONG_TEXT.strip())
+    assert entry.analysis == "processed"
+    assert entry.text_source == "page"
+    assert entry.text_chars is not None
+    assert entry.text_chars > MIN_TEXT_CHARS
+    assert (entry.summary, entry.match_level, entry.motivation) == (
+        "Short.",
+        "high",
+        "Fits.",
+    )
+    assert entry.analyzed_at is not None
+
+
+def test_the_log_says_when_the_feed_text_was_used(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.web.pages[f"{SITE}/one"] = FetchError("down")
+    job.run()
+    assert _entry(job.last_run(source), f"{SITE}/one").text_source == "feed"
+
+
+def test_the_log_says_a_post_was_too_short(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one", body="Short."))
+    job.web.pages[f"{SITE}/one"] = b"<html><body><p>Hi</p></body></html>"
+    job.run()
+    entry = _entry(job.last_run(source), f"{SITE}/one")
+    assert entry.analysis == "too_short"
+    assert entry.summary is None
+
+
+def test_a_model_error_is_logged_then_retried_in_the_next_runs(job: Job) -> None:
+    source = job.source()
+    job.analyzer.error = RuntimeError("secret detail from the provider")
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.web.pages[f"{SITE}/one"] = _page()
+
+    for _ in range(MAX_ATTEMPTS):
+        job.run()
+
+    runs = job.runs(source)
+    first = _entry(runs[0], f"{SITE}/one")
+    assert (first.verdict, first.analysis) == ("new", "error")
+    assert first.error == "Could not analyze (RuntimeError)"
+    # Later runs see it stored in the feed, and log the retry on that entry.
+    retried = _entry(runs[1], f"{SITE}/one")
+    assert (retried.verdict, retried.analysis) == ("stored", "error")
+    assert retried.post_id == first.post_id
+    assert retried.text_source == "file"
+    assert _entry(runs[-1], f"{SITE}/one").analysis == "failed"
+
+
+def test_a_retry_the_feed_no_longer_lists_gets_its_own_entry(job: Job) -> None:
+    source = job.source()
+    job.analyzer.error = RuntimeError("no credits")
+    job.web.pages[FEED] = _rss(_item("one", title="One"))
+    job.web.pages[f"{SITE}/one"] = _page()
+    job.run()
+
+    job.analyzer.error = None
+    job.web.pages[FEED] = _rss()
+    job.run()
+
+    run = job.last_run(source)
+    entry = _entry(run, f"{SITE}/one")
+    assert (entry.verdict, entry.analysis, entry.title) == ("retry", "processed", "One")
+    assert run.entries_found == 0
+
+
+def test_not_modified_is_logged_with_no_entries(job: Job) -> None:
+    source = job.source(etag='"v1"')
+    job.web.pages[FEED] = 304
+    job.run()
+    run = job.last_run(source)
+    assert run.outcome == "not_modified"
+    assert run.entries == []
+
+
+def test_a_failed_source_is_logged_with_its_error(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = 500
+    job.run()
+    run = job.last_run(source)
+    assert run.outcome == "failed"
+    assert run.error == source.last_error
+    assert run.finished_at is not None
+
+
+def test_an_entry_with_no_link_is_logged_as_invalid(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss("<item><title>Nowhere</title></item>")
+    job.run()
+    [entry] = job.last_run(source).entries
+    assert (entry.url, entry.title, entry.verdict) == ("", "Nowhere", "invalid")
+
+
+def test_a_sitemap_run_logs_why_each_page_was_left(job: Job) -> None:
+    source = job.source(kind=BlogSourceKind.SITEMAP.value, feed_url=SITEMAP)
+    job.web.pages[ROBOTS] = b"User-agent: *\nDisallow: /private/\n"
+    job.web.pages[SITEMAP] = _sitemap(
+        (f"{SITE}/new", NOW),
+        (f"{SITE}/old", NOW - timedelta(days=30)),
+        (f"{SITE}/private/x", NOW),
+        (f"{SITE}/dateless", None),
+        (f"{SITE}/flaky", None),
+    )
+    job.web.pages[f"{SITE}/new"] = _page()
+    job.web.pages[f"{SITE}/dateless"] = _page()
+    job.web.pages[f"{SITE}/flaky"] = FetchError("down")
+    job.run()
+
+    assert _verdicts(job.last_run(source)) == {
+        f"{SITE}/new": "new",
+        f"{SITE}/old": "too_old",
+        f"{SITE}/private/x": "robots",
+        f"{SITE}/dateless": "no_date",
+        f"{SITE}/flaky": "unreadable",
+    }
+
+
+def test_a_refresh_reads_everything_and_logs_in_its_own_run(job: Job) -> None:
+    source = job.source(etag='"v1"')
+    job.web.etags[FEED] = '"v1"'
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.web.pages[f"{SITE}/one"] = _page()
+    with job.factory() as session:
+        run = start_run(session, source.id, BlogRunTrigger.MANUAL)
+        session.commit()
+
+    with patch.object(TextStore, "sweep") as sweep:
+        job.run(source_id=source.id, refresh_run_id=run.id)
+
+    assert job.web.conditional[job.web.requested.index(FEED)] is None
+    sweep.assert_not_called()
+    [logged] = job.runs(source)
+    assert logged.id == run.id
+    assert logged.trigger == "manual"
+    assert logged.finished_at is not None
+    assert not logged.interrupted
+    assert _verdicts(logged) == {f"{SITE}/one": "new"}
+
+
+def test_a_refresh_is_of_one_source(job: Job) -> None:
+    with pytest.raises(ValueError, match="one source"):
+        job.run(refresh_run_id=uuid.uuid4())
+
+
+def test_a_run_closes_runs_a_crash_left_unfinished(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss()
+    with job.factory() as session:
+        dead = start_run(session, source.id, BlogRunTrigger.MANUAL)
+        session.commit()
+    job.run()
+    closed, current = job.runs(source)
+    assert closed.id == dead.id
+    assert closed.interrupted
+    assert closed.finished_at is not None
+    assert not current.interrupted
+
+
+def test_only_the_latest_runs_are_kept(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss()
+    for _ in range(MAX_RUNS_PER_SOURCE + 2):
+        job.run()
+    assert len(job.runs(source)) == MAX_RUNS_PER_SOURCE
+
+
+def test_dry_run_logs_nothing(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.run(dry_run=True)
+    assert job.runs(source) == []
+
+
+def test_deleting_a_post_keeps_its_log_entry(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.web.pages[f"{SITE}/one"] = _page()
+    job.run()
+    [post] = job.posts(source)
+    job.session.delete(post)
+    job.session.flush()
+    entry = _entry(job.last_run(source), f"{SITE}/one")
+    assert entry.post_id is None
+    assert entry.summary == "A summary."
 
 
 # --- Lock ---

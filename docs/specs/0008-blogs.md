@@ -108,6 +108,33 @@ deleted with the post by the next job run.
   summary only. The embeddings are not used by any feature yet.
 - Moving a post away from useful deletes its embeddings.
 
+### Collection history and refresh
+
+For troubleshooting, every collection of a source is logged, by the job or by
+hand, and the user can read it and refresh a source on demand.
+
+- A run records when it started, what started it (the job or a refresh), how
+  reading the source went (collected, not modified, failed with its error),
+  and when its posts were done.
+- For each entry the feed or sitemap listed: its link, title, date, how much
+  text the feed gave, and the verdict: new post, already collected, older
+  than the look back, left for the next run, no date (skipped for good), page
+  unreadable (tried next run), blocked by robots.txt, or no usable link.
+- For each post analyzed in the run: where its text came from (the page, the
+  feed, or the text saved by an earlier attempt) and how long it was, then
+  the outcome: summarized, too short, or failed with a generic error (tried
+  next run, or given up). A summarized post shows the summary, match level
+  and motivation the model answered then, even if the post changes or is
+  deleted later. A post collected earlier and analyzed again is shown too.
+- Only the latest 20 runs of a source are kept, and up to 300 entries of a
+  run: posts collected by earlier runs are the first left out, and the run
+  says how many entries the source listed in all.
+- **Refresh now** collects one source immediately, without the conditional
+  GET so the whole feed is listed, and analyzes its pending posts. The user
+  watches the run fill in. It is refused while the job or another refresh is
+  running, for a paused source, and when AI is disabled.
+- A run cut short by a crash or a restart is shown as interrupted.
+
 ### Web UI
 
 Notes and Blogs are top-level sections: the desktop header (also on the
@@ -121,6 +148,7 @@ Triage and is shown only when AI is enabled.
 | `/blogs` | **All**: every post, newest first, with a directory sidebar including Unfiled |
 | `/blogs/relevant` | **Relevant**: useful posts, same layout |
 | `/blogs/sources` | Add, edit, pause and delete sources and directories |
+| `/blogs/sources/:id/log` | **History** of one source: its runs, entries and the model's answers, with Refresh now |
 
 - **Triage** shows every directory by default and can be filtered to one
   directory, or Unfiled, from a picker. Its tab always opens it on every

@@ -146,6 +146,64 @@ export interface BlogPost {
   tags: Tag[];
 }
 
+export type RunTrigger = 'job' | 'manual';
+export type RunOutcome = 'collected' | 'not_modified' | 'failed';
+export type EntryVerdict =
+  | 'new'
+  | 'stored'
+  | 'too_old'
+  | 'over_cap'
+  | 'no_date'
+  | 'unreadable'
+  | 'robots'
+  | 'invalid'
+  | 'retry';
+export type EntryAnalysis = 'processed' | 'too_short' | 'error' | 'failed';
+export type TextSource = 'file' | 'page' | 'feed';
+
+/** A run of the collection log: one source, read by the job or a refresh. */
+export interface CollectionRun {
+  id: string;
+  source_id: string;
+  trigger: RunTrigger;
+  started_at: string;
+  /** Null while its posts are still being analyzed. */
+  finished_at: string | null;
+  /** Null while the source is still being read. */
+  outcome: RunOutcome | null;
+  error: string | null;
+  interrupted: boolean;
+  /** Every entry the source listed; the log may keep fewer. */
+  entries_found: number;
+  /** Logged entries by verdict. */
+  verdicts: Partial<Record<EntryVerdict, number>>;
+}
+
+/** What the source listed in a run and what became of it. */
+export interface CollectionEntry {
+  id: string;
+  /** Empty for an entry with no link. */
+  url: string;
+  title: string | null;
+  published_at: string | null;
+  verdict: EntryVerdict;
+  post_id: string | null;
+  feed_text_chars: number | null;
+  /** Null when the run did not analyze it. */
+  analysis: EntryAnalysis | null;
+  text_source: TextSource | null;
+  text_chars: number | null;
+  error: string | null;
+  summary: string | null;
+  match_level: MatchLevel | null;
+  motivation: string | null;
+  analyzed_at: string | null;
+}
+
+export interface CollectionRunDetail extends CollectionRun {
+  entries: CollectionEntry[];
+}
+
 export interface PostPage {
   posts: BlogPost[];
   next_cursor: string | null;

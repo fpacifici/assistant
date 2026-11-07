@@ -16,6 +16,8 @@ function loads the row filtered by owner, so another user's row is a 404.
 | `blog_sources` | What to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
 | `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict, `read_at` when the user marked it read. |
 | `post_tags` | Tags on posts, from the same per-user vocabulary as notes. |
+| `blog_collection_runs` | The collection log: one row per source each time the job or a refresh reads it. `outcome` is null while the source is read, `finished_at` while its posts are analyzed. The latest 20 per source are kept. |
+| `blog_collection_entries` | One row per entry the source listed in a run: link, date, `verdict`, `post_id` (`SET NULL` when the post goes), then the analysis: `text_source`, `text_chars`, outcome, error, and a copy of the model's summary, match level and motivation. |
 | `post_chunk_embedding` | Not mapped (Postgres-only, pgvector). One row per chunk of a useful post, same shape as `note_chunk_embedding`, with `post_id`, `source_id`, `owner_id`. HNSW cosine index. No feature reads it yet. |
 
 Deleting a user cascades to all of it.
@@ -153,6 +155,50 @@ the post is `failed` until its verdict changes.
 **Sweep** deletes each file in `blog_posts/` whose post no longer exists. This is
 the only code that removes text files, see
 [ADR-0004](../adr/0004-blog-post-text-in-documents.md).
+
+## Collection log
+
+`blogs/runs.py`. Each source the job reads gets a run, created before the
+feed is fetched. Collecting writes the entries in the same transaction as the
+new posts, so a new entry points at its post; an entry for a post stored by an
+earlier run points at it too. Each analysis then updates that post's entry in
+the current run, or adds a `retry` entry when the source no longer lists the
+post. The runs are finished together once analysis and embedding are done.
+
+- A run of at most 300 entries is logged whole. Over that, entries that did
+  something in this run come first and `stored` ones fill what room is left,
+  in the source's order. `entries_found` keeps the total.
+- Errors in the log are the source's `last_error`, a `FetchError` message, or
+  `Could not analyze (<exception class>)`: never anything from a response or
+  from the model provider.
+- Failing to write the analysis log is logged and never fails the post.
+- Holding the advisory lock means no other run is going, so every run starts
+  by closing the unfinished ones as `interrupted`.
+- `--dry-run` writes no log.
+
+## Refresh
+
+`POST /blog/source/{id}/refresh` (`blogs/refresh.py`) takes the job's advisory
+lock in the request, creates a `manual` run, commits it and answers 202 with
+it. A daemon thread in the API process then runs the pipeline for that source
+with `refresh_run_id`: no conditional GET, no sweep. It releases the lock when
+it ends. The client polls `GET /blog/source/{id}/run/{run_id}` until
+`finished_at` is set.
+
+| Case | Answer |
+| --- | --- |
+| The job or another refresh holds the lock | 409 |
+| Paused source | 409 |
+| Archived or someone else's source | 404 |
+| AI disabled (no `OPENAI_API_KEY`) | 503 |
+
+The refresh needs the same AI configuration as the job, read by the API from
+its own environment. A process that stops mid-refresh leaves its run
+unfinished, and the next run closes it as interrupted. With several API
+workers, the lock still allows only one collection at a time.
+
+`GET /blog/source/{id}/run` lists the runs, newest first, with `verdicts`:
+how many logged entries got each verdict.
 
 ## Configuration
 

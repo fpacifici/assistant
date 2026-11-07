@@ -111,6 +111,55 @@ class PostResponse(BaseModel):
     tags: list[TagResponse]
 
 
+class CollectionRunResponse(BaseModel):
+    """A run of the collection log.
+
+    `outcome` is null while the source is being read, and `finished_at` while
+    its posts are still being analyzed. `verdicts` counts the logged entries.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_id: uuid.UUID
+    trigger: str
+    started_at: datetime
+    finished_at: datetime | None
+    outcome: str | None
+    error: str | None
+    interrupted: bool
+    entries_found: int
+    verdicts: dict[str, int] = {}
+
+
+class CollectionEntryResponse(BaseModel):
+    """An entry of a run: what the source listed and what became of it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    url: str
+    title: str | None
+    published_at: datetime | None
+    verdict: str
+    post_id: uuid.UUID | None
+    feed_text_chars: int | None
+    analysis: str | None
+    text_source: str | None
+    text_chars: int | None
+    error: str | None
+    summary: str | None
+    match_level: str | None
+    motivation: str | None
+    analyzed_at: datetime | None
+
+
+class CollectionRunDetailResponse(CollectionRunResponse):
+    """A run with its logged entries, in the order the source listed them."""
+
+    entries: list[CollectionEntryResponse]
+
+
 class PostListResponse(BaseModel):
     posts: list[PostResponse]
     next_cursor: str | None
