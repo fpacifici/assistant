@@ -714,11 +714,11 @@ class Config:
             - `blogs.max_posts_per_run` -> `BLOGS_MAX_POSTS_PER_RUN`
 
         Returns:
-            A `BlogsConfig` mapping, defaulting to 50 words and 50 posts per
+            A `BlogsConfig` mapping, defaulting to 35 words and 50 posts per
             source per run.
         """
         return {
-            "summary_words": int(self.get("blogs.summary_words", 50)),
+            "summary_words": int(self.get("blogs.summary_words", 35)),
             "max_posts_per_run": int(self.get("blogs.max_posts_per_run", 50)),
         }
 

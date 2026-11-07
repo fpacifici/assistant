@@ -84,7 +84,7 @@ Routes are declared in `src/routes.tsx`.
 | `/notebooks/:notebookId/notes/:noteId` | `Layout`: lists + note editor |
 | `/search?q=…` | `SearchPage`: note search results (see Search below) |
 | `/ask?thread=…` | `AskPage`: questions to the AI agent about the notes (see Ask AI below) |
-| `/blogs`, `/blogs/relevant`, `/blogs/review` | `BlogsPage`: All, Relevant and New posts (see Blogs below) |
+| `/blogs/triage`, `/blogs`, `/blogs/relevant` | `BlogsPage`: Triage (new posts), All and Relevant (see Blogs below). `/blogs/review` redirects to Triage |
 | `/blogs/sources` | `BlogSourcesPage`: add, edit, pause and delete sources and directories |
 | `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
@@ -195,19 +195,29 @@ turns it off. Code lives in `components/tui/`.
 ## Blogs
 
 Posts collected from the user's sources ([spec](../specs/0008-blogs.md),
-[backend](blogs.md)). The **Blogs** link in `DesktopHeader`, the mobile `⋯` menu
-and the TUI File menu is gated on `useAskEnabled()`. The pages themselves and the
-API are not. Code: `pages/BlogsPage.tsx`, `pages/BlogSourcesPage.tsx`,
+[backend](blogs.md)). Notes and Blogs are the top-level sections: the
+`Sections` nav in `DesktopHeader` (also shown in TUI mode on the Blogs pages)
+and the mobile `⋯` menu link to both, with the current one marked. The **Blogs**
+link there and in the TUI File menu opens Triage and is gated on
+`useAskEnabled()`. The pages themselves and the API are not. Code: `pages/BlogsPage.tsx`, `pages/BlogSourcesPage.tsx`,
 `components/blogs/`.
 
 - **Filters** live in the URL: `?directory=` (an id, `unfiled` or `all`),
-  `?source=` (an archived source) and `?tag=`. New ignores `tag`. Switching
-  view keeps them.
+  `?source=` (an archived source), `?tag=` and `?read=` (`read` or `unread`).
+  Switching between All and Relevant keeps them.
+- **Triage** (view `new`) shows the new posts of every directory, with no
+  sidebar: a directory `<select>` in the toolbar narrows it. It only reads
+  `directory`, and its tab always opens it with no filter.
 - **Mobile** shows one level at a time: `BlogDirectoryList` at `/blogs`, and the
   posts alone once a `directory` or `source` is chosen, with the back link
-  dropping it. **TUI** mode shows the desktop page.
+  dropping it. Triage goes straight to the posts. **TUI** mode shows the
+  desktop page.
+- **Read** is separate from the verdict: Mark read / Mark to read on the card
+  sets `read_at`, and a read card is dimmed with a Read badge. Under a read
+  filter, a post that no longer matches leaves the list with the same undo as
+  a verdict.
 - **`PostList`** is one `useInfiniteQuery` per view and filter set, paged by the
-  server's cursor. A verdict is written to the cached pages right away. If the
+  server's cursor. A verdict or a read change is written to the cached pages right away. If the
   post no longer belongs to the view it leaves the list, with an undo that stays
   for `UNDO_MS`. A failed save restores the pages. Other views are only marked
   stale, so the list on screen doesn't reload under the user.

@@ -95,6 +95,8 @@ export interface PostFilters {
   unfiled?: boolean;
   sourceId?: string;
   tagId?: string;
+  /** True for read posts only, false for those still to read. */
+  read?: boolean;
 }
 
 export function fetchPosts(
@@ -107,6 +109,7 @@ export function fetchPosts(
   if (filters.unfiled) params.set('unfiled', 'true');
   if (filters.sourceId) params.set('source_id', filters.sourceId);
   if (filters.tagId) params.set('tag', filters.tagId);
+  if (filters.read !== undefined) params.set('read', String(filters.read));
   if (cursor) params.set('cursor', cursor);
   return apiFetch<PostPage>(`/blog/post?${params}`);
 }
@@ -115,6 +118,14 @@ export function setPostState(id: string, state: PostState): Promise<BlogPost> {
   return apiFetch<BlogPost>(`/blog/post/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ state }),
+  });
+}
+
+/** Mark a post read, or back to read later. The verdict stays. */
+export function setPostRead(id: string, read: boolean): Promise<BlogPost> {
+  return apiFetch<BlogPost>(`/blog/post/${id}/read`, {
+    method: 'PUT',
+    body: JSON.stringify({ read }),
   });
 }
 

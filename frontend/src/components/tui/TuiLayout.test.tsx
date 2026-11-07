@@ -308,7 +308,7 @@ describe('TUI layout', () => {
     await user.click(screen.getByRole('button', { name: 'File' }));
     await user.click(await screen.findByRole('menuitem', { name: /Blogs/ }));
 
-    expect(router.state.location.pathname).toBe('/blogs');
+    expect(router.state.location.pathname).toBe('/blogs/triage');
   });
 
   it('File has no Ask AI entry when AI is disabled', async () => {

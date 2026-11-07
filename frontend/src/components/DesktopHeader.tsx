@@ -1,5 +1,6 @@
-/** Desktop header: app title, search box, Ask AI and Blogs (when AI is enabled), Invites,
- * Settings and TUI-layout links, quota, theme picker, user name and Logout. */
+/** Desktop header: app title, the top-level sections (Notes, and Blogs when AI is
+ * enabled), search box, Ask AI (when AI is enabled), Invites, Settings and TUI-layout
+ * links, quota, theme picker, user name and Logout. */
 
 import { Link, useLocation } from 'react-router';
 import SearchBox from './SearchBox';
@@ -22,16 +23,32 @@ export default function DesktopHeader() {
   });
   const askEnabled = useAskEnabled();
 
+  const section = (to: string, prefix: string, label: string) => {
+    const active = location.pathname.startsWith(prefix);
+    return (
+      <Link
+        to={to}
+        className={`app-section${active ? ' active' : ''}`}
+        aria-current={active ? 'page' : undefined}
+      >
+        {label}
+      </Link>
+    );
+  };
+
   return (
     <header className="app-header">
-      <span className="app-title">Assistant</span>
+      <div className="app-header-start">
+        <span className="app-title">Assistant</span>
+        <nav className="app-sections" aria-label="Sections">
+          {section('/notebooks', '/notebooks', 'Notes')}
+          {askEnabled && section('/blogs/triage', '/blogs', 'Blogs')}
+        </nav>
+      </div>
       <SearchBox key={location.search} initialQuery={currentQuery} />
       <div className="header-user">
         {askEnabled && (
           <Link to="/ask" className="nav-link">Ask AI</Link>
-        )}
-        {askEnabled && (
-          <Link to="/blogs" className="nav-link">Blogs</Link>
         )}
         {invitesConfig?.invites_enabled && (
           <Link to="/invites" className="nav-link">Invites</Link>

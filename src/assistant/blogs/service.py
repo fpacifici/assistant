@@ -83,6 +83,8 @@ class PostFilters:
     unfiled: bool = False
     source_id: uuid.UUID | None = None
     tag_id: uuid.UUID | None = None
+    # True only read posts, False only those still to read, None both.
+    read: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -445,6 +447,10 @@ def _filtered(
         stmt = stmt.join(PostTag, PostTag.post_id == BlogPost.id).where(
             PostTag.tag_id == filters.tag_id
         )
+    if filters.read is True:
+        stmt = stmt.where(BlogPost.read_at.is_not(None))
+    elif filters.read is False:
+        stmt = stmt.where(BlogPost.read_at.is_(None))
     return stmt
 
 
@@ -596,6 +602,28 @@ def set_posts_state(
         _apply_state(session, post, state)
     session.flush()
     return len(posts)
+
+
+# --- Read ---
+
+
+def set_post_read(
+    session: Session, owner: User, post_id: uuid.UUID, *, read: bool
+) -> BlogPost:
+    """Mark a post read or still to read. Idempotent, and the verdict stays.
+
+    Marking a read post read again keeps the first time it was read.
+
+    Raises:
+        BlogNotFoundError: If the post is missing or someone else's.
+    """
+    [post] = _owned_posts(session, owner, [post_id])
+    if not read:
+        post.read_at = None
+    elif post.read_at is None:
+        post.read_at = datetime.now(UTC)
+    session.flush()
+    return post
 
 
 # --- Tags ---

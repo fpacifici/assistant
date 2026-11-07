@@ -561,6 +561,88 @@ def test_hidden_posts_cannot_be_evaluated(
     assert response.status_code == 404
 
 
+# --- Read ---
+
+
+def _set_read(client: TestClient, headers: Headers, post: BlogPost, read: bool) -> dict:
+    response = client.put(
+        f"/blog/post/{post.id}/read", json={"read": read}, headers=headers
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_posts_start_unread(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    _post(pg_session, _source(pg_session, owner))
+    [card] = _list(pg_client, headers)["posts"]
+    assert card["read_at"] is None
+
+
+def test_marking_read_keeps_the_verdict(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    post = _post(pg_session, _source(pg_session, owner), state=BlogPostState.USEFUL)
+    card = _set_read(pg_client, headers, post, True)
+    assert card["read_at"] is not None
+    assert card["state"] == "useful"
+    pg_session.refresh(post)
+    assert post.embed_status == BlogEmbedStatus.NONE.value
+
+
+def test_marking_read_twice_keeps_the_first_time(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    post = _post(pg_session, _source(pg_session, owner))
+    first = _set_read(pg_client, headers, post, True)["read_at"]
+    assert _set_read(pg_client, headers, post, True)["read_at"] == first
+
+
+def test_marking_unread_clears_the_read_time(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    post = _post(pg_session, _source(pg_session, owner))
+    _set_read(pg_client, headers, post, True)
+    assert _set_read(pg_client, headers, post, False)["read_at"] is None
+
+
+def test_filter_by_read(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    source = _source(pg_session, owner)
+    read = _post(pg_session, source, state=BlogPostState.USEFUL, age=1)
+    to_read = _post(pg_session, source, state=BlogPostState.USEFUL, age=2)
+    _set_read(pg_client, headers, read, True)
+
+    assert _ids(pg_client, headers, view="relevant", read=True) == [str(read.id)]
+    assert _ids(pg_client, headers, view="relevant", read=False) == [str(to_read.id)]
+    assert _ids(pg_client, headers, view="relevant") == [str(read.id), str(to_read.id)]
+
+
+def test_someone_elses_post_cannot_be_marked_read(
+    pg_client: TestClient,
+    pg_session: Session,
+    owner: User,
+    stranger_headers: Headers,
+) -> None:
+    post = _post(pg_session, _source(pg_session, owner))
+    response = pg_client.put(
+        f"/blog/post/{post.id}/read", json={"read": True}, headers=stranger_headers
+    )
+    assert response.status_code == 404
+
+
+def test_hidden_posts_cannot_be_marked_read(
+    pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
+) -> None:
+    post = _post(pg_session, _source(pg_session, owner), status=BlogPostStatus.PENDING)
+    response = pg_client.put(
+        f"/blog/post/{post.id}/read", json={"read": True}, headers=headers
+    )
+    assert response.status_code == 404
+
+
 # --- Bulk ---
 
 

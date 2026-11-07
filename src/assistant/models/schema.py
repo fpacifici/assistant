@@ -1021,7 +1021,8 @@ class BlogPost(Base):
     The full text is not here: it is a file in the documents directory, see
     `assistant.blogs.text_store`. `status` is the pipeline's progress and
     `state` the user's verdict; `status`, `state`, `match_level` and
-    `embed_status` are validated in the service layer.
+    `embed_status` are validated in the service layer. `read_at` is when the
+    user marked the post read, independent of the verdict.
     """
 
     __tablename__ = "blog_posts"
@@ -1066,6 +1067,9 @@ class BlogPost(Base):
         String(20), nullable=False, default=BlogPostState.NEW.value
     )
     evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     embed_status: Mapped[str] = mapped_column(

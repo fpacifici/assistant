@@ -74,5 +74,5 @@ ai:
 
 # Blog collection (see docs/architecture/blogs.md), the same for all users.
 blogs:
-  summary_words: 50      # approximate length of a post's summary
+  summary_words: 35      # approximate length of a post's summary
   max_posts_per_run: 50  # per source, oldest first; the rest wait for the next run

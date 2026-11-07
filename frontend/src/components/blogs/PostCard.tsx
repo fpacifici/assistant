@@ -1,7 +1,8 @@
 /**
  * One post. The title opens the original post in a new tab: there is no
- * embedded reader, and opening a post doesn't change its state. Everything on
- * the card that came from a feed or the model is rendered as text.
+ * embedded reader, and opening a post doesn't change its state or mark it
+ * read; Mark read does, apart from the verdict. Everything on the card that
+ * came from a feed or the model is rendered as text.
  */
 
 import { useState } from 'react';
@@ -15,6 +16,7 @@ import type { TagChoice } from '../TagChips';
 interface PostCardProps {
   post: BlogPost;
   onVerdict: (post: BlogPost, state: PostState) => void;
+  onRead: (post: BlogPost, read: boolean) => void;
   onTagsChanged: (postId: string, tags: Tag[]) => void;
 }
 
@@ -28,7 +30,7 @@ function PostTitle({ post }: { post: BlogPost }) {
   );
 }
 
-export default function PostCard({ post, onVerdict, onTagsChanged }: PostCardProps) {
+export default function PostCard({ post, onVerdict, onRead, onTagsChanged }: PostCardProps) {
   const queryClient = useQueryClient();
   const [tagError, setTagError] = useState<string | null>(null);
   const failed = (err: Error) => setTagError(err.message);
@@ -63,8 +65,10 @@ export default function PostCard({ post, onVerdict, onTagsChanged }: PostCardPro
     </button>
   );
 
+  const read = post.read_at !== null;
+
   return (
-    <li className="post-card">
+    <li className={`post-card${read ? ' read' : ''}`}>
       <PostTitle post={post} />
       <div className="post-card-meta">
         <span>{post.source_title}</span>
@@ -74,6 +78,7 @@ export default function PostCard({ post, onVerdict, onTagsChanged }: PostCardPro
         {post.match_level && (
           <span className={`post-match ${post.match_level}`}>{post.match_level} match</span>
         )}
+        {read && <span className="post-read-badge">Read</span>}
       </div>
       {post.summary ? (
         <p className="post-card-summary">{post.summary}</p>
@@ -88,9 +93,19 @@ export default function PostCard({ post, onVerdict, onTagsChanged }: PostCardPro
           onRemove={(tagId) => removeTag.mutate(tagId)}
           error={tagError}
         />
-        <div className="post-verdict" role="group" aria-label="Verdict">
-          {verdictButton('useful', 'Useful')}
-          {verdictButton('not_useful', 'Not useful')}
+        <div className="post-actions">
+          <button
+            type="button"
+            className="btn-secondary post-read-toggle"
+            aria-pressed={read}
+            onClick={() => onRead(post, !read)}
+          >
+            {read ? 'Mark to read' : 'Mark read'}
+          </button>
+          <div className="post-verdict" role="group" aria-label="Verdict">
+            {verdictButton('useful', 'Useful')}
+            {verdictButton('not_useful', 'Not useful')}
+          </div>
         </div>
       </div>
     </li>
