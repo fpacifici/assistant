@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
@@ -22,7 +23,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { noteWindowPath, openNoteWindow } from '../lib/noteWindow';
-import type { NoteNode } from '../types';
+import type { Note, NoteNode } from '../types';
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 const SEARCH_HIT_FLASH_MS = 1500;
@@ -108,11 +109,26 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
     if (!notebookId || !noteId || draft === null) return;
     const updated = await updateNoteTitle(notebookId, noteId, draft.trim());
     queryClient.setQueryData(['note', notebookId, noteId], updated);
-    // The list shows the title and moves the note to the top.
+    // The saved note moves to the top of the list.
     queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
     // Show the saved title, unless the user kept typing meanwhile.
     if (titleDraftRef.current === draft) setDraft(null);
   }, [notebookId, noteId, queryClient, setDraft]);
+
+  // The note list follows the title as it is typed.
+  const showTitleInList = useCallback(
+    (title: string) => {
+      queryClient.setQueryData<InfiniteData<Note[]>>(['notes', notebookId], (list) =>
+        list && {
+          ...list,
+          pages: list.pages.map((page) =>
+            page.map((item) => (item.id === noteId ? { ...item, title } : item)),
+          ),
+        },
+      );
+    },
+    [queryClient, notebookId, noteId],
+  );
 
   const titleSave = useAutoSave(saveTitle, { enabled: canUpdate });
   const { markDirty: markTitleDirty, reset: resetTitleSave, flush: flushTitle } = titleSave;
@@ -128,15 +144,17 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
     (title: string) => {
       if (!canUpdate) return;
       setDraft(title);
+      showTitleInList(title);
       markTitleDirty();
     },
-    [canUpdate, setDraft, markTitleDirty],
+    [canUpdate, setDraft, showTitleInList, markTitleDirty],
   );
 
   const cancelTitle = useCallback(() => {
     setDraft(null);
     resetTitleSave();
-  }, [setDraft, resetTitleSave]);
+    if (note) showTitleInList(note.title);
+  }, [setDraft, resetTitleSave, note, showTitleInList]);
 
   const commitTitle = useCallback(() => {
     void flushTitle();
