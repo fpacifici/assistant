@@ -107,6 +107,7 @@ class PostResponse(BaseModel):
     status: str
     state: str
     evaluated_at: datetime | None
+    read_at: datetime | None
     tags: list[TagResponse]
 
 
@@ -117,6 +118,10 @@ class PostListResponse(BaseModel):
 
 class PostStateUpdate(BaseModel):
     state: BlogPostState
+
+
+class PostReadUpdate(BaseModel):
+    read: bool
 
 
 class BulkPostStateUpdate(BaseModel):

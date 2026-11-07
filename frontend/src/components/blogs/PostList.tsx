@@ -1,8 +1,9 @@
 /**
  * The posts of a view, scrolling without limit.
  *
- * A verdict is applied to the cached pages right away. A post that no longer
- * belongs to the view leaves the list and an undo stays up for a few seconds.
+ * A verdict, or marking a post read, is applied to the cached pages right
+ * away. A post that no longer belongs to the view (or to its read filter)
+ * leaves the list and an undo stays up for a few seconds.
  * The next page comes from the server's keyset cursor, so posts leaving the
  * list skip nothing.
  */
@@ -11,7 +12,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { fetchPosts, MAX_BULK_POSTS, setPostsState, setPostState } from '../../api/blogs';
+import {
+  fetchPosts,
+  MAX_BULK_POSTS,
+  setPostRead,
+  setPostsState,
+  setPostState,
+} from '../../api/blogs';
 import type { PostFilters } from '../../api/blogs';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import type { BlogPost, PostPage, PostState, PostView, Tag } from '../../types';
@@ -23,7 +30,7 @@ export const UNDO_MS = 6000;
 const EMPTY: Record<PostView, string> = {
   all: 'No posts yet.',
   relevant: 'Posts you mark as useful appear here.',
-  new: 'Nothing new to review.',
+  new: 'Nothing new to triage.',
 };
 
 const STATE_LABELS: Record<PostState, string> = {
@@ -34,17 +41,24 @@ const STATE_LABELS: Record<PostState, string> = {
 
 type Pages = InfiniteData<PostPage, string | undefined>;
 
-interface Undo {
-  post: BlogPost;
-  /** The verdict just given. */
-  state: PostState;
-}
+/** What was just done to a post that left the list. `post` is as it was before. */
+type Undo = { post: BlogPost } & ({ state: PostState } | { read: boolean });
 
 /** Whether a post in this state stays in the view. */
 function belongsTo(view: PostView, state: PostState): boolean {
   if (view === 'new') return state === 'new';
   if (view === 'relevant') return state === 'useful';
   return true;
+}
+
+/** Whether a post stays under the read filter once marked read or not. */
+function matchesRead(filters: PostFilters, read: boolean): boolean {
+  return filters.read === undefined || filters.read === read;
+}
+
+function undoMessage(undo: Undo): string {
+  const label = 'state' in undo ? STATE_LABELS[undo.state] : undo.read ? 'read' : 'to read';
+  return `Marked ${label}: ${undo.post.title ?? undo.post.url}`;
 }
 
 function mapPosts(pages: Pages, change: (post: BlogPost) => BlogPost | null): Pages {
@@ -117,8 +131,45 @@ export default function PostList({ view, filters }: PostListProps) {
     onSuccess: () => void markOtherViewsStale(),
   });
 
-  const undoVerdict = useMutation({
-    mutationFn: ({ post }: Undo) => setPostState(post.id, post.state),
+  const markRead = useMutation({
+    mutationFn: ({ post, read }: { post: BlogPost; read: boolean }) =>
+      setPostRead(post.id, read),
+    onMutate: async ({ post, read }) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<Pages>(queryKey);
+      const stays = matchesRead(filters, read);
+      const readAt = read ? new Date().toISOString() : null;
+      queryClient.setQueryData<Pages>(queryKey, (pages) =>
+        pages &&
+        mapPosts(pages, (item) => {
+          if (item.id !== post.id) return item;
+          return stays ? { ...item, read_at: readAt } : null;
+        }),
+      );
+      setError(null);
+      setUndo(stays ? null : { post, read });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      queryClient.setQueryData(queryKey, context?.previous);
+      setUndo(null);
+      setError('Could not save that. Please try again.');
+    },
+    onSuccess: (saved) => {
+      // Keep the server's read time on a post that stayed.
+      queryClient.setQueryData<Pages>(queryKey, (pages) =>
+        pages &&
+        mapPosts(pages, (item) => (item.id === saved.id ? { ...item, read_at: saved.read_at } : item)),
+      );
+      void markOtherViewsStale();
+    },
+  });
+
+  const undoChange = useMutation({
+    mutationFn: (change: Undo) =>
+      'state' in change
+        ? setPostState(change.post.id, change.post.state)
+        : setPostRead(change.post.id, change.post.read_at !== null),
     onMutate: () => setUndo(null),
     onError: () => setError('Could not undo that. Please try again.'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['blogs', 'posts'] }),
@@ -172,6 +223,7 @@ export default function PostList({ view, filters }: PostListProps) {
             key={post.id}
             post={post}
             onVerdict={(item, state) => verdict.mutate({ post: item, state })}
+            onRead={(item, read) => markRead.mutate({ post: item, read })}
             onTagsChanged={setTags}
           />
         ))}
@@ -180,10 +232,8 @@ export default function PostList({ view, filters }: PostListProps) {
       {isFetchingNextPage && <p className="search-status">Loading…</p>}
       {undo && (
         <div className="post-undo" role="status">
-          <span>
-            Marked {STATE_LABELS[undo.state]}: {undo.post.title ?? undo.post.url}
-          </span>
-          <button type="button" onClick={() => undoVerdict.mutate(undo)}>
+          <span>{undoMessage(undo)}</span>
+          <button type="button" onClick={() => undoChange.mutate(undo)}>
             Undo
           </button>
         </div>

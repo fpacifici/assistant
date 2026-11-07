@@ -76,7 +76,7 @@ The user chooses, in a dialog that shows the number of useful posts:
 
 For each post the model produces, in the language of the post:
 
-- a summary of about 50 words (configurable, for all users)
+- a summary of about 35 words (configurable, for all users)
 - a match level of `high`, `medium` or `low` against the source's preferences
 - a short paragraph explaining that level (the motivation)
 
@@ -99,6 +99,9 @@ deleted with the post by the next job run.
 - **Relevant** always means the user marked the post useful. The model's
   match level never changes a post's state or hides it.
 - A verdict can be changed at any time from any view.
+- Separately from the verdict, a post can be marked **read**, and back to
+  read later, at any time from any view, with the time it was read.
+  New posts start unread. Opening a post does not mark it read.
 - Marking a post useful embeds its title, summary and text, in a separate
   vector store from the notes. The job does this from the stored text, without
   fetching the page again. A post with no stored text embeds its title and
@@ -107,30 +110,38 @@ deleted with the post by the next job run.
 
 ### Web UI
 
-A **Blogs** link in the desktop header, mobile `⋯` menu and TUI File menu,
-shown only when AI is enabled.
+Notes and Blogs are top-level sections: the desktop header (also on the
+Blogs pages in TUI mode) and the mobile `⋯` menu link to both, so the user can
+always go back to the notes. The Blogs link, also in the TUI File menu, opens
+Triage and is shown only when AI is enabled.
 
 | Route | View |
 |---|---|
+| `/blogs/triage` | **Triage**: posts in the `new` state from every directory |
 | `/blogs` | **All**: every post, newest first, with a directory sidebar including Unfiled |
 | `/blogs/relevant` | **Relevant**: useful posts, same layout |
-| `/blogs/review` | **New**: posts in the `new` state |
 | `/blogs/sources` | Add, edit, pause and delete sources and directories |
 
-- All and Relevant can be filtered by directory and by tag.
+- **Triage** shows every directory by default and can be filtered to one
+  directory, or Unfiled, from a picker. Its tab always opens it on every
+  directory.
+- All and Relevant can be filtered by directory, by tag, and by read (to read,
+  read, or both).
 - A post card shows the title, source, date, summary, match level, motivation
-  (when there is one), tag chips, and Useful / Not useful buttons.
+  (when there is one), a Read badge once read, tag chips, Mark read / Mark to
+  read, and Useful / Not useful buttons.
 - The title opens the original post in a new browser tab. Opening a post does
   not change its state. There is no embedded reader.
 - Lists scroll without limit.
-- **New** is sorted by match level (high first, unscored last), then newest.
-  An evaluated post leaves the list immediately, with a short undo.
-- **New** offers "Mark visible as not useful" for the current directory, with
+- **Triage** is sorted by match level (high first, unscored last), then newest.
+  An evaluated post leaves the list immediately, with a short undo. Under a read
+  filter, a post marked otherwise leaves the list the same way.
+- **Triage** offers "Mark visible as not useful" for the current directory, with
   a confirmation.
 - Posts still waiting for analysis are hidden. Posts whose analysis failed
   are shown with their title and link and "Summary unavailable".
-- Mobile shows one level at a time, like the rest of the app. TUI mode shows
-  the desktop page.
+- Mobile shows one level at a time, like the rest of the app; Triage goes
+  straight to the posts. TUI mode shows the desktop page.
 
 ### Tags
 

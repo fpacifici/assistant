@@ -5,6 +5,7 @@ import {
   deleteSource,
   fetchPosts,
   fetchSources,
+  setPostRead,
   setPostsState,
 } from './blogs';
 
@@ -26,6 +27,11 @@ describe('fetchPosts', () => {
       '/blog/post?view=all&limit=20&directory_id=d&unfiled=true&source_id=s&tag=t&cursor=c',
     );
   });
+
+  it('sends the read filter, false included', () => {
+    void fetchPosts('relevant', { read: false });
+    expect(apiFetch).toHaveBeenCalledWith('/blog/post?view=relevant&limit=20&read=false');
+  });
 });
 
 describe('sources', () => {
@@ -43,6 +49,14 @@ describe('sources', () => {
 });
 
 describe('posts', () => {
+  it('marks a post read', () => {
+    void setPostRead('p', true);
+    expect(apiFetch).toHaveBeenCalledWith('/blog/post/p/read', {
+      method: 'PUT',
+      body: JSON.stringify({ read: true }),
+    });
+  });
+
   it('sends bulk verdicts by id', () => {
     void setPostsState(['a', 'b'], 'not_useful');
     expect(apiFetch).toHaveBeenCalledWith('/blog/post/bulk-state', {

@@ -1,7 +1,7 @@
 # Blogs
 
 Users register blogs and feeds as sources. A job started from the command line
-collects new posts, and the user reviews them in the Blogs tab. The behaviour
+collects new posts, and the user triages them in the Blogs section. The behaviour
 is in the [spec](../specs/0008-blogs.md). Code: `src/assistant/blogs/`.
 
 Nothing is shared: directories and sources have an `owner_id`, posts reach
@@ -14,7 +14,7 @@ function loads the row filtered by owner, so another user's row is a 404.
 | --- | --- |
 | `blog_directories` | A user's single-level folders. `name` is unique per user. |
 | `blog_sources` | What to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
-| `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict. |
+| `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict, `read_at` when the user marked it read. |
 | `post_tags` | Tags on posts, from the same per-user vocabulary as notes. |
 | `post_chunk_embedding` | Not mapped (Postgres-only, pgvector). One row per chunk of a useful post, same shape as `note_chunk_embedding`, with `post_id`, `source_id`, `owner_id`. HNSW cosine index. No feature reads it yet. |
 
@@ -55,6 +55,13 @@ skip the posts after them. All and Relevant sort by `published_at DESC, id DESC`
 New by match rank (high first, unscored last) and then the same.
 
 Posts still `pending`, and `skipped` rows, are never returned and answer 404.
+
+## Read
+
+`PUT /blog/post/{id}/read` with `{"read": true}` sets `read_at`, and `false`
+clears it. It never touches `state` or the embeddings, and marking a read post
+read again keeps the first time. `GET /blog/post?read=true|false` keeps only
+read posts, or only those still to read, in any view.
 
 ## Safe fetcher
 
@@ -154,6 +161,6 @@ ai:
   blog_model: openai:gpt-6-luna  # AI_BLOG_MODEL
 
 blogs:
-  summary_words: 50      # BLOGS_SUMMARY_WORDS
+  summary_words: 35      # BLOGS_SUMMARY_WORDS
   max_posts_per_run: 50  # BLOGS_MAX_POSTS_PER_RUN
 ```

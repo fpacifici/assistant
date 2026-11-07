@@ -123,6 +123,7 @@ export interface BlogSource {
 
 export type PostState = 'new' | 'useful' | 'not_useful';
 export type MatchLevel = 'high' | 'medium' | 'low';
+/** `new` is the Triage view: posts not evaluated yet. */
 export type PostView = 'all' | 'relevant' | 'new';
 
 export interface BlogPost {
@@ -140,6 +141,8 @@ export interface BlogPost {
   status: 'processed' | 'failed';
   state: PostState;
   evaluated_at: string | null;
+  /** When the user marked it read; null while it is still to read. */
+  read_at: string | null;
   tags: Tag[];
 }
 

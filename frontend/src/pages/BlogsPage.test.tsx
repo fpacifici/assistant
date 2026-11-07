@@ -31,6 +31,7 @@ vi.mock('../api/blogs', async (importOriginal) => ({
   fetchSources: vi.fn(),
   fetchPosts: vi.fn(),
   setPostState: vi.fn(),
+  setPostRead: vi.fn(),
   setPostsState: vi.fn(),
   addPostTag: vi.fn(),
   removePostTag: vi.fn(),
@@ -42,6 +43,7 @@ import {
   fetchPosts,
   fetchSources,
   removePostTag,
+  setPostRead,
   setPostsState,
   setPostState,
 } from '../api/blogs';
@@ -61,6 +63,7 @@ function post(id: string, fields: Partial<BlogPost> = {}): BlogPost {
     status: 'processed',
     state: 'new',
     evaluated_at: null,
+    read_at: null,
     tags: [],
     ...fields,
   };
@@ -84,6 +87,9 @@ beforeEach(() => {
   vi.mocked(fetchSources).mockResolvedValue([]);
   vi.mocked(fetchTags).mockResolvedValue([WORK]);
   vi.mocked(setPostState).mockImplementation(async (id, state) => post(id, { state }));
+  vi.mocked(setPostRead).mockImplementation(async (id, read) =>
+    post(id, { read_at: read ? '2026-10-02T00:00:00Z' : null }),
+  );
   vi.mocked(setPostsState).mockResolvedValue({ updated: 1 });
   showPosts();
 });
@@ -95,6 +101,19 @@ afterEach(() => {
 // --- Views ---
 
 describe('BlogsPage views', () => {
+  it('has top-level links to Notes and Blogs, with Blogs current', async () => {
+    renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'] });
+
+    const sections = await screen.findByRole('navigation', { name: 'Sections' });
+    expect(within(sections).getByRole('link', { name: 'Notes' })).toHaveAttribute(
+      'href',
+      '/notebooks',
+    );
+    const blogs = await within(sections).findByRole('link', { name: 'Blogs' });
+    expect(blogs).toHaveAttribute('href', '/blogs/triage');
+    expect(blogs).toHaveAttribute('aria-current', 'page');
+  });
+
   it('asks for every post on All, newest first from the server', async () => {
     showPosts(post('a'), post('b'));
     renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'] });
@@ -112,12 +131,28 @@ describe('BlogsPage views', () => {
     expect(fetchPosts).toHaveBeenCalledWith('relevant', {}, undefined);
   });
 
-  it('asks for new posts on New, with no tag filter', async () => {
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review?tag=t1'] });
+  it('asks for new posts on Triage, with no tag or read filter', async () => {
+    renderWithProviders(<BlogsPage view="new" />, {
+      initialEntries: ['/blogs/triage?tag=t1&read=read'],
+    });
 
-    expect(await screen.findByText('Nothing new to review.')).toBeInTheDocument();
+    expect(await screen.findByText('Nothing new to triage.')).toBeInTheDocument();
     expect(fetchPosts).toHaveBeenCalledWith('new', {}, undefined);
+    expect(screen.getByRole('link', { name: 'Triage' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByLabelText('Filter by tag')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter by read')).not.toBeInTheDocument();
+  });
+
+  it('opens Triage on every directory, whatever the current filter', async () => {
+    const { router } = renderWithProviders(<BlogsPage view="all" />, {
+      initialEntries: ['/blogs?directory=d1'],
+    });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('link', { name: 'Triage' }));
+
+    expect(router.state.location.pathname).toBe('/blogs/triage');
+    expect(router.state.location.search).toBe('');
   });
 
   it('keeps the directory when switching view', async () => {
@@ -189,6 +224,133 @@ describe('BlogsPage filters', () => {
     await waitFor(() =>
       expect(fetchPosts).toHaveBeenCalledWith('all', { sourceId: 's9' }, undefined),
     );
+  });
+});
+
+// --- Triage ---
+
+describe('Triage', () => {
+  it('shows the posts of every directory with no sidebar', async () => {
+    showPosts(post('a'));
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
+
+    expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Directories' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by directory')).toHaveValue('');
+  });
+
+  it('filters by one directory, then back to all', async () => {
+    const user = userEvent.setup();
+    const { router } = renderWithProviders(<BlogsPage view="new" />, {
+      initialEntries: ['/blogs/triage'],
+    });
+
+    await screen.findByRole('option', { name: 'Tech' });
+    await user.selectOptions(screen.getByLabelText('Filter by directory'), 'Tech');
+
+    expect(router.state.location.search).toBe('?directory=d1');
+    await waitFor(() =>
+      expect(fetchPosts).toHaveBeenCalledWith('new', { directoryId: 'd1' }, undefined),
+    );
+
+    await user.selectOptions(screen.getByLabelText('Filter by directory'), 'All directories');
+    expect(router.state.location.search).toBe('');
+  });
+
+  it('filters by Unfiled', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
+
+    await user.selectOptions(await screen.findByLabelText('Filter by directory'), 'Unfiled');
+
+    await waitFor(() =>
+      expect(fetchPosts).toHaveBeenCalledWith('new', { unfiled: true }, undefined),
+    );
+  });
+});
+
+// --- Read ---
+
+describe('read', () => {
+  it('marks a post read and keeps its verdict', async () => {
+    showPosts(post('a', { state: 'useful' }));
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="relevant" />, { initialEntries: ['/blogs/relevant'] });
+
+    await user.click(await screen.findByRole('button', { name: 'Mark read' }));
+
+    expect(setPostRead).toHaveBeenCalledWith('a', true);
+    expect(setPostState).not.toHaveBeenCalled();
+    const card = screen.getByRole('link', { name: 'Post a' }).closest('li')!;
+    expect(within(card).getByText('Read')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Mark to read' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('marks a read post to read again', async () => {
+    showPosts(post('a', { read_at: '2026-10-02T00:00:00Z' }));
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'] });
+
+    await user.click(await screen.findByRole('button', { name: 'Mark to read' }));
+
+    expect(setPostRead).toHaveBeenCalledWith('a', false);
+    expect(await screen.findByRole('button', { name: 'Mark read' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['To read', false],
+    ['Read', true],
+  ])('filters by %s', async (label, read) => {
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="relevant" />, { initialEntries: ['/blogs/relevant'] });
+
+    await user.selectOptions(await screen.findByLabelText('Filter by read'), label);
+
+    await waitFor(() =>
+      expect(fetchPosts).toHaveBeenCalledWith('relevant', { read }, undefined),
+    );
+  });
+
+  it('removes a post from To read once read, with an undo', async () => {
+    showPosts(post('a', { state: 'useful' }));
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="relevant" />, {
+      initialEntries: ['/blogs/relevant?read=unread'],
+    });
+
+    await user.click(await screen.findByRole('button', { name: 'Mark read' }));
+
+    expect(screen.queryByRole('link', { name: 'Post a' })).not.toBeInTheDocument();
+    expect(screen.getByText('Marked read: Post a')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+
+    await waitFor(() => expect(setPostRead).toHaveBeenLastCalledWith('a', false));
+  });
+
+  it('puts the post back when saving fails', async () => {
+    vi.mocked(setPostRead).mockRejectedValue(new Error('boom'));
+    showPosts(post('a'));
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs?read=unread'] });
+
+    await user.click(await screen.findByRole('button', { name: 'Mark read' }));
+
+    expect(await screen.findByText('Could not save that. Please try again.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Post a' })).toBeInTheDocument();
+  });
+
+  it('opening a post does not mark it read', async () => {
+    showPosts(post('a'));
+    const user = userEvent.setup();
+    renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'] });
+
+    await user.click(await screen.findByRole('link', { name: 'Post a' }));
+
+    expect(setPostRead).not.toHaveBeenCalled();
   });
 });
 
@@ -298,7 +460,7 @@ describe('verdicts', () => {
     );
     showPosts(post('a'), post('b'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     const card = (await screen.findByRole('link', { name: 'Post a' })).closest('li')!;
     await user.click(within(card).getByRole('button', { name: 'Useful' }));
@@ -313,7 +475,7 @@ describe('verdicts', () => {
   it('undoes a verdict', async () => {
     showPosts(post('a'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     const card = (await screen.findByRole('link', { name: 'Post a' })).closest('li')!;
     await user.click(within(card).getByRole('button', { name: 'Not useful' }));
@@ -330,7 +492,7 @@ describe('verdicts', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     showPosts(post('a'));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     const card = (await screen.findByRole('link', { name: 'Post a' })).closest('li')!;
     await user.click(within(card).getByRole('button', { name: 'Useful' }));
@@ -347,7 +509,7 @@ describe('verdicts', () => {
     vi.mocked(setPostState).mockRejectedValue(new Error('boom'));
     showPosts(post('a'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     const card = (await screen.findByRole('link', { name: 'Post a' })).closest('li')!;
     await user.click(within(card).getByRole('button', { name: 'Useful' }));
@@ -393,7 +555,7 @@ describe('verdicts', () => {
   it('opening a post changes nothing', async () => {
     showPosts(post('a'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     await user.click(await screen.findByRole('link', { name: 'Post a' }));
 
@@ -417,7 +579,7 @@ describe('Mark visible as not useful', () => {
   it('asks first, and sends the ids on screen', async () => {
     showPosts(post('a'), post('b'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review?directory=d1'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage?directory=d1'] });
 
     await user.click(await screen.findByRole('button', { name: 'Mark visible as not useful' }));
     expect(setPostsState).not.toHaveBeenCalled();
@@ -432,7 +594,7 @@ describe('Mark visible as not useful', () => {
   it('does nothing when cancelled', async () => {
     showPosts(post('a'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/review'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     await user.click(await screen.findByRole('button', { name: 'Mark visible as not useful' }));
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }));
@@ -484,6 +646,18 @@ describe('mobile layout', () => {
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/blogs');
   });
 
+  it('goes straight to the posts on Triage', async () => {
+    showPosts(post('a'));
+    renderWithProviders(<BlogsPage view="new" />, {
+      initialEntries: ['/blogs/triage'],
+      layout: 'mobile',
+    });
+
+    expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by directory')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/notebooks');
+  });
+
   it('reaches every post from All directories', async () => {
     const user = userEvent.setup();
     renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'], layout: 'mobile' });
@@ -503,5 +677,15 @@ describe('TUI layout', () => {
 
     expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Directories' })).toBeInTheDocument();
+  });
+
+  it('links back to the notes', async () => {
+    renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'], layout: 'tui' });
+
+    const sections = await screen.findByRole('navigation', { name: 'Sections' });
+    expect(within(sections).getByRole('link', { name: 'Notes' })).toHaveAttribute(
+      'href',
+      '/notebooks',
+    );
   });
 });

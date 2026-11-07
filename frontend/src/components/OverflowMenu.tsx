@@ -1,5 +1,5 @@
-/** Mobile `⋯` menu: account details, Ask AI and Blogs (when AI is enabled), Invites,
- * Settings, theme, Logout, plus view-specific entries. */
+/** Mobile `⋯` menu: account details, Notes, Blogs and Ask AI (when AI is enabled),
+ * Invites, Settings, theme, Logout, plus view-specific entries. */
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -68,8 +68,9 @@ export default function OverflowMenu({ children }: { children?: React.ReactNode 
             </button>
           ))}
           {children}
+          <Link role="menuitem" to="/notebooks">Notes</Link>
+          {askEnabled && <Link role="menuitem" to="/blogs/triage">Blogs</Link>}
           {askEnabled && <Link role="menuitem" to="/ask">Ask AI</Link>}
-          {askEnabled && <Link role="menuitem" to="/blogs">Blogs</Link>}
           {invitesConfig?.invites_enabled && (
             <Link role="menuitem" to="/invites">Invites</Link>
           )}

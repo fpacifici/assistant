@@ -861,7 +861,7 @@ def test_config_get_sentry_config_invalid_yaml_rate_raises(tmp_path: Path) -> No
 def test_blog_defaults(tmp_path: Path) -> None:
     config = Config(config_path=tmp_path / "missing.yaml")
     assert config.get_ai_config()["blog_model"] == "openai:gpt-6-luna"
-    assert config.get_blogs_config() == {"summary_words": 50, "max_posts_per_run": 50}
+    assert config.get_blogs_config() == {"summary_words": 35, "max_posts_per_run": 50}
 
 
 def test_blog_settings_from_yaml_and_env(

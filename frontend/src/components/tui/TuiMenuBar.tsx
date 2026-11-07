@@ -93,7 +93,7 @@ export default function TuiMenuBar() {
     if (askEnabled) {
       fileItems.push(
         { id: 'ask', label: 'Ask AI…', onSelect: () => navigate('/ask') },
-        { id: 'blogs', label: 'Blogs…', onSelect: () => navigate('/blogs') },
+        { id: 'blogs', label: 'Blogs…', onSelect: () => navigate('/blogs/triage') },
       );
     }
     fileItems.push(

@@ -15,6 +15,7 @@ from assistant.api.schemas.blogs import (
     DirectoryResponse,
     DirectoryUpdate,
     PostListResponse,
+    PostReadUpdate,
     PostResponse,
     PostStateUpdate,
     SourceCreate,
@@ -37,6 +38,7 @@ from assistant.blogs.service import (
     register_source,
     remove_tag_from_post,
     rename_directory,
+    set_post_read,
     set_post_state,
     set_posts_state,
     tags_for_posts,
@@ -165,6 +167,7 @@ def _post_response(post: BlogPost, tags: list[Tag]) -> PostResponse:
         status=post.status,
         state=post.state,
         evaluated_at=post.evaluated_at,
+        read_at=post.read_at,
         tags=[TagResponse.model_validate(tag) for tag in tags],
     )
 
@@ -178,6 +181,7 @@ def list_posts_endpoint(  # noqa: PLR0913
     unfiled: Annotated[bool, Query()] = False,
     source_id: Annotated[uuid.UUID | None, Query()] = None,
     tag: Annotated[uuid.UUID | None, Query()] = None,
+    read: Annotated[bool | None, Query()] = None,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> PostListResponse:
@@ -191,6 +195,7 @@ def list_posts_endpoint(  # noqa: PLR0913
             unfiled=unfiled,
             source_id=source_id,
             tag_id=tag,
+            read=read,
         ),
         cursor=cursor,
         limit=limit,
@@ -219,6 +224,18 @@ def set_post_state_endpoint(
 ) -> PostResponse:
     """Set a post's verdict. Undo sets it back."""
     post = set_post_state(session, user, post_id, body.state)
+    return _post_response(post, tags_for_posts(session, [post.id]).get(post.id, []))
+
+
+@router.put("/post/{post_id}/read", response_model=PostResponse)
+def set_post_read_endpoint(
+    post_id: uuid.UUID,
+    body: PostReadUpdate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> PostResponse:
+    """Mark a post read, or back to read later. The verdict is unchanged."""
+    post = set_post_read(session, user, post_id, read=body.read)
     return _post_response(post, tags_for_posts(session, [post.id]).get(post.id, []))
 
 
