@@ -23,7 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "langgraph-checkpoint-postgres>=3.0.4",
     "textual>=8.0.2",
-    "fastapi>=0.138.0",  # Depends(scope=...) for the session commit
+    "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "argon2-cffi>=23.1.0",
     "PyJWT>=2.8.0",

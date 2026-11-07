@@ -11,17 +11,6 @@ All functionalities are supported with both APIs
 
 The API is an OpenAPI implemented with FastAPI. It follows the REST principles.
 
-### Database session
-
-Each request gets one session through `SessionDep` (`api/dependencies.py`).
-It commits, or rolls back on an error, **before the response is sent**: the
-dependency has FastAPI's `function` scope, while by default the code after a
-dependency's `yield` runs only once the response is out. A client that reads
-right after a write therefore sees it (the note list refetched after a
-rename). The session itself stays open until the response is sent, so
-serializing a response can still load what the commit expired. A streaming
-response that writes while it streams must commit itself, as Ask AI does.
-
 ### Authentication
 
 We support two modes for authentication, both JWT-based:

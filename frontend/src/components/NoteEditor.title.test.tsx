@@ -91,6 +91,23 @@ function renderEditor(
   );
 }
 
+/** A client whose note list holds this note and another one. */
+function seededList(): QueryClient {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'], {
+    pages: [[note(), note({ id: 'note-2', title: 'Other' })]],
+    pageParams: [0],
+  });
+  return queryClient;
+}
+
+function listTitles(queryClient: QueryClient): string[] | undefined {
+  return queryClient
+    .getQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'])
+    ?.pages.flat()
+    .map((item) => item.title);
+}
+
 function titleField(): Promise<HTMLTextAreaElement> {
   return screen.findByRole('textbox', { name: 'Note title' }) as Promise<HTMLTextAreaElement>;
 }
@@ -165,28 +182,29 @@ describe('editing the title', () => {
     expect(field).toHaveValue('Shopping list');
   });
 
-  it('shows the saved title in the note list at once', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const other = note({ id: 'note-2', title: 'Other' });
-    queryClient.setQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'], {
-      pages: [[note(), other]],
-      pageParams: [0],
-    });
+  it('updates the title in the note list while typing, before any save', async () => {
+    const queryClient = seededList();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor(undefined, queryClient);
 
     const field = await titleField();
     await user.clear(field);
-    await user.type(field, 'Renamed{Enter}');
+    await user.type(field, 'Renamed');
 
-    await waitFor(() =>
-      expect(
-        queryClient
-          .getQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'])
-          ?.pages[0].map((item) => item.title),
-      ).toEqual(['Renamed', 'Other']),
-    );
-    expect(queryClient.getQueryState(['notes', 'nb-1'])?.isInvalidated).toBe(true);
+    expect(listTitles(queryClient)).toEqual(['Renamed', 'Other']);
+    expect(updateNoteTitle).not.toHaveBeenCalled();
+  });
+
+  it('puts the saved title back in the note list on Escape', async () => {
+    const queryClient = seededList();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(undefined, queryClient);
+
+    await user.type(await titleField(), ' oops');
+    expect(listTitles(queryClient)).toEqual(['Groceries oops', 'Other']);
+    await user.keyboard('{Escape}');
+
+    expect(listTitles(queryClient)).toEqual(['Groceries', 'Other']);
   });
 
   it('saves when leaving the field, trimmed', async () => {
