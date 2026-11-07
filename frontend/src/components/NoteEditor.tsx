@@ -5,11 +5,12 @@ import { useCreateBlockNote } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/mantine';
 import '@blocknote/mantine/style.css';
 import { fetchNodes } from '../api/nodes';
-import { fetchNote } from '../api/notes';
+import { fetchNote, updateNoteTitle } from '../api/notes';
 import { ServerRegistry } from '../markdown/serverRegistry';
 import { buildBlocksFromNodes, buildSnapshot } from '../markdown/mapper';
 import { executeSave } from '../markdown/reconcile';
 import MarkdownToolbar from './MarkdownToolbar';
+import NoteTitle from './NoteTitle';
 import AttachmentList from './AttachmentList';
 import TagEditor from './TagEditor';
 import DebugBlockView from './DebugBlockView';
@@ -29,6 +30,10 @@ const SEARCH_HIT_FLASH_MS = 1500;
 /**
  * `standalone` is set in the note's own window (`NoteWindow`), which has no
  * "Open in new window" button.
+ *
+ * The title sits at the top of the text as an H2 (`NoteTitle`) and has its own
+ * autosave, joined with the text's for the save state, the unsaved-changes
+ * guard and "Open in new window".
  */
 export default function NoteEditor({ standalone = false }: { standalone?: boolean }) {
   const { notebookId, noteId } = useParams();
@@ -87,6 +92,58 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
   const [conflict, setConflict] = useState(false);
   const autoSave = useAutoSave(save, { enabled: canUpdate && !conflict });
   const { markDirty, reset: resetAutoSave } = autoSave;
+
+  // --- Title ---
+  // The title being typed, or null to show the saved one. The ref is what the
+  // save reads, as it may run after newer edits.
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const titleDraftRef = useRef<string | null>(null);
+  const setDraft = useCallback((draft: string | null) => {
+    titleDraftRef.current = draft;
+    setTitleDraft(draft);
+  }, []);
+
+  const saveTitle = useCallback(async () => {
+    const draft = titleDraftRef.current;
+    if (!notebookId || !noteId || draft === null) return;
+    const updated = await updateNoteTitle(notebookId, noteId, draft.trim());
+    queryClient.setQueryData(['note', notebookId, noteId], updated);
+    // The list shows the title and moves the note to the top.
+    queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+    // Show the saved title, unless the user kept typing meanwhile.
+    if (titleDraftRef.current === draft) setDraft(null);
+  }, [notebookId, noteId, queryClient, setDraft]);
+
+  const titleSave = useAutoSave(saveTitle, { enabled: canUpdate });
+  const { markDirty: markTitleDirty, reset: resetTitleSave, flush: flushTitle } = titleSave;
+
+  // Another note: its own title, with nothing pending. The unsaved-changes
+  // guard saved the previous one before the route changed.
+  useEffect(() => {
+    setDraft(null);
+    resetTitleSave();
+  }, [noteId, setDraft, resetTitleSave]);
+
+  const changeTitle = useCallback(
+    (title: string) => {
+      if (!canUpdate) return;
+      setDraft(title);
+      markTitleDirty();
+    },
+    [canUpdate, setDraft, markTitleDirty],
+  );
+
+  const cancelTitle = useCallback(() => {
+    setDraft(null);
+    resetTitleSave();
+  }, [setDraft, resetTitleSave]);
+
+  const commitTitle = useCallback(() => {
+    void flushTitle();
+    const [first] = editor.document;
+    if (first) editor.setTextCursorPosition(first, 'start');
+    editor.focus();
+  }, [flushTitle, editor]);
 
   useEffect(() => {
     const err = autoSave.error;
@@ -174,7 +231,11 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
   // The popup opens synchronously (popup blockers allow it only inside the
   // click), then loads the note once pending edits are saved. This window
   // goes back to the note list so the note isn't edited in two places.
-  const { flush } = autoSave;
+  const { flush: flushText } = autoSave;
+  const flush = useCallback(
+    async () => (await flushTitle()) && (await flushText()),
+    [flushTitle, flushText],
+  );
   const openInNewWindow = useCallback(async () => {
     if (!notebookId || !noteId) return;
     const popup = openNoteWindow(noteId);
@@ -188,10 +249,9 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
     navigate(`/notebooks/${notebookId}/notes`);
   }, [notebookId, noteId, flush, navigate]);
 
-  const unsavedChangesDialog = useUnsavedChangesGuard(
-    autoSave.isDirty || autoSave.saving,
-    autoSave.flush,
-  );
+  const isDirty = autoSave.isDirty || titleSave.isDirty;
+  const saving = autoSave.saving || titleSave.saving;
+  const unsavedChangesDialog = useUnsavedChangesGuard(isDirty || saving, flush);
 
   if (!notebookId || !noteId) {
     return <div className="editor-placeholder">Select a note to edit</div>;
@@ -200,16 +260,20 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
   if (isLoading) return <div>Loading...</div>;
 
   const saveError = autoSave.error;
+  const titleError = titleSave.error;
   let errorMessage: string | null = null;
   if (conflict) {
     errorMessage = 'Conflict: note was modified externally. Please refresh.';
   } else if (saveError) {
     errorMessage = `Error: ${saveError instanceof Error ? saveError.message : String(saveError)}`;
+  } else if (titleError) {
+    const reason = titleError instanceof Error ? titleError.message : String(titleError);
+    errorMessage = `Error saving the title: ${reason}`;
   }
   let saveState: string | null = null;
-  if (autoSave.saving) saveState = 'Saving…';
+  if (saving) saveState = 'Saving…';
   else if (errorMessage) saveState = 'Not saved';
-  else if (autoSave.isDirty) saveState = 'Unsaved changes';
+  else if (isDirty) saveState = 'Unsaved changes';
   else if (canUpdate) saveState = 'Saved';
   const saveIndicator = saveState && (
     <span
@@ -238,11 +302,23 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
       />
       {note && <TagEditor notebookId={notebookId} noteId={noteId} tags={note.tags} />}
       <div className={`editor-content${debugOpen && !isMobile ? ' with-debug' : ''}`}>
-        <BlockNoteView
-          editor={editor}
-          theme={colorScheme}
-          portalElements={{ default: null }}
-        />
+        <div className="note-body">
+          {note && (
+            <NoteTitle
+              value={titleDraft ?? note.title}
+              readOnly={!canUpdate}
+              onChange={changeTitle}
+              onCommit={commitTitle}
+              onCancel={cancelTitle}
+              onBlur={() => void flushTitle()}
+            />
+          )}
+          <BlockNoteView
+            editor={editor}
+            theme={colorScheme}
+            portalElements={{ default: null }}
+          />
+        </div>
         {debugOpen && !isMobile && (
           <DebugBlockView
             key={debugTick}

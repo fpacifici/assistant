@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from assistant.api.schemas.notes import MAX_NOTE_TITLE_LENGTH
 from assistant.models.schema import Entitlement, RoleName
 from assistant.notes.service import (
     add_markdown_node,
@@ -246,6 +247,41 @@ class TestUpdateNote:
         )
         assert response.status_code == 200
         assert response.json()["title"] == "New"
+
+    def test_a_note_can_be_untitled(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "NB", test_user)
+        note = create_note(db_session, nb.id, test_user, "Old")
+
+        response = client.patch(
+            f"/notebook/{nb.id}/note/{note.id}",
+            json={"title": ""},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert response.json()["title"] == ""
+
+    def test_a_title_longer_than_the_column_is_refused(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        test_user: User,
+        db_session: Session,
+    ) -> None:
+        nb = create_notebook(db_session, "NB", test_user)
+        note = create_note(db_session, nb.id, test_user, "Old")
+
+        response = client.patch(
+            f"/notebook/{nb.id}/note/{note.id}",
+            json={"title": "x" * (MAX_NOTE_TITLE_LENGTH + 1)},
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
 
     def test_update_note_wrong_notebook(
         self,

@@ -4,19 +4,24 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from assistant.api.schemas.tags import TagResponse
 from assistant.models.schema import PermissionName
 
+# As long as the `notes.title` column allows. Empty means untitled.
+MAX_NOTE_TITLE_LENGTH = 500
+NoteTitle = Annotated[str, StringConstraints(max_length=MAX_NOTE_TITLE_LENGTH)]
+
 
 class NoteCreate(BaseModel):
-    title: str
+    title: NoteTitle
 
 
 class NoteUpdate(BaseModel):
-    title: str | None = None
+    title: NoteTitle | None = None
 
 
 class NoteResponse(BaseModel):

@@ -22,6 +22,18 @@ export function createNote(notebookId: string, title: string): Promise<Note> {
   });
 }
 
+/** Rename a note. */
+export function updateNoteTitle(
+  notebookId: string,
+  noteId: string,
+  title: string,
+): Promise<Note> {
+  return apiFetch<Note>(`/notebook/${notebookId}/note/${noteId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  });
+}
+
 export function deleteNote(notebookId: string, noteId: string): Promise<void> {
   return apiFetch<void>(`/notebook/${notebookId}/note/${noteId}`, {
     method: 'DELETE',
