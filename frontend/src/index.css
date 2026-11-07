@@ -1316,10 +1316,42 @@ ul {
 }
 
 /* Desktop: the editor scrolls inside the box, keeping both toolbars in view */
-.editor-content > .bn-container {
+/* The title and the text scroll together. */
+.editor-content > .note-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  background: var(--surface);
+}
+
+/* The note's title, written like an H2 of the text: BlockNote's inline
+   padding and heading size, so it reads as the first line of the note. */
+.note-title {
+  margin: 0;
+  padding: 18px 54px 0;
+  font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Open Sans",
+    "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.note-title textarea {
+  display: block;
+  width: 100%;
+  padding: 3px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.note-title textarea::placeholder {
+  color: var(--text-faint);
 }
 
 .editor-content.with-debug {
@@ -1327,7 +1359,7 @@ ul {
   gap: 0;
 }
 
-.editor-content.with-debug .bn-container {
+.editor-content.with-debug .note-body {
   flex: 1;
   min-width: 0;
 }
@@ -1684,7 +1716,7 @@ ul {
   overflow: visible;
 }
 
-[data-layout="mobile"] .editor-content > .bn-container {
+[data-layout="mobile"] .editor-content > .note-body {
   flex: none;
   overflow: visible;
 }
@@ -2677,6 +2709,25 @@ ul {
 
 .app-shell.tui .bn-editor {
   font-family: var(--tui-font);
+}
+
+/* The title is a heading like the others: one line tall, `## `, accent. */
+.app-shell.tui .note-title {
+  display: flex;
+  padding-top: 0.5em;
+  font-family: var(--tui-font);
+  font-size: 1em;
+  color: var(--accent);
+}
+
+.app-shell.tui .note-title::before {
+  content: '## ';
+  white-space: pre;
+  color: var(--text-faint);
+}
+
+.app-shell.tui .note-title textarea {
+  color: var(--accent);
 }
 
 /* Headings stay one line tall and show their markdown marker */
