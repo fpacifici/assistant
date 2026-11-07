@@ -19,19 +19,36 @@ from assistant.models.schema import User
 from assistant.notes.user_service import get_user
 
 
+def _open_session(request: Request) -> Generator[Session]:
+    """The request's session, closed once the response has been sent.
+
+    It stays open while the response is serialized, which may load
+    attributes the commit expired.
+    """
+    session = request.app.state.session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
 def get_session(
-    request: Request,
+    session: Annotated[Session, Depends(_open_session)],
 ) -> Generator[Session]:
-    session_factory = request.app.state.session_factory
-    session = session_factory()
+    """The request's session, committed before the response is sent.
+
+    `SessionDep` gives this dependency the `function` scope: by default
+    FastAPI runs the code after `yield` only once the response is out, and a
+    client that reads right after a write (e.g. the note list refetched after
+    a rename) would see the data from before it. A failure rolls back.
+    Tests override this dependency to keep their own transaction.
+    """
     try:
         yield session
         session.commit()
     except Exception:
         session.rollback()
         raise
-    finally:
-        session.close()
 
 
 def get_current_user_id(request: Request) -> uuid.UUID:
@@ -86,7 +103,7 @@ def get_import_settings(request: Request) -> ImportSettings:
     return request.app.state.import_settings  # type: ignore[no-any-return]
 
 
-SessionDep = Annotated[Session, Depends(get_session)]
+SessionDep = Annotated[Session, Depends(get_session, scope="function")]
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
 StorageDep = Annotated[FileStorage, Depends(get_storage)]
 ImportSettingsDep = Annotated[ImportSettings, Depends(get_import_settings)]

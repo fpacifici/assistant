@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router';
+import { QueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 import NoteEditor from './NoteEditor';
 import { renderWithProviders } from '../test/renderWithProviders';
 import { AUTOSAVE_DELAY_MS } from '../hooks/useAutoSave';
@@ -76,13 +78,16 @@ function note(fields: Partial<Note> = {}): Note {
   };
 }
 
-function renderEditor(path = '/notebooks/nb-1/notes/note-1') {
+function renderEditor(
+  path = '/notebooks/nb-1/notes/note-1',
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return renderWithProviders(
     <Routes>
       <Route path="/notebooks/:notebookId/notes/:noteId" element={<NoteEditor />} />
       <Route path="/notebooks/:notebookId/notes" element={<div>Note list</div>} />
     </Routes>,
-    { initialEntries: [path] },
+    { initialEntries: [path], queryClient },
   );
 }
 
@@ -158,6 +163,30 @@ describe('editing the title', () => {
     expect(updateNoteTitle).toHaveBeenCalledWith('nb-1', 'note-1', 'Shopping list');
     await waitFor(() => expect(screen.getByTestId('save-state')).toHaveTextContent('Saved'));
     expect(field).toHaveValue('Shopping list');
+  });
+
+  it('shows the saved title in the note list at once', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const other = note({ id: 'note-2', title: 'Other' });
+    queryClient.setQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'], {
+      pages: [[note(), other]],
+      pageParams: [0],
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(undefined, queryClient);
+
+    const field = await titleField();
+    await user.clear(field);
+    await user.type(field, 'Renamed{Enter}');
+
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryData<InfiniteData<Note[]>>(['notes', 'nb-1'])
+          ?.pages[0].map((item) => item.title),
+      ).toEqual(['Renamed', 'Other']),
+    );
+    expect(queryClient.getQueryState(['notes', 'nb-1'])?.isInvalidated).toBe(true);
   });
 
   it('saves when leaving the field, trimmed', async () => {
