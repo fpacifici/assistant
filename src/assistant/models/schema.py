@@ -148,6 +148,52 @@ class BlogEmbedStatus(str, Enum):
     FAILED = "failed"
 
 
+class BlogRunTrigger(str, Enum):
+    """What started a collection run."""
+
+    JOB = "job"
+    MANUAL = "manual"
+
+
+class BlogRunOutcome(str, Enum):
+    """How reading the source went. Null on a run still reading it."""
+
+    COLLECTED = "collected"
+    NOT_MODIFIED = "not_modified"
+    FAILED = "failed"
+
+
+class BlogEntryVerdict(str, Enum):
+    """What the collection made of one entry of a feed or sitemap."""
+
+    NEW = "new"  # stored as a new post
+    STORED = "stored"  # collected by an earlier run
+    TOO_OLD = "too_old"  # before the source's collection start
+    OVER_CAP = "over_cap"  # left for the next run
+    NO_DATE = "no_date"  # a sitemap page with no date: never fetched again
+    UNREADABLE = "unreadable"  # a sitemap page that could not be read now
+    ROBOTS = "robots"  # robots.txt disallows it
+    INVALID = "invalid"  # no link, or a link too long to store
+    RETRY = "retry"  # collected earlier and analyzed again in this run
+
+
+class BlogEntryAnalysis(str, Enum):
+    """What analyzing an entry's post did in the run."""
+
+    PROCESSED = "processed"
+    TOO_SHORT = "too_short"
+    ERROR = "error"  # tried again by the next run
+    FAILED = "failed"  # out of attempts
+
+
+class BlogTextSource(str, Enum):
+    """Where the text given to the model came from."""
+
+    FILE = "file"  # saved by an earlier attempt
+    PAGE = "page"
+    FEED = "feed"
+
+
 class User(Base):
     """User model."""
 
@@ -1013,6 +1059,12 @@ class BlogSource(Base):
         back_populates="source",
         cascade="all, delete-orphan",
     )
+    runs: Mapped[list[BlogCollectionRun]] = relationship(
+        "BlogCollectionRun",
+        back_populates="source",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class BlogPost(Base):
@@ -1082,6 +1134,108 @@ class BlogPost(Base):
         "PostTag",
         back_populates="post",
         cascade="all, delete-orphan",
+    )
+
+
+class BlogCollectionRun(Base):
+    """One attempt at collecting a source, by the job or a manual refresh.
+
+    `outcome` is set once the source is read, and `finished_at` once its posts
+    are analyzed too. A run left unfinished by a crash is closed by the next
+    one, with `interrupted`. Only the latest runs of a source are kept, see
+    `assistant.blogs.runs`.
+    """
+
+    __tablename__ = "blog_collection_runs"
+    __table_args__ = (
+        Index("ix_blog_collection_runs_source_started", "source_id", "started_at"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    source_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_sources.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    trigger: Mapped[str] = mapped_column(String(20), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    outcome: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    interrupted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Every entry the source listed; only some are kept when there are many.
+    entries_found: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    source: Mapped[BlogSource] = relationship("BlogSource", back_populates="runs")
+    entries: Mapped[list[BlogCollectionEntry]] = relationship(
+        "BlogCollectionEntry",
+        back_populates="run",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="BlogCollectionEntry.position",
+    )
+
+
+class BlogCollectionEntry(Base):
+    """One entry of a run: what the source listed and what became of it.
+
+    The analysis columns are a copy of what the model answered in this run,
+    so the log still shows it after the post changes or is deleted.
+    """
+
+    __tablename__ = "blog_collection_entries"
+    __table_args__ = (
+        Index("ix_blog_collection_entries_run_position", "run_id", "position"),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    run_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_collection_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    post_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.blog_posts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    feed_text_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    analysis: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    text_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    text_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    match_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    motivation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analyzed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    run: Mapped[BlogCollectionRun] = relationship(
+        "BlogCollectionRun", back_populates="entries"
     )
 
 

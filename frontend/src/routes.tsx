@@ -13,6 +13,7 @@ import SearchPage from './pages/SearchPage';
 import AskPage from './pages/AskPage';
 import BlogsPage from './pages/BlogsPage';
 import BlogSourcesPage from './pages/BlogSourcesPage';
+import BlogSourceLogPage from './pages/BlogSourceLogPage';
 import SwitchToGooglePage from './pages/SwitchToGooglePage';
 import NoteWindow from './pages/NoteWindow';
 import {
@@ -48,6 +49,7 @@ export const routes: RouteObject[] = [
           { path: '/blogs/triage', element: <BlogsPage view="new" /> },
           { path: '/blogs/review', element: <Navigate to="/blogs/triage" replace /> },
           { path: '/blogs/sources', element: <BlogSourcesPage /> },
+          { path: '/blogs/sources/:sourceId/log', element: <BlogSourceLogPage /> },
           { path: '/notebooks/:notebookId/notes/:noteId/window', element: <NoteWindow /> },
           { path: '/invites', element: <InvitesPage /> },
           { path: '/settings', element: <SettingsPage /> },

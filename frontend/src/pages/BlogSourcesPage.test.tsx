@@ -116,6 +116,17 @@ describe('source status', () => {
 
 // --- Adding ---
 
+describe('history', () => {
+  it('links each source to its collection history', async () => {
+    render();
+
+    expect(await screen.findByRole('link', { name: 'History of Example Blog' })).toHaveAttribute(
+      'href',
+      '/blogs/sources/s1/log',
+    );
+  });
+});
+
 describe('adding a source', () => {
   it('sends the form and warns about the look back', async () => {
     const user = userEvent.setup();

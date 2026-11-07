@@ -86,6 +86,7 @@ Routes are declared in `src/routes.tsx`.
 | `/ask?thread=…` | `AskPage`: questions to the AI agent about the notes (see Ask AI below) |
 | `/blogs/triage`, `/blogs`, `/blogs/relevant` | `BlogsPage`: Triage (new posts), All and Relevant (see Blogs below). `/blogs/review` redirects to Triage |
 | `/blogs/sources` | `BlogSourcesPage`: add, edit, pause and delete sources and directories |
+| `/blogs/sources/:sourceId/log?run=…` | `BlogSourceLogPage`: the collection history of one source, with Refresh now |
 | `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
 | `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
@@ -228,6 +229,13 @@ link there and in the TUI File menu opens Triage and is gated on
   from a feed or the model is rendered as text.
 - **Tags**: `TagChips` is the chips and combobox with `tags`, `onAdd` and
   `onRemove`. `TagEditor` applies them to a note, `PostCard` to a post.
+- **History** (`BlogSourceLogPage`, the History button on each source): the
+  runs, newest first, and the chosen run's entries (`?run=`, the newest by
+  default) with their verdict and the model's answer. A run whose
+  `finished_at` is null is polled every `POLL_MS`, and so is the run list while
+  one is going. Refresh now starts a run and selects it; it is disabled while a
+  run is going and for a paused source, and a 409 shows its message. Entry links
+  go through `isSafeLink` like post titles.
 
 ## Theming
 

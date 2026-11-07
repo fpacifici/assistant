@@ -1,4 +1,5 @@
-/** `/blogs/sources`: add, edit, pause and delete sources, and manage directories. */
+/** `/blogs/sources`: add, edit, pause and delete sources, open their collection
+ * history, and manage directories. */
 
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -194,6 +195,13 @@ function SourceRow({ source }: { source: BlogSource }) {
         <SourceStatus source={source} />
       </div>
       <div className="source-row-actions">
+        <Link
+          to={`/blogs/sources/${source.id}/log`}
+          className="btn-secondary"
+          aria-label={`History of ${source.title}`}
+        >
+          History
+        </Link>
         <button
           type="button"
           className="btn-secondary"

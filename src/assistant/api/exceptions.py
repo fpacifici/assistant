@@ -16,9 +16,11 @@ from assistant.auth.exceptions import (
 )
 from assistant.blogs.exceptions import (
     BlogNotFoundError,
+    CollectionBusyError,
     DuplicateDirectoryError,
     DuplicateSourceError,
     InvalidPostQueryError,
+    SourcePausedError,
     SourceResolutionError,
 )
 from assistant.chat.exceptions import AIDisabledError, ChatThreadNotFoundError
@@ -55,6 +57,8 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(DuplicateDirectoryError)
     @app.exception_handler(DuplicateSourceError)
+    @app.exception_handler(CollectionBusyError)
+    @app.exception_handler(SourcePausedError)
     async def blog_duplicate_handler(
         request: Request,  # noqa: ARG001
         exc: Exception,

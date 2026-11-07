@@ -28,6 +28,7 @@ from assistant.api.routes.search import router as search_router
 from assistant.api.routes.tags import router as tags_router
 from assistant.api.routes.users import router as users_router
 from assistant.attachments.storage import FileStorage, LocalFileStorage
+from assistant.blogs.refresh import BlogRefresher, create_blog_refresher
 from assistant.config import Config
 from assistant.observability import init_sentry
 from assistant.vectors.indexer import create_vector_indexer
@@ -56,6 +57,7 @@ def create_app(  # noqa: PLR0913
     import_settings: ImportSettings | None = None,
     vector_worker: VectorIndexWorker | None = None,
     ask_agent: AskAgent | None = None,
+    blog_refresher: BlogRefresher | None = None,
 ) -> FastAPI:
     """Build the API application.
 
@@ -69,6 +71,8 @@ def create_app(  # noqa: PLR0913
             when AI is disabled (no `OPENAI_API_KEY`).
         ask_agent: The Ask AI agent. Defaults to one built from config, or
             none when AI is disabled (the /ask routes then answer 503).
+        blog_refresher: Collects one blog on request. Defaults to one built
+            from config, or none when AI is disabled (refresh answers 503).
     """
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
@@ -96,6 +100,7 @@ def create_app(  # noqa: PLR0913
     app.state.session_factory = session_factory
     app.state.vector_worker = worker
     app.state.ask_agent = ask_agent or create_ask_agent(session_factory)
+    app.state.blog_refresher = blog_refresher or create_blog_refresher(session_factory)
 
     if file_storage is None:
         storage_path = file_storage_path or Config().get_file_storage_path()
