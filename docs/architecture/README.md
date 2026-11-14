@@ -166,5 +166,6 @@ the webui.
 - [`Ask AI`](ask.md)
 - [`Categories`](categories.md)
 - [`Blogs`](blogs.md)
+- [`Reading list`](reading.md)
 - [`Adapters (import)`](adapters.md)
 - [`Go backend code`](go.md)

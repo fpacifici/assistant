@@ -33,6 +33,8 @@ from assistant.attachments.storage import FileStorage, LocalFileStorage
 from assistant.blogs.refresh import BlogRefresher, create_blog_refresher
 from assistant.config import Config
 from assistant.observability import init_sentry
+from assistant.reading.analysis import LinkProcessor, create_link_analyzer
+from assistant.reading.worker import ReadingAnalysisWorker
 from assistant.vectors.indexer import create_vector_indexer
 from assistant.vectors.worker import VectorIndexWorker
 
@@ -52,6 +54,35 @@ def _default_vector_worker(
     return VectorIndexWorker(session_factory, indexer.index_note)
 
 
+def _default_reading_worker(
+    session_factory: sessionmaker[Session],
+) -> ReadingAnalysisWorker | None:
+    """The worker analyzing saved links, or `None` if AI is off."""
+    analyzer = create_link_analyzer()
+    if analyzer is None:
+        return None
+    return ReadingAnalysisWorker(LinkProcessor(session_factory, analyzer).process)
+
+
+def _include_routers(app: FastAPI) -> None:
+    """Mount every route module under its prefix."""
+    app.include_router(auth_router, prefix="/auth", tags=["auth"])
+    app.include_router(users_router, prefix="/user", tags=["users"])
+    app.include_router(invites_router, prefix="/invites", tags=["invites"])
+    app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
+    app.include_router(notes_router, prefix="/notebook", tags=["notes"])
+    app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
+    app.include_router(files_router, tags=["files"])
+    app.include_router(imports_router, prefix="/imports", tags=["imports"])
+    app.include_router(tags_router, prefix="/tag", tags=["tags"])
+    app.include_router(search_router, prefix="/search", tags=["search"])
+    app.include_router(ask_router, prefix="/ask", tags=["ask"])
+    app.include_router(categories_router, prefix="/category", tags=["categories"])
+    app.include_router(blogs_router, prefix="/blog", tags=["blogs"])
+    app.include_router(reading_router, prefix="/reading", tags=["reading"])
+    app.include_router(gocore_router, prefix="/gocore", tags=["gocore"])
+
+
 def create_app(  # noqa: PLR0913
     session_factory: sessionmaker[Session] | None = None,
     file_storage: FileStorage | None = None,
@@ -60,6 +91,7 @@ def create_app(  # noqa: PLR0913
     vector_worker: VectorIndexWorker | None = None,
     ask_agent: AskAgent | None = None,
     blog_refresher: BlogRefresher | None = None,
+    reading_worker: ReadingAnalysisWorker | None = None,
 ) -> FastAPI:
     """Build the API application.
 
@@ -75,6 +107,9 @@ def create_app(  # noqa: PLR0913
             none when AI is disabled (the /ask routes then answer 503).
         blog_refresher: Collects one blog on request. Defaults to one built
             from config, or none when AI is disabled (refresh answers 503).
+        reading_worker: Analyzes reading links after they are saved, started
+            and stopped with the app. Defaults to one built from config, or
+            none when AI is disabled (links then stay pending).
     """
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
@@ -86,21 +121,27 @@ def create_app(  # noqa: PLR0913
         session_factory = get_session_factory()
 
     worker = vector_worker or _default_vector_worker(session_factory)
+    link_worker = reading_worker or _default_reading_worker(session_factory)
     configure_tracing()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if worker is not None:
             worker.start()
+        if link_worker is not None:
+            link_worker.start()
         try:
             yield
         finally:
+            if link_worker is not None:
+                link_worker.stop()
             if worker is not None:
                 worker.stop()
 
     app = FastAPI(title="Assistant API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
     app.state.vector_worker = worker
+    app.state.reading_worker = link_worker
     app.state.ask_agent = ask_agent or create_ask_agent(session_factory)
     app.state.blog_refresher = blog_refresher or create_blog_refresher(session_factory)
 
@@ -137,20 +178,6 @@ def create_app(  # noqa: PLR0913
 
     register_exception_handlers(app)
 
-    app.include_router(auth_router, prefix="/auth", tags=["auth"])
-    app.include_router(users_router, prefix="/user", tags=["users"])
-    app.include_router(invites_router, prefix="/invites", tags=["invites"])
-    app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
-    app.include_router(notes_router, prefix="/notebook", tags=["notes"])
-    app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
-    app.include_router(files_router, tags=["files"])
-    app.include_router(imports_router, prefix="/imports", tags=["imports"])
-    app.include_router(tags_router, prefix="/tag", tags=["tags"])
-    app.include_router(search_router, prefix="/search", tags=["search"])
-    app.include_router(ask_router, prefix="/ask", tags=["ask"])
-    app.include_router(categories_router, prefix="/category", tags=["categories"])
-    app.include_router(blogs_router, prefix="/blog", tags=["blogs"])
-    app.include_router(reading_router, prefix="/reading", tags=["reading"])
-    app.include_router(gocore_router, prefix="/gocore", tags=["gocore"])
+    _include_routers(app)
 
     return app

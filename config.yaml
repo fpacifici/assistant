@@ -76,3 +76,8 @@ ai:
 blogs:
   summary_words: 35      # approximate length of a post's summary
   max_posts_per_run: 50  # per source, oldest first; the rest wait for the next run
+
+# Reading list (see docs/architecture/reading.md), the same for all users.
+# Links are analyzed with ai.blog_model.
+reading:
+  summary_words: 100  # approximate length of a link's summary

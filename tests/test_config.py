@@ -864,6 +864,21 @@ def test_blog_defaults(tmp_path: Path) -> None:
     assert config.get_blogs_config() == {"summary_words": 35, "max_posts_per_run": 50}
 
 
+def test_reading_defaults(tmp_path: Path) -> None:
+    config = Config(config_path=tmp_path / "missing.yaml")
+    assert config.get_reading_config() == {"summary_words": 100}
+
+
+def test_reading_settings_from_yaml_and_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text("reading:\n  summary_words: 80\n")
+    assert Config(config_path=path).get_reading_config() == {"summary_words": 80}
+    monkeypatch.setenv("READING_SUMMARY_WORDS", "60")
+    assert Config(config_path=path).get_reading_config() == {"summary_words": 60}
+
+
 def test_blog_settings_from_yaml_and_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

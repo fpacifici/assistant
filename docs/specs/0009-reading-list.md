@@ -68,14 +68,14 @@ appears at once, marked as being analyzed, and fills in when it is done.
 |---|---|
 | `pending` | waiting for or under analysis |
 | `done` | categorized and summarized |
-| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types) |
-| `failed` | could not be fetched or analyzed: no summary, Unfiled |
+| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types, or a document with too little text: under 200 characters) |
+| `failed` | could not be fetched or analyzed after 3 attempts: no summary, Unfiled unless the user chose a category |
 
 - The type is decided before any fetch for YouTube (by host:
   `youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`), and from
   the response `Content-Type` otherwise.
 - **Web pages**: the main text is extracted.
-- **Text files** (`text/plain`, `text/markdown`): used as they are.
+- **Text files** (`text/plain`, `text/markdown`, `text/x-markdown`): used as they are.
 - **PDFs**: up to about 25 MB. Only the first pages are read, up to the
   input limit, and the model is asked to summarize from the abstract and
   introduction when present. The rest of the document is never read. A
@@ -88,18 +88,25 @@ appears at once, marked as being analyzed, and fills in when it is done.
   description, or none (Unfiled). It never creates a category.
 - Text is untrusted: the model call has no tools and only returns
   structured fields.
+- A failed attempt is retried automatically: 3 attempts in all, 30 s and
+  then 120 s apart. Only then is the link `failed`.
 - A failed link stays in the list. The user can set the category and title
   by hand, or **Retry analysis**. Retry is also available on any analyzed
-  link, for example after editing category descriptions.
+  link, for example after editing category descriptions. Retry never
+  overwrites a title or a category the user set (Unfiled included): only a
+  link the AI filed is filed again.
+- Links left pending (saved while AI was off, or when the server stopped)
+  are analyzed by `python -m assistant.cli.process_reading`.
 - Fetching uses the same safety rules as blogs: public addresses only,
   limited redirects, time and size limits.
 
 ### Titles
 
 In order: the page's `og:title` or `<title>`; a PDF's metadata title, then
-its first line of text; the oEmbed title for YouTube; otherwise the URL.
-The model's suggestion is used only when none of these exist. The user can
-edit the title; a later retry never overwrites a title the user edited.
+its first line of text; the oEmbed title for YouTube. When the link has no
+title of its own (text files, other types, a failed oEmbed lookup), the
+model's suggestion; failing that, the URL is shown. The user can edit the
+title; a later retry never overwrites a title the user edited.
 
 ### States
 

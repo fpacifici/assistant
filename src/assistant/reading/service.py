@@ -25,7 +25,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import and_, func, or_, select
 
 from assistant.categories.service import get_category
-from assistant.models.schema import ReadingLink, ReadingLinkState
+from assistant.models.schema import ReadingAnalysisStatus, ReadingLink, ReadingLinkState
 from assistant.reading.exceptions import (
     DuplicateLinkError,
     InvalidLinkQueryError,
@@ -33,6 +33,7 @@ from assistant.reading.exceptions import (
     InvalidLinkUrlError,
     LinkNotFoundError,
 )
+from assistant.reading.worker import queue_for_analysis
 from assistant.text import blank_to_none
 from assistant.web.urls import canonical_path, is_http_url, strip_tracking
 
@@ -104,7 +105,7 @@ def normalize_url(url: str) -> str:
 def url_key(url: str) -> str:
     """The identity of a link: the same for spelling variants of one URL.
 
-    Like a blog post's key (`assistant.blogs.identity`), it ignores tracking
+    Like a blog post's key (`assistant.web.urls.canonical_path`), it ignores tracking
     parameters, the order of the others, a trailing slash and the fragment,
     but it keeps the host, since links come from many sites. The scheme and
     a default port are ignored.
@@ -149,7 +150,7 @@ def get_link(
 
 
 def add_link(session: Session, owner: User, url: str) -> ReadingLink:
-    """Save a URL as a link to read, waiting for analysis.
+    """Save a URL as a link to read. It is analyzed once the transaction commits.
 
     Raises:
         InvalidLinkUrlError: If it is not an absolute http(s) URL.
@@ -167,6 +168,26 @@ def add_link(session: Session, owner: User, url: str) -> ReadingLink:
     link = ReadingLink(owner_id=owner.uid, url=normalized, url_key=key)
     session.add(link)
     session.flush()
+    queue_for_analysis(session, link.id)
+    return link
+
+
+def retry_analysis(session: Session, owner: User, link_id: uuid.UUID) -> ReadingLink:
+    """Analyze a link again, in any state, after the transaction commits.
+
+    Attempts start over. What the user chose wins, as on the first analysis:
+    an edited title and a category they set (Unfiled included) are kept, so
+    only a link the AI filed is filed again.
+
+    Raises:
+        LinkNotFoundError: If the link is missing or someone else's.
+    """
+    link = get_link(session, owner, link_id, lock=True)
+    link.analysis_status = ReadingAnalysisStatus.PENDING
+    link.attempts = 0
+    link.last_error = None
+    session.flush()
+    queue_for_analysis(session, link.id)
     return link
 
 

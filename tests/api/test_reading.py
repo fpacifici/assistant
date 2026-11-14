@@ -359,3 +359,39 @@ def test_another_users_link_is_not_found(
 def test_requires_authentication(client: TestClient) -> None:
     assert client.get("/reading/link").status_code == 401
     assert client.post("/reading/link", json={"url": URL}).status_code == 401
+
+
+# --- Retry ---
+
+
+def test_retry_starts_the_analysis_over(
+    client: TestClient, auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    category = _category(db_session, test_user)
+    link = _link(db_session, test_user, "f", category=category)
+    link.analysis_status = "failed"
+    link.attempts = 3
+    link.last_error = "The server answered HTTP 500"
+    link.title = "Mine"
+    link.title_edited = True
+    link.category_set_by_user = True
+    db_session.flush()
+
+    retried = client.post(f"/reading/link/{link.id}/retry", headers=auth_headers).json()
+    assert retried["analysis_status"] == "pending"
+    assert retried["last_error"] is None
+    assert retried["title"] == "Mine"
+    db_session.refresh(link)
+    assert link.attempts == 0
+    assert link.title_edited
+    assert link.category_set_by_user
+    assert link.category_id == category.id
+
+
+def test_retry_of_another_users_link_is_not_found(
+    client: TestClient, other_auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    link = _link(db_session, test_user, "f")
+    db_session.commit()
+    response = client.post(f"/reading/link/{link.id}/retry", headers=other_auth_headers)
+    assert response.status_code == 404

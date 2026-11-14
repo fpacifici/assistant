@@ -97,6 +97,12 @@ class BlogsConfig(TypedDict):
     max_posts_per_run: int
 
 
+class ReadingConfig(TypedDict):
+    """Reading list settings, the same for all users."""
+
+    summary_words: int
+
+
 class SentryConfig(TypedDict):
     """Sentry SDK configuration. A `None` dsn means Sentry is disabled."""
 
@@ -124,6 +130,7 @@ class AssistantConfig(TypedDict, total=False):
     sentry: SentryConfig
     ai: AIConfig
     blogs: BlogsConfig
+    reading: ReadingConfig
 
 
 T = TypeVar("T")
@@ -721,6 +728,17 @@ class Config:
             "summary_words": int(self.get("blogs.summary_words", 35)),
             "max_posts_per_run": int(self.get("blogs.max_posts_per_run", 50)),
         }
+
+    def get_reading_config(self) -> ReadingConfig:
+        """Get the effective reading list configuration.
+
+        Env var overrides follow the module convention:
+            - `reading.summary_words` -> `READING_SUMMARY_WORDS`
+
+        Returns:
+            A `ReadingConfig` mapping, defaulting to 100 words.
+        """
+        return {"summary_words": int(self.get("reading.summary_words", 100))}
 
     def _get_sample_rate(self, key: str, default: float = 1.0) -> float:
         """Read a `[0.0, 1.0]` sample rate, accepting YAML ints like `1`.

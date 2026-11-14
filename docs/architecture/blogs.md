@@ -67,7 +67,8 @@ read posts, or only those still to read, in any view.
 
 ## Safe fetcher
 
-`blogs/fetch.py` is the only code that opens a URL.
+`assistant/web/fetch.py` is the only code that opens a URL a user gave. Blogs and
+the [reading list](reading.md) share it.
 
 - `http` and `https` only, no credentials in the URL.
 - The host is resolved, every address must be public, and the connection goes
@@ -75,7 +76,9 @@ read posts, or only those still to read, in any view.
   is verified against the host name.
 - Redirects are followed by the fetcher, at most 5, with the same checks on
   each hop.
-- 10 s for a whole request and 5 MB of decompressed body.
+- 10 s for a whole request and 5 MB of decompressed body, unless the caller
+  asks for other limits (the reading list takes 30 s and 25 MB, for PDFs).
+- The result carries the `Content-Type`, which decides how a link is read.
 
 Fetched content is only parsed as data. Two details matter: `feedparser` gets
 a stream, because given a plain value it tries it as a URL or a local path; and
@@ -83,7 +86,7 @@ sitemaps are parsed with `defusedxml`, with DTDs refused.
 
 ## Post identity
 
-`blogs/identity.py`: `post_key` is the SHA-256 of the guid or, without one or
+`blogs/identity.py`, on top of `web/urls.py`: `post_key` is the SHA-256 of the guid or, without one or
 when the guid is a URL, of the URL path. The domain is ignored, so a blog can
 move. Tracking parameters (`utm_*`, `fbclid`, ...) are dropped and any other
 query parameter counts, which errs on the side of keeping two posts apart.

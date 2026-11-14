@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from assistant.blogs.analysis import PostAnalysis, PostToAnalyze
-from assistant.blogs.fetch import FetchResult
+from assistant.web.fetch import FetchResult
 
 
 @dataclass

@@ -1,4 +1,4 @@
-"""Turns downloaded HTML into plain text.
+"""Turns downloaded HTML into plain text, for blogs and the reading list.
 
 `trafilatura` only ever sees HTML we downloaded through the safe fetcher: its
 own downloading and discovery helpers bypass it, and are not used. No script
@@ -14,7 +14,16 @@ import trafilatura
 from bs4 import BeautifulSoup
 from trafilatura.utils import load_html
 
-from assistant.blogs.discovery import parse_date
+
+def parse_date(value: str | None) -> datetime | None:
+    """Parse an ISO 8601 date or datetime, as UTC when it has no zone."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)

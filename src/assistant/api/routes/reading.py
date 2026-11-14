@@ -26,6 +26,7 @@ from assistant.reading.service import (
     link_counts,
     list_links,
     restore_link,
+    retry_analysis,
     update_link,
 )
 
@@ -116,6 +117,14 @@ def restore_link_endpoint(
 ) -> LinkResponse:
     """Move a discarded link back to read. 409 unless it is discarded."""
     return LinkResponse.model_validate(restore_link(session, user, link_id))
+
+
+@router.post("/link/{link_id}/retry", response_model=LinkResponse)
+def retry_link_endpoint(
+    link_id: uuid.UUID, session: SessionDep, user: CurrentUser
+) -> LinkResponse:
+    """Analyze a link again. A title or category the user set is kept."""
+    return LinkResponse.model_validate(retry_analysis(session, user, link_id))
 
 
 @router.delete("/link/{link_id}", status_code=204)
