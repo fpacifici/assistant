@@ -5,8 +5,8 @@
  * model is rendered as text.
  */
 
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   deleteLink,
@@ -21,6 +21,7 @@ import { linkDomain, linkTitle } from '../../lib/readingLinks';
 import { isSafeLink } from '../../lib/safeLink';
 import type { Category, LinkType, ReadingLink } from '../../types';
 import ConfirmDialog from '../ConfirmDialog';
+import { useAskEnabled } from '../../hooks/useAskEnabled';
 
 const TYPE_LABELS: Record<LinkType, { icon: string; label: string }> = {
   web: { icon: '🌐', label: 'Web page' },
@@ -31,9 +32,15 @@ const TYPE_LABELS: Record<LinkType, { icon: string; label: string }> = {
 };
 
 function Status({ link }: { link: ReadingLink }) {
+  const aiEnabled = useAskEnabled();
   switch (link.analysis_status) {
     case 'pending':
-      return <span className="link-status pending">Analyzing…</span>;
+      // Without AI nothing analyzes it until AI is on and the job runs.
+      return (
+        <span className="link-status pending">
+          {aiEnabled ? 'Analyzing…' : 'Waiting for analysis'}
+        </span>
+      );
     case 'failed':
       return <span className="link-status failed">Analysis failed</span>;
     case 'not_summarizable':
@@ -145,6 +152,14 @@ export default function LinkCard({ link, categories, onPromote }: LinkCardProps)
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const title = linkTitle(link);
+  const { hash } = useLocation();
+  const target = hash === `#link-${link.id}`;
+  const cardRef = useRef<HTMLLIElement>(null);
+
+  // A link to this card (from a duplicate) scrolls to it.
+  useEffect(() => {
+    if (target) cardRef.current?.scrollIntoView?.({ block: 'center' });
+  }, [target]);
 
   const handlers = {
     onSuccess: () => {
@@ -171,7 +186,13 @@ export default function LinkCard({ link, categories, onPromote }: LinkCardProps)
     remove.isPending;
 
   return (
-    <li className={`post-card link-card${link.analysis_status === 'pending' ? ' pending' : ''}`}>
+    <li
+      ref={cardRef}
+      id={`link-${link.id}`}
+      className={`post-card link-card${link.analysis_status === 'pending' ? ' pending' : ''}${
+        target ? ' targeted' : ''
+      }`}
+    >
       <Title link={link} onSave={(value) => update.mutate({ title: value || null })} />
       <div className="post-card-meta">
         {type && (

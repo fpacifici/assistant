@@ -90,8 +90,14 @@ function CategorySidebar({
   );
 }
 
-/** Mobile: the sidebar as a picker. */
-function CategoryPicker({ categories }: { categories: Category[] }) {
+/** Mobile: the sidebar as a picker, with the same counts. */
+function CategoryPicker({
+  categories,
+  counts,
+}: {
+  categories: Category[];
+  counts: CategoryCount[];
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   return (
     <select
@@ -104,13 +110,15 @@ function CategoryPicker({ categories }: { categories: Category[] }) {
         setSearchParams(next, { replace: true });
       }}
     >
-      <option value="">All categories</option>
+      <option value="">
+        All categories ({counts.reduce((sum, count) => sum + count.count, 0)})
+      </option>
       {categories.map((category) => (
         <option key={category.id} value={category.id}>
-          {category.name}
+          {category.name} ({countOf(counts, category.id)})
         </option>
       ))}
-      <option value={UNFILED}>Unfiled</option>
+      <option value={UNFILED}>Unfiled ({countOf(counts, null)})</option>
     </select>
   );
 }
@@ -226,7 +234,18 @@ export default function ReadingPage({ state }: { state: LinkState }) {
               </Link>
             ))}
           </nav>
-          {isMobile && <CategoryPicker categories={categories} />}
+          {isMobile && (
+            <>
+              <CategoryPicker categories={categories} counts={counts} />
+              <button
+                type="button"
+                className="btn-secondary reading-manage"
+                onClick={() => setManaging(true)}
+              >
+                Manage categories
+              </button>
+            </>
+          )}
         </div>
         {state === 'to_read' && <AddLinkBox />}
         {links}
@@ -237,11 +256,7 @@ export default function ReadingPage({ state }: { state: LinkState }) {
   return (
     <div className="app-shell" data-layout={mode}>
       {isMobile ? (
-        <MobileTopBar title="Reading" backTo="/notebooks">
-          <button role="menuitem" onClick={() => setManaging(true)}>
-            Manage categories
-          </button>
-        </MobileTopBar>
+        <MobileTopBar title="Reading" backTo="/notebooks" />
       ) : (
         <DesktopHeader />
       )}

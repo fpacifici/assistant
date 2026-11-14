@@ -176,14 +176,7 @@ def promote_endpoint(
     Nothing is written into the note. 409 unless the link is to read; 404
     for a note or notebook the caller can't see, 403 if they can't edit it.
     """
-    link, note = promote_link(
-        session,
-        user,
-        link_id,
-        note_id=body.note_id,
-        notebook_id=body.notebook_id,
-        title=body.title,
-    )
+    link, note = promote_link(session, user, link_id, body.target())
     return PromoteResponse(
         link=_link_response(link), note_id=note.id, notebook_id=note.notebook_id
     )

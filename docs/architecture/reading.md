@@ -125,7 +125,8 @@ the UI doesn't offer.
 ## Promotion
 
 `POST /reading/link/{id}/promote`, from `to_read` only, with either
-`{note_id}` or `{notebook_id, title}`. An existing note needs `update`
+`{note_id}` or `{notebook_id, title}`. The request schema checks there is
+exactly one target and hands `promote_link` an `ExistingNote` or a `NewNote`. An existing note needs `update`
 (`require_note_access`: 404 if invisible, 403 if view only); a new one is
 created by `notes.service.create_note`, which checks `create_notes` on the
 notebook. The link becomes `promoted` with `decided_at` and `note_id` in the

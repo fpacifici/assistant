@@ -256,21 +256,27 @@ Blogs, gated on `useAskEnabled()` like Blogs in the `Sections` nav, the mobile
   is its own `LinkList`. Archive and Promoted are a single `LinkList`.
 - **Sidebar** (desktop): every category with its count for the view, Unfiled,
   and Manage categories (`ManageCategoriesDialog`). **Mobile**: a category
-  `<select>` in the toolbar, and Manage categories in the `⋯` menu.
+  `<select>` with the same counts, and Manage categories next to it.
 - **`LinkList`** is one `useInfiniteQuery` per state and filter, paged by the
   server's cursor with a Show more button. While a link on it is `pending` it
-  polls every `PENDING_POLL_MS`; when a pending link is done it invalidates
-  every `['reading']` query, since the link may move section.
+  polls every `PENDING_POLL_MS`, but never when AI is off (nothing analyzes
+  links then: the card says Waiting for analysis) and not past `MAX_POLL_MS`
+  without a change. When a pending link is done it invalidates every
+  `['reading']` query, since the link may move section.
 - **`LinkCard`**: title (opens the URL in a new tab, editable), domain, type,
   added date, status, summary, category picker, notes (saved on blur), and the
   actions of its state. Any change invalidates `['reading']`: no optimistic
   updates. URLs go through `isSafeLink`; everything else is text.
-- **`AddLinkBox`** (To read only) shows the API's message on a duplicate (409)
-  or a bad URL (422). `ApiError.body` carries the duplicate's `link_id`.
+- **`AddLinkBox`** (To read only): on a duplicate (409) it loads the existing
+  link from the `link_id` in `ApiError.body` and links to it
+  (`linkLocation`: its view and category, `#link-<id>`); the card that matches
+  the hash scrolls into view and is outlined. A bad URL (422) shows the
+  API's message.
 - **`PromoteDialog`**: suggested notes (`/suggestions`, unavailable without
-  AI), keyword search with `/search/notes` where notes without the `update`
-  permission are disabled, a new note in a notebook with `create_notes`, and
-  Copy as markdown (`lib/readingLinks.ts`). Promoting navigates to the note.
+  AI), keyword search with `/search/notes` (paged with More results) where
+  notes without the `update` permission are disabled, a new note in a
+  notebook with `create_notes` (every page of notebooks is loaded), and Copy
+  as markdown (`lib/readingLinks.ts`). Promoting navigates to the note.
 
 ## Theming
 

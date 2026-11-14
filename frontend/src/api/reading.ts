@@ -25,6 +25,18 @@ export function addLink(url: string): Promise<ReadingLink> {
   });
 }
 
+export function fetchLink(id: string): Promise<ReadingLink> {
+  return apiFetch<ReadingLink>(`/reading/link/${id}`);
+}
+
+/** Where a link is shown: its view, narrowed to its category, scrolled to the card. */
+export function linkLocation(link: ReadingLink): string {
+  const path = { to_read: '/reading', discarded: '/reading/archive', promoted: '/reading/promoted' }[
+    link.state
+  ];
+  return `${path}?category=${link.category_id ?? 'unfiled'}#link-${link.id}`;
+}
+
 export function fetchLinks(
   state: LinkState,
   filter: LinkFilter,
