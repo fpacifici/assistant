@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from assistant.blogs.extraction import extract_page, html_to_text
+from assistant.web.pages import extract_page, html_to_text, parse_date
 
 BODY = " ".join(f"This is sentence number {n} of a fine article." for n in range(40))
 PAGE = f"""<html><head><title>Page title</title>
@@ -47,3 +47,13 @@ def test_a_page_with_nothing_to_extract() -> None:
 
 def test_html_to_text() -> None:
     assert html_to_text("<p>One <b>two</b></p><p>three</p>") == "One\ntwo\nthree"
+
+
+# --- Dates ---
+
+
+def test_parse_date() -> None:
+    assert parse_date("2024-03-01T10:00:00Z") == datetime(2024, 3, 1, 10, tzinfo=UTC)
+    assert parse_date("2024-03-01") == datetime(2024, 3, 1, tzinfo=UTC)
+    assert parse_date("soon") is None
+    assert parse_date(None) is None

@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server go-build go-lint go-test go-check frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server go-build go-lint go-test go-check frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs process-reading
 
 # Default target
 help:
@@ -25,6 +25,7 @@ help:
 	@echo "  make reindex-search      - Rebuild the search index for stale notes"
 	@echo "  make reindex-vectors     - Embed stale notes into the vector index (needs OPENAI_API_KEY)"
 	@echo "  make process-blogs       - Collect and summarize blog posts (needs OPENAI_API_KEY)"
+	@echo "  make process-reading     - Analyze reading links left pending (needs OPENAI_API_KEY)"
 	@echo "  make server              - Start the FastAPI API server"
 	@echo "  make docker-build        - Build the API server Docker image"
 	@echo "  make docker-server       - Start the FastAPI API server in Docker"
@@ -168,6 +169,9 @@ reindex-vectors:
 # Collect new blog posts and summarize them (needs OPENAI_API_KEY)
 process-blogs:
 	@.venv/bin/python -m assistant.cli.process_blogs
+
+process-reading:
+	@.venv/bin/python -m assistant.cli.process_reading
 
 # Clean generated files and cache
 clean:

@@ -39,9 +39,6 @@ from assistant.blogs.discovery import (
     parse_robots,
     parse_sitemap,
 )
-from assistant.blogs.exceptions import FetchError
-from assistant.blogs.extraction import extract_page, html_to_text
-from assistant.blogs.fetch import fetch
 from assistant.blogs.identity import post_key
 from assistant.blogs.runs import (
     LoggedEntry,
@@ -67,6 +64,8 @@ from assistant.models.schema import (
     BlogSourceKind,
     BlogTextSource,
 )
+from assistant.web.fetch import FetchError, fetch
+from assistant.web.pages import extract_page, html_to_text
 from assistant.web.urls import is_http_url
 
 if TYPE_CHECKING:
@@ -79,8 +78,8 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from assistant.blogs.analysis import PostAnalysis, PostAnalyzer
-    from assistant.blogs.fetch import FetchResult
     from assistant.blogs.text_store import TextStore
+    from assistant.web.fetch import FetchResult
 
     type SessionFactory = Callable[[], AbstractContextManager[Session]]
 

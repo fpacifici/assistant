@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 
 from assistant.blogs import pipeline as pipeline_module
 from assistant.blogs.analysis import MIN_TEXT_CHARS, PostAnalysis
-from assistant.blogs.exceptions import FetchError
 from assistant.blogs.identity import post_key
 from assistant.blogs.pipeline import (
     MAX_ATTEMPTS,
@@ -42,6 +41,7 @@ from assistant.models.schema import (
     User,
 )
 from assistant.vectors.store import EMBEDDING_DIMENSIONS
+from assistant.web.fetch import FetchError
 from tests.blogs.fakes import FakeAnalyzer, FakeWeb
 
 pytestmark = pytest.mark.postgres

@@ -11,11 +11,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from assistant.blogs import fetch as fetch_module
-from assistant.blogs.exceptions import BlockedUrlError, FetchError
-from assistant.blogs.fetch import (
+from assistant.web import fetch as fetch_module
+from assistant.web.fetch import (
     MAX_BYTES,
     MAX_REDIRECTS,
+    BlockedUrlError,
+    FetchError,
     fetch,
     is_public_address,
     resolve_host,
@@ -246,6 +247,46 @@ def test_stops_past_the_size_limit(dns: MagicMock, http: MagicMock) -> None:  # 
 def test_exactly_the_size_limit_is_fine(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
     http.return_value = _response(body=b"x" * MAX_BYTES)
     assert len(fetch("https://example.com/").content) == MAX_BYTES
+
+
+def test_the_caller_can_raise_the_size_limit(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
+    http.return_value = _response(body=b"x" * (MAX_BYTES + 1))
+    with pytest.raises(FetchError, match="too large"):
+        fetch("https://example.com/")
+    result = fetch("https://example.com/", max_bytes=MAX_BYTES * 2)
+    assert len(result.content) == MAX_BYTES + 1
+
+
+def test_the_caller_can_lower_the_size_limit(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
+    http.return_value = _response(body=b"x" * 11)
+    with pytest.raises(FetchError, match="too large"):
+        fetch("https://example.com/", max_bytes=10)
+
+
+def test_the_caller_can_set_the_timeout(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
+    fetch("https://example.com/", timeout=30)
+    assert http.call_args.kwargs["timeout"] == 30
+
+
+@pytest.mark.parametrize(
+    ("header", "media_type"),
+    [
+        ("application/PDF", "application/pdf"),
+        ("text/html; charset=utf-8", "text/html"),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_content_type_is_returned(
+    dns: MagicMock,  # noqa: ARG001
+    http: MagicMock,
+    header: str | None,
+    media_type: str | None,
+) -> None:
+    headers = {} if header is None else {"Content-Type": header}
+    http.return_value = _response(headers=headers)
+    result = fetch("https://example.com/")
+    assert result.media_type == media_type
 
 
 def test_a_slow_drip_hits_the_total_deadline(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001

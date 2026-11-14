@@ -45,11 +45,3 @@ class SourcePausedError(BlogsError):
 
     def __init__(self) -> None:
         super().__init__("Resume this blog to refresh it")
-
-
-class FetchError(BlogsError):
-    """A URL could not be fetched. The message never has response content."""
-
-
-class BlockedUrlError(FetchError):
-    """A URL is not allowed: bad scheme, credentials, or a non-public address."""

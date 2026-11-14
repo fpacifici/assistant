@@ -592,9 +592,14 @@ PATCH  /reading/link/{id}                    -> LinkResponse
        {"title", "category_id", "user_notes"}   (any subset)
 POST   /reading/link/{id}/discard            -> LinkResponse (from to_read only)
 POST   /reading/link/{id}/restore            -> LinkResponse (from discarded only)
+POST   /reading/link/{id}/retry              -> LinkResponse (back to "pending")
 DELETE /reading/link/{id}                    -> 204 (from discarded or promoted only)
 ```
 
+- A new link is analyzed in the background when AI is enabled; until then
+  it stays `pending`. See [`reading.md`](reading.md).
+- `retry` works from any state: attempts start over, and a title or
+  category the user set is kept.
 - The URL must be `http` or `https`, otherwise a 422. Tracking parameters are
   dropped before it is stored.
 - A URL the caller already saved, in any state, is a 409 whose body has the
