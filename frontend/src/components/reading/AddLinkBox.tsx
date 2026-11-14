@@ -1,14 +1,38 @@
-/** Saves a link. It appears at once, being analyzed, and fills in when done. */
+/**
+ * Saves a link. It appears at once, being analyzed, and fills in when done.
+ * A link already saved, in any state, is refused, and the box links to it.
+ */
 
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { addLink, READING_KEY } from '../../api/reading';
+import { ApiError } from '../../api/client';
+import { addLink, fetchLink, linkLocation, READING_KEY } from '../../api/reading';
+import { linkTitle } from '../../lib/readingLinks';
+import type { ReadingLink } from '../../types';
+
+class DuplicateLink extends Error {
+  constructor(public link: ReadingLink) {
+    super('This link is already in your reading list');
+  }
+}
+
+/** Save the URL; on a duplicate, load the link already saved. */
+async function save(url: string): Promise<ReadingLink> {
+  try {
+    return await addLink(url);
+  } catch (err) {
+    const existing = err instanceof ApiError && err.status === 409 ? err.body.link_id : null;
+    if (typeof existing !== 'string') throw err;
+    throw new DuplicateLink(await fetchLink(existing));
+  }
+}
 
 export default function AddLinkBox() {
   const queryClient = useQueryClient();
   const [url, setUrl] = useState('');
   const add = useMutation({
-    mutationFn: () => addLink(url.trim()),
+    mutationFn: () => save(url.trim()),
     onSuccess: () => {
       setUrl('');
       return queryClient.invalidateQueries({ queryKey: [...READING_KEY] });
@@ -35,7 +59,14 @@ export default function AddLinkBox() {
       <button type="submit" className="btn-secondary" disabled={!url.trim() || add.isPending}>
         {add.isPending ? 'Adding…' : 'Add link'}
       </button>
-      {add.isError && <p className="auth-error">{add.error.message}</p>}
+      {add.error instanceof DuplicateLink ? (
+        <p className="auth-error">
+          {add.error.message}:{' '}
+          <Link to={linkLocation(add.error.link)}>{linkTitle(add.error.link)}</Link>
+        </p>
+      ) : (
+        add.isError && <p className="auth-error">{add.error.message}</p>
+      )}
     </form>
   );
 }

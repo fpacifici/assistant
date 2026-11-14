@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ReadingPage from './ReadingPage';
 import { ApiError } from '../api/client';
-import { PENDING_POLL_MS } from '../components/reading/LinkList';
+import { MAX_POLL_MS, PENDING_POLL_MS } from '../components/reading/LinkList';
 import { readingLink } from '../test/readingLinks';
 import { renderWithProviders } from '../test/renderWithProviders';
 import type { LinkState } from '../types';
@@ -20,7 +20,7 @@ vi.mock('../api/invites', () => ({
     invites_enabled: false,
   }),
 }));
-vi.mock('../api/ask', () => ({ fetchAskStatus: vi.fn().mockResolvedValue({ enabled: true }) }));
+vi.mock('../api/ask', () => ({ fetchAskStatus: vi.fn() }));
 vi.mock('../api/categories', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/categories')>()),
   fetchCategories: vi.fn(),
@@ -29,11 +29,13 @@ vi.mock('../api/reading', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/reading')>()),
   fetchLinks: vi.fn(),
   fetchLinkCounts: vi.fn(),
+  fetchLink: vi.fn(),
   addLink: vi.fn(),
 }));
 
 import { fetchCategories } from '../api/categories';
-import { addLink, fetchLinkCounts, fetchLinks } from '../api/reading';
+import { fetchAskStatus } from '../api/ask';
+import { addLink, fetchLink, fetchLinkCounts, fetchLinks } from '../api/reading';
 
 const TECH = { id: 'c1', name: 'Tech', description: null, created_at: '2026-10-01T00:00:00Z' };
 const EMPTY_CAT = { id: 'c2', name: 'Cooking', description: null, created_at: '2026-10-01T00:00:00Z' };
@@ -44,6 +46,7 @@ function render(path: string, state: LinkState, layout: 'desktop' | 'mobile' = '
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
   vi.mocked(fetchCategories).mockResolvedValue([TECH, EMPTY_CAT]);
   vi.mocked(fetchLinkCounts).mockResolvedValue([
     { category_id: 'c1', count: 2 },
@@ -123,15 +126,32 @@ describe('adding a link', () => {
     expect(screen.getByLabelText('Link to add')).toHaveValue('');
   });
 
-  it('says when the link is already saved', async () => {
+  it('points to the link already saved', async () => {
     vi.mocked(addLink).mockRejectedValue(
       new ApiError(409, 'This link is already in your reading list', { link_id: 'a' }),
     );
+    vi.mocked(fetchLink).mockResolvedValue(
+      readingLink({ id: 'a', title: 'Saved before', state: 'discarded', category_id: 'c1' }),
+    );
     const user = userEvent.setup();
-    render('/reading', 'to_read');
+    const { router } = render('/reading', 'to_read');
     await user.type(screen.getByLabelText('Link to add'), 'https://example.com/btrees');
     await user.click(screen.getByRole('button', { name: 'Add link' }));
     expect(await screen.findByText(/already in your reading list/)).toBeInTheDocument();
+    expect(fetchLink).toHaveBeenCalledWith('a');
+    await user.click(screen.getByRole('link', { name: 'Saved before' }));
+    expect(router.state.location.pathname).toBe('/reading/archive');
+    expect(router.state.location.search).toBe('?category=c1');
+    expect(router.state.location.hash).toBe('#link-a');
+  });
+
+  it('shows other errors as they are', async () => {
+    vi.mocked(addLink).mockRejectedValue(new ApiError(422, 'Enter an http or https URL'));
+    const user = userEvent.setup();
+    render('/reading', 'to_read');
+    await user.type(screen.getByLabelText('Link to add'), 'https://x');
+    await user.click(screen.getByRole('button', { name: 'Add link' }));
+    expect(await screen.findByText('Enter an http or https URL')).toBeInTheDocument();
   });
 
   it('is only in To read', async () => {
@@ -164,6 +184,42 @@ describe('analysis in progress', () => {
     });
     expect(await screen.findByText('Analyzed')).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(fetchLinkCounts).mock.calls.length).toBeGreaterThan(counts));
+  });
+
+  it('does not poll when AI is off', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: false });
+    vi.mocked(fetchLinkCounts).mockResolvedValue([{ category_id: null, count: 1 }]);
+    vi.mocked(fetchLinks).mockResolvedValue({
+      links: [readingLink({ id: 'p', analysis_status: 'pending', summary: null })],
+      next_cursor: null,
+    });
+    render('/reading', 'to_read');
+    expect(await screen.findByText('Waiting for analysis')).toBeInTheDocument();
+    const calls = vi.mocked(fetchLinks).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PENDING_POLL_MS * 3);
+    });
+    expect(vi.mocked(fetchLinks).mock.calls.length).toBe(calls);
+  });
+
+  it('stops polling when nothing changes for a while', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchLinkCounts).mockResolvedValue([{ category_id: null, count: 1 }]);
+    vi.mocked(fetchLinks).mockResolvedValue({
+      links: [readingLink({ id: 'p', analysis_status: 'pending', summary: null })],
+      next_cursor: null,
+    });
+    render('/reading', 'to_read');
+    expect(await screen.findByText('Analyzing…')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MAX_POLL_MS + PENDING_POLL_MS);
+    });
+    const calls = vi.mocked(fetchLinks).mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PENDING_POLL_MS * 3);
+    });
+    expect(vi.mocked(fetchLinks).mock.calls.length).toBe(calls);
   });
 });
 
@@ -217,20 +273,21 @@ describe('header and categories', () => {
 // --- Mobile ---
 
 describe('mobile layout', () => {
-  it('replaces the sidebar with a category picker', async () => {
+  it('replaces the sidebar with a category picker with counts', async () => {
     const user = userEvent.setup();
     const { router } = render('/reading', 'to_read', 'mobile');
     expect(screen.queryByRole('navigation', { name: 'Categories' })).not.toBeInTheDocument();
-    await screen.findByRole('option', { name: 'Tech' });
-    await user.selectOptions(screen.getByLabelText('Filter by category'), 'Tech');
+    await screen.findByRole('option', { name: 'Tech (2)' });
+    expect(screen.getByRole('option', { name: 'Unfiled (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'All categories (3)' })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Filter by category'), 'Tech (2)');
     expect(router.state.location.search).toBe('?category=c1');
   });
 
-  it('has Manage categories in the menu', async () => {
+  it('has Manage categories next to the picker', async () => {
     const user = userEvent.setup();
     render('/reading', 'to_read', 'mobile');
-    await user.click(screen.getByRole('button', { name: 'Menu' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Manage categories' }));
+    await user.click(screen.getByRole('button', { name: 'Manage categories' }));
     expect(screen.getByRole('dialog', { name: 'Manage categories' })).toBeInTheDocument();
   });
 });

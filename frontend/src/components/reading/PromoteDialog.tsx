@@ -7,15 +7,26 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchNotebooks } from '../../api/notebooks';
+import { PAGE_SIZE } from '../../api/pagination';
 import { fetchSuggestions, promoteLink, READING_KEY } from '../../api/reading';
 import type { PromoteTarget } from '../../api/reading';
 import { searchNotes } from '../../api/search';
-import type { ReadingLink } from '../../types';
+import type { Notebook, ReadingLink } from '../../types';
 import { linkMarkdown, linkTitle } from '../../lib/readingLinks';
 
 const SEARCH_LIMIT = 10;
+
+/** Every notebook of the user, page after page. */
+async function fetchAllNotebooks(): Promise<Notebook[]> {
+  const notebooks: Notebook[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const page = await fetchNotebooks(offset, PAGE_SIZE);
+    notebooks.push(...page);
+    if (page.length < PAGE_SIZE) return notebooks;
+  }
+}
 
 function Suggestions({
   link,
@@ -69,11 +80,16 @@ function Search({
 }) {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
-  const { data, isFetching, isError } = useQuery({
-    queryKey: ['search', 'promote', query],
-    queryFn: () => searchNotes(query, { offset: 0, limit: SEARCH_LIMIT }),
-    enabled: query !== '',
-  });
+  const { data, isFetching, isError, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ['search', 'promote', query],
+      queryFn: ({ pageParam }) => searchNotes(query, { offset: pageParam, limit: SEARCH_LIMIT }),
+      initialPageParam: 0,
+      getNextPageParam: (last) =>
+        last.results.length < last.limit ? undefined : last.offset + last.limit,
+      enabled: query !== '',
+    });
+  const results = data?.pages.flatMap((page) => page.results) ?? [];
 
   return (
     <section className="promote-section" aria-label="Search notes">
@@ -96,14 +112,14 @@ function Search({
           Search
         </button>
       </form>
-      {isFetching && <p className="search-status">Searching…</p>}
+      {isFetching && !isFetchingNextPage && <p className="search-status">Searching…</p>}
       {isError && <p className="search-status auth-error">Could not search.</p>}
-      {data && !isFetching && data.results.length === 0 && (
+      {data && !isFetching && results.length === 0 && (
         <p className="search-status">No notes found.</p>
       )}
-      {data && data.results.length > 0 && (
+      {results.length > 0 && (
         <ul className="promote-notes">
-          {data.results.map((result) => {
+          {results.map((result) => {
             const editable = result.note.permissions.includes('update');
             return (
               <li key={result.note.id}>
@@ -125,6 +141,16 @@ function Search({
           })}
         </ul>
       )}
+      {hasNextPage && (
+        <button
+          type="button"
+          className="btn-secondary link-more"
+          disabled={isFetchingNextPage}
+          onClick={() => void fetchNextPage()}
+        >
+          {isFetchingNextPage ? 'Loading…' : 'More results'}
+        </button>
+      )}
     </section>
   );
 }
@@ -142,7 +168,7 @@ function NewNote({
   const [notebookId, setNotebookId] = useState('');
   const { data: notebooks = [] } = useQuery({
     queryKey: ['notebooks', 'all'],
-    queryFn: () => fetchNotebooks(0, 100),
+    queryFn: fetchAllNotebooks,
   });
   const writable = notebooks.filter((notebook) =>
     notebook.permissions.includes('create_notes'),

@@ -492,33 +492,35 @@ def suggest_notes(
     return list(suggestions.values())
 
 
-def promote_link(  # noqa: PLR0913
-    session: Session,
-    owner: User,
-    link_id: uuid.UUID,
-    *,
-    note_id: uuid.UUID | None = None,
-    notebook_id: uuid.UUID | None = None,
-    title: str | None = None,
+@dataclass(frozen=True, slots=True)
+class ExistingNote:
+    """Promote to a note the user can edit."""
+
+    note_id: uuid.UUID
+
+
+@dataclass(frozen=True, slots=True)
+class NewNote:
+    """Promote to a new note, with only a title, in a notebook."""
+
+    notebook_id: uuid.UUID
+    title: str
+
+
+type PromoteTarget = ExistingNote | NewNote
+
+
+def promote_link(
+    session: Session, owner: User, link_id: uuid.UUID, target: PromoteTarget
 ) -> tuple[ReadingLink, Note]:
     """Promote a link to an existing note, or to a new one. Promotion is final.
 
     Nothing is written into the note: a new note has only its title.
 
-    Args:
-        session: The session.
-        owner: The user.
-        link_id: The link, still to read.
-        note_id: An existing note the user can edit.
-        notebook_id: Where to create a note, with `title`, instead.
-        title: The new note's title.
-
     Returns:
         The link and its note.
 
     Raises:
-        ValueError: Unless exactly one of `note_id` or `notebook_id` and
-            `title` is given.
         LinkNotFoundError: If the link is missing or someone else's.
         InvalidLinkStateError: If the link is not to read.
         NoteNotFoundError, NotebookNotFoundError: If the note or notebook
@@ -526,18 +528,13 @@ def promote_link(  # noqa: PLR0913
         PermissionDeniedError: If the note can't be edited, or the notebook
             doesn't take new notes from the user.
     """
-    creating = notebook_id is not None and bool(title and title.strip())
-    if (note_id is None) == (not creating):
-        msg = "Give a note, or a notebook and a title"
-        raise ValueError(msg)
     link = get_link(session, owner, link_id, lock=True)
     _require_state(link, _PROMOTABLE, "promoted")
-    if note_id is not None:
-        note = require_note_access(session, note_id, owner, PermissionName.UPDATE)
-    else:
-        assert notebook_id is not None
-        assert title is not None
-        note = create_note(session, notebook_id, owner, title.strip())
+    match target:
+        case ExistingNote(note_id=note_id):
+            note = require_note_access(session, note_id, owner, PermissionName.UPDATE)
+        case NewNote(notebook_id=notebook_id, title=title):
+            note = create_note(session, notebook_id, owner, title)
     link.state = ReadingLinkState.PROMOTED
     link.decided_at = datetime.now(UTC)
     link.note_id = note.id

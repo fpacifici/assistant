@@ -8,6 +8,8 @@ import { readingLink } from '../../test/readingLinks';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import type { Category, ReadingLink } from '../../types';
 
+vi.mock('../../api/ask', () => ({ fetchAskStatus: vi.fn() }));
+
 vi.mock('../../api/reading', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/reading')>()),
   updateLink: vi.fn(),
@@ -17,6 +19,7 @@ vi.mock('../../api/reading', async (importOriginal) => ({
   deleteLink: vi.fn(),
 }));
 
+import { fetchAskStatus } from '../../api/ask';
 import { deleteLink, discardLink, restoreLink, retryLink, updateLink } from '../../api/reading';
 
 const CATEGORIES: Category[] = [
@@ -25,16 +28,18 @@ const CATEGORIES: Category[] = [
 
 const onPromote = vi.fn();
 
-function render(link: ReadingLink) {
+function render(link: ReadingLink, path = '/reading') {
   return renderWithProviders(
     <ul>
       <LinkCard link={link} categories={CATEGORIES} onPromote={onPromote} />
     </ul>,
+    { initialEntries: [path] },
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
   vi.mocked(updateLink).mockImplementation(async (_id, changes) => readingLink(changes as Partial<ReadingLink>));
   vi.mocked(discardLink).mockResolvedValue(readingLink({ state: 'discarded' }));
   vi.mocked(restoreLink).mockResolvedValue(readingLink());
@@ -56,13 +61,28 @@ describe('content', () => {
     expect(screen.getByText('B-trees keep data sorted.')).toBeInTheDocument();
   });
 
-  it('shows the URL while nothing names the link, and says it is analyzed', () => {
+  it('shows the URL while nothing names the link, and says it is analyzed', async () => {
     render(readingLink({ title: null, summary: null, link_type: null, analysis_status: 'pending' }));
     expect(
       screen.getByRole('link', { name: 'https://www.example.com/btrees' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Analyzing…')).toBeInTheDocument();
+    expect(await screen.findByText('Analyzing…')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry analysis' })).not.toBeInTheDocument();
+  });
+
+  it('says a pending link waits when AI is off', async () => {
+    vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: false });
+    render(readingLink({ summary: null, analysis_status: 'pending' }));
+    await waitFor(() => expect(fetchAskStatus).toHaveBeenCalled());
+    expect(screen.getByText('Waiting for analysis')).toBeInTheDocument();
+  });
+
+  it('is marked and scrolled to when the URL points at it', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    render(readingLink(), '/reading#link-l1');
+    expect(screen.getByRole('listitem')).toHaveClass('targeted');
+    expect(scroll).toHaveBeenCalled();
   });
 
   it('explains a failure', () => {

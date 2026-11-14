@@ -13,7 +13,13 @@ from assistant.models.schema import (
     ReadingLinkState,
     ReadingLinkType,
 )
-from assistant.reading.service import MAX_TITLE_LENGTH, MAX_URL_LENGTH
+from assistant.reading.service import (
+    MAX_TITLE_LENGTH,
+    MAX_URL_LENGTH,
+    ExistingNote,
+    NewNote,
+    PromoteTarget,
+)
 
 LinkUrl = Annotated[
     str,
@@ -102,13 +108,21 @@ class PromoteRequest(BaseModel):
 
     @model_validator(mode="after")
     def _one_target(self) -> PromoteRequest:
-        new_note = self.notebook_id is not None and self.title is not None
-        if (self.note_id is not None) == new_note or (
-            self.note_id is not None and (self.notebook_id or self.title)
-        ):
+        existing = self.note_id is not None
+        new_fields = [self.notebook_id is not None, self.title is not None]
+        # Exactly one target: a note, or both fields of a new note.
+        if existing == any(new_fields) or (any(new_fields) and not all(new_fields)):
             msg = "Give note_id, or notebook_id and title"
             raise ValueError(msg)
         return self
+
+    def target(self) -> PromoteTarget:
+        """The validated target, for `promote_link`."""
+        if self.note_id is not None:
+            return ExistingNote(self.note_id)
+        assert self.notebook_id is not None
+        assert self.title is not None
+        return NewNote(self.notebook_id, self.title)
 
 
 class PromoteResponse(BaseModel):

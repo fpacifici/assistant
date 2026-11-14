@@ -115,7 +115,50 @@ describe('search', () => {
   });
 });
 
+describe('search paging', () => {
+  it('loads more results', async () => {
+    const page = (offset: number, count: number): SearchResponse => ({
+      results: Array.from({ length: count }, (_, i) => ({
+        note: note(`n${offset + i}`, `Note ${offset + i}`, ['update']),
+        notebook: { id: 'nb1', name: 'Databases' },
+        score: 1,
+        title: [],
+        snippets: [],
+      })),
+      unknown_tags: [],
+      offset,
+      limit: 10,
+    });
+    vi.mocked(searchNotes).mockImplementation(async (_q, { offset }) =>
+      offset === 0 ? page(0, 10) : page(10, 2),
+    );
+    const user = userEvent.setup();
+    render();
+    await user.type(screen.getByLabelText('Search your notes'), 'trees{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'More results' }));
+    expect(await screen.findByRole('button', { name: /Note 11/ })).toBeInTheDocument();
+    expect(searchNotes).toHaveBeenLastCalledWith('trees', { offset: 10, limit: 10 });
+    expect(screen.queryByRole('button', { name: 'More results' })).not.toBeInTheDocument();
+  });
+});
+
 describe('new note', () => {
+  it('offers writable notebooks past the first page', async () => {
+    vi.mocked(fetchNotebooks).mockImplementation(async (offset = 0) =>
+      offset === 0
+        ? Array.from({ length: 50 }, (_, i) => ({
+            id: `ro${i}`,
+            name: `Read only ${i}`,
+            owner_id: 'u2',
+            permissions: ['view_notebook'],
+          }))
+        : [{ id: 'late', name: 'Late notebook', owner_id: 'u1', permissions: ['create_notes'] }],
+    );
+    render();
+    expect(await screen.findByRole('option', { name: 'Late notebook' })).toBeInTheDocument();
+    expect(fetchNotebooks).toHaveBeenCalledWith(50, 50);
+  });
+
   it('offers only notebooks taking new notes and creates one', async () => {
     const user = userEvent.setup();
     render();
