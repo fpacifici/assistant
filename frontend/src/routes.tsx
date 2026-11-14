@@ -14,6 +14,7 @@ import AskPage from './pages/AskPage';
 import BlogsPage from './pages/BlogsPage';
 import BlogSourcesPage from './pages/BlogSourcesPage';
 import BlogSourceLogPage from './pages/BlogSourceLogPage';
+import ReadingPage from './pages/ReadingPage';
 import SwitchToGooglePage from './pages/SwitchToGooglePage';
 import NoteWindow from './pages/NoteWindow';
 import {
@@ -50,6 +51,9 @@ export const routes: RouteObject[] = [
           { path: '/blogs/review', element: <Navigate to="/blogs/triage" replace /> },
           { path: '/blogs/sources', element: <BlogSourcesPage /> },
           { path: '/blogs/sources/:sourceId/log', element: <BlogSourceLogPage /> },
+          { path: '/reading', element: <ReadingPage state="to_read" /> },
+          { path: '/reading/archive', element: <ReadingPage state="discarded" /> },
+          { path: '/reading/promoted', element: <ReadingPage state="promoted" /> },
           { path: '/notebooks/:notebookId/notes/:noteId/window', element: <NoteWindow /> },
           { path: '/invites', element: <InvitesPage /> },
           { path: '/settings', element: <SettingsPage /> },

@@ -593,6 +593,9 @@ PATCH  /reading/link/{id}                    -> LinkResponse
 POST   /reading/link/{id}/discard            -> LinkResponse (from to_read only)
 POST   /reading/link/{id}/restore            -> LinkResponse (from discarded only)
 POST   /reading/link/{id}/retry              -> LinkResponse (back to "pending")
+GET    /reading/link/{id}/suggestions        -> NoteSuggestion[] (503 without AI)
+POST   /reading/link/{id}/promote            -> {"link", "note_id", "notebook_id"}
+       {"note_id"} or {"notebook_id", "title"}  (from to_read only)
 DELETE /reading/link/{id}                    -> 204 (from discarded or promoted only)
 ```
 
@@ -614,8 +617,14 @@ DELETE /reading/link/{id}                    -> 204 (from discarded or promoted 
   overwritten. `title: null` or `""` goes back to the automatic title.
 - LinkResponse is `{"id", "url", "title", "link_type", "category_id",
   "summary", "user_notes", "analysis_status", "last_error", "state",
-  "note_id", "created_at", "decided_at"}`. `title` and `link_type` are null
-  until the analysis sets them.
+  "note_id", "note_notebook_id", "created_at", "decided_at"}`. `title` and
+  `link_type` are null until the analysis sets them.
+- Suggestions are up to 5 notes the caller can edit, as `{"note_id",
+  "notebook_id", "title", "notebook_name", "passage"}`.
+- Promote: an existing note needs `update` (404 if the caller can't see it,
+  403 if they can only view it); a new note needs `create_notes` on the
+  notebook. Nothing is written into the note. Both targets, or neither, is a
+  422.
 
 ### Error Responses
 
@@ -636,7 +645,8 @@ Status codes:
 - 409: Conflict (duplicate email, version conflict, duplicate category or source)
 - 413: Upload too large
 - 422: Validation error (missing/invalid fields or headers)
-- 503: AI features are disabled on this server (`/ask` routes)
+- 503: AI features are disabled on this server (`/ask` routes, blog refresh,
+  reading suggestions)
 
 ## Websocket
 

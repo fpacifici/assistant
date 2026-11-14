@@ -8,17 +8,27 @@ from __future__ import annotations
 
 import base64
 import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
+from fastapi.testclient import TestClient as FastAPITestClient
 
+from assistant.api.app import create_app
+from assistant.api.dependencies import get_session
 from assistant.models.schema import (
     Category,
+    Note,
     ReadingLink,
     ReadingLinkState,
+    RoleName,
 )
+from assistant.notes.entitlements import grant_entitlement
+from assistant.notes.service import create_note, create_notebook
 from assistant.notes.user_service import delete_user
+from assistant.vectors.search import ChunkHit
 
 if TYPE_CHECKING:
     from fastapi.testclient import TestClient
@@ -395,3 +405,267 @@ def test_retry_of_another_users_link_is_not_found(
     db_session.commit()
     response = client.post(f"/reading/link/{link.id}/retry", headers=other_auth_headers)
     assert response.status_code == 404
+
+
+# --- Promotion ---
+
+
+def test_promote_to_a_new_note(
+    client: TestClient, auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    notebook = create_notebook(db_session, "Reading", test_user)
+    link = _add(client, auth_headers)
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"notebook_id": str(notebook.id), "title": "  B-trees "},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["notebook_id"] == str(notebook.id)
+    assert body["link"]["state"] == "promoted"
+    assert body["link"]["note_id"] == body["note_id"]
+    assert body["link"]["note_notebook_id"] == str(notebook.id)
+    assert body["link"]["decided_at"] is not None
+    note = db_session.get(Note, uuid.UUID(body["note_id"]))
+    assert note is not None
+    assert note.title == "B-trees"
+    assert note.nodes == []
+
+    promoted = client.get(
+        "/reading/link", params={"state": "promoted"}, headers=auth_headers
+    ).json()["links"]
+    assert [(p["id"], p["note_notebook_id"]) for p in promoted] == [
+        (link["id"], str(notebook.id))
+    ]
+
+
+def test_promote_to_an_existing_note_leaves_it_unchanged(
+    client: TestClient, auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    notebook = create_notebook(db_session, "Reading", test_user)
+    note = create_note(db_session, notebook.id, test_user, "Databases")
+    link = _add(client, auth_headers)
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"note_id": str(note.id)},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["note_id"] == str(note.id)
+    db_session.refresh(note)
+    assert note.title == "Databases"
+
+
+def test_promotion_is_final(
+    client: TestClient, auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    notebook = create_notebook(db_session, "Reading", test_user)
+    note = create_note(db_session, notebook.id, test_user, "Databases")
+    link = _add(client, auth_headers)
+    url = f"/reading/link/{link['id']}"
+    client.post(f"{url}/promote", json={"note_id": str(note.id)}, headers=auth_headers)
+    db_session.commit()
+    again = client.post(
+        f"{url}/promote", json={"note_id": str(note.id)}, headers=auth_headers
+    )
+    assert again.status_code == 409
+    assert client.post(f"{url}/discard", headers=auth_headers).status_code == 409
+
+
+def test_a_discarded_link_cannot_be_promoted(
+    client: TestClient, auth_headers: Headers, db_session: Session, test_user: User
+) -> None:
+    notebook = create_notebook(db_session, "Reading", test_user)
+    link = _add(client, auth_headers)
+    client.post(f"/reading/link/{link['id']}/discard", headers=auth_headers)
+    db_session.commit()
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"notebook_id": str(notebook.id), "title": "x"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+
+def test_promote_to_a_note_the_user_cannot_see_is_not_found(
+    client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    other_user: User,
+) -> None:
+    notebook = create_notebook(db_session, "Theirs", other_user)
+    note = create_note(db_session, notebook.id, other_user, "Private")
+    link = _add(client, auth_headers)
+    db_session.commit()
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"note_id": str(note.id)},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+    read = client.get(f"/reading/link/{link['id']}", headers=auth_headers).json()
+    assert read["state"] == "to_read"
+
+
+def test_promote_to_a_note_the_user_can_only_view_is_forbidden(
+    client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    other_user: User,
+    test_user: User,
+) -> None:
+    notebook = create_notebook(db_session, "Theirs", other_user)
+    note = create_note(db_session, notebook.id, other_user, "Shared")
+    grant_entitlement(
+        db_session,
+        other_user,
+        note_id=note.id,
+        grantee_email=test_user.email,
+        role_name=RoleName.NOTE_VIEWER,
+    )
+    link = _add(client, auth_headers)
+    db_session.commit()
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"note_id": str(note.id)},
+        headers=auth_headers,
+    )
+    assert response.status_code == 403
+
+
+def test_promote_into_a_notebook_without_create_rights_is_refused(
+    client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    other_user: User,
+) -> None:
+    notebook = create_notebook(db_session, "Theirs", other_user)
+    link = _add(client, auth_headers)
+    db_session.commit()
+    response = client.post(
+        f"/reading/link/{link['id']}/promote",
+        json={"notebook_id": str(notebook.id), "title": "x"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"title": "x"},
+        {"notebook_id": str(uuid.uuid4())},
+        {"note_id": str(uuid.uuid4()), "notebook_id": str(uuid.uuid4()), "title": "x"},
+        {"notebook_id": str(uuid.uuid4()), "title": "  "},
+    ],
+)
+def test_promote_needs_one_target(
+    client: TestClient, auth_headers: Headers, body: dict[str, str]
+) -> None:
+    link = _add(client, auth_headers)
+    response = client.post(
+        f"/reading/link/{link['id']}/promote", json=body, headers=auth_headers
+    )
+    assert response.status_code == 422
+
+
+# --- Suggestions ---
+
+
+def test_suggestions_need_ai(client: TestClient, auth_headers: Headers) -> None:
+    link = _add(client, auth_headers)
+    response = client.get(f"/reading/link/{link['id']}/suggestions", headers=auth_headers)
+    assert response.status_code == 503
+
+
+@pytest.fixture
+def searcher() -> MagicMock:
+    return MagicMock()
+
+
+@pytest.fixture
+def ai_client(db_session: Session, searcher: MagicMock) -> Iterator[TestClient]:
+    def override_get_session() -> Iterator[Session]:
+        yield db_session
+
+    app = create_app(note_searcher=searcher)
+    app.dependency_overrides[get_session] = override_get_session
+    with FastAPITestClient(app) as tc:
+        yield tc
+
+
+def _hit(note_id: uuid.UUID, title: str, content: str = "Some text") -> ChunkHit:
+    return ChunkHit(
+        note_id=note_id,
+        notebook_id=uuid.uuid4(),
+        title=title,
+        notebook_name="Notebook",
+        content=content,
+        score=0.1,
+    )
+
+
+def test_suggestions_group_chunks_by_note_and_keep_five(
+    ai_client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    test_user: User,
+    searcher: MagicMock,
+) -> None:
+    create_notebook(db_session, "Mine", test_user)
+    link = _link(db_session, test_user, "s")
+    link.summary = "About B-trees"
+    db_session.flush()
+    first = uuid.uuid4()
+    others = [uuid.uuid4() for _ in range(6)]
+    searcher.search.return_value = [
+        _hit(first, "First", "x " * 400),
+        _hit(first, "First again"),
+        *[_hit(note_id, f"Note {i}") for i, note_id in enumerate(others)],
+    ]
+    response = ai_client.get(f"/reading/link/{link.id}/suggestions", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    suggestions = response.json()
+    assert [s["title"] for s in suggestions] == [
+        "First",
+        "Note 0",
+        "Note 1",
+        "Note 2",
+        "Note 3",
+    ]
+    assert len(suggestions[0]["passage"]) <= 300
+    query = searcher.search.call_args.args[2]
+    assert query == "About B-trees"
+    scope = searcher.search.call_args.kwargs["scope"]
+    assert scope.notebook_ids
+
+
+def test_suggestions_use_the_title_without_a_summary(
+    ai_client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    test_user: User,
+    searcher: MagicMock,
+) -> None:
+    create_notebook(db_session, "Mine", test_user)
+    link = _link(db_session, test_user, "s")
+    link.title = "A video"
+    db_session.flush()
+    searcher.search.return_value = []
+    ai_client.get(f"/reading/link/{link.id}/suggestions", headers=auth_headers)
+    assert searcher.search.call_args.args[2] == "A video"
+
+
+def test_no_suggestions_without_editable_notes(
+    ai_client: TestClient,
+    auth_headers: Headers,
+    db_session: Session,
+    test_user: User,
+    searcher: MagicMock,
+) -> None:
+    link = _link(db_session, test_user, "s")
+    response = ai_client.get(f"/reading/link/{link.id}/suggestions", headers=auth_headers)
+    assert response.json() == []
+    searcher.search.assert_not_called()

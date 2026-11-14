@@ -211,3 +211,55 @@ export interface PostPage {
   posts: BlogPost[];
   next_cursor: string | null;
 }
+
+export type LinkState = 'to_read' | 'discarded' | 'promoted';
+export type LinkType = 'web' | 'pdf' | 'text' | 'youtube' | 'other';
+/** `pending` while the AI analyzes the link. */
+export type AnalysisStatus = 'pending' | 'done' | 'not_summarizable' | 'failed';
+
+export interface ReadingLink {
+  id: string;
+  url: string;
+  /** Null until something names the link: show the URL. */
+  title: string | null;
+  /** Null until analyzed. */
+  link_type: LinkType | null;
+  category_id: string | null;
+  summary: string | null;
+  user_notes: string | null;
+  analysis_status: AnalysisStatus;
+  /** Why the last analysis failed, in generic words. */
+  last_error: string | null;
+  state: LinkState;
+  note_id: string | null;
+  /** The notebook of the promoted note, to link to it. */
+  note_notebook_id: string | null;
+  created_at: string;
+  decided_at: string | null;
+}
+
+export interface LinkPage {
+  links: ReadingLink[];
+  next_cursor: string | null;
+}
+
+/** Links of one state in a category; `category_id: null` is Unfiled. */
+export interface CategoryCount {
+  category_id: string | null;
+  count: number;
+}
+
+export interface NoteSuggestion {
+  note_id: string;
+  notebook_id: string;
+  title: string;
+  notebook_name: string;
+  /** The part of the note that matched. */
+  passage: string;
+}
+
+export interface PromoteResult {
+  link: ReadingLink;
+  note_id: string;
+  notebook_id: string;
+}

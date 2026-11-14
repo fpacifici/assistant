@@ -94,6 +94,7 @@ export default function TuiMenuBar() {
       fileItems.push(
         { id: 'ask', label: 'Ask AI…', onSelect: () => navigate('/ask') },
         { id: 'blogs', label: 'Blogs…', onSelect: () => navigate('/blogs/triage') },
+        { id: 'reading', label: 'Reading…', onSelect: () => navigate('/reading') },
       );
     }
     fileItems.push(

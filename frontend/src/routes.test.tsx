@@ -25,6 +25,12 @@ vi.mock('./components/Layout', () => ({
   },
 }));
 
+vi.mock('./pages/ReadingPage', () => ({
+  default: function FakeReadingPage({ state }: { state: string }) {
+    return <div data-testid="reading">{state}</div>;
+  },
+}));
+
 vi.mock('./pages/NoteWindow', () => ({
   default: function FakeNoteWindow() {
     const { noteId } = useParams();
@@ -74,6 +80,19 @@ it('sends unauthenticated users on protected routes to /login', async () => {
 
   await waitFor(() => expect(window.location.href).toBe('/login'));
   expect(screen.queryByTestId('layout')).not.toBeInTheDocument();
+});
+
+// --- Reading ---
+
+it.each([
+  ['/reading', 'to_read'],
+  ['/reading/archive', 'discarded'],
+  ['/reading/promoted', 'promoted'],
+])('renders the reading view at %s', async (path, state) => {
+  mockGetMe.mockResolvedValue(USER);
+  renderWithProviders(null, { routes, initialEntries: [path] });
+
+  expect(await screen.findByTestId('reading')).toHaveTextContent(state);
 });
 
 // --- Layout instance sharing ---

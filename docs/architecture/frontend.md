@@ -87,6 +87,7 @@ Routes are declared in `src/routes.tsx`.
 | `/blogs/triage`, `/blogs`, `/blogs/relevant` | `BlogsPage`: Triage (new posts), All and Relevant (see Blogs below). `/blogs/review` redirects to Triage |
 | `/blogs/sources` | `BlogSourcesPage`: add, edit, pause and delete sources; Manage categories |
 | `/blogs/sources/:sourceId/log?run=…` | `BlogSourceLogPage`: the collection history of one source, with Refresh now |
+| `/reading`, `/reading/archive`, `/reading/promoted` | `ReadingPage`: To read, Archive and Promoted links (see Reading list below) |
 | `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
 | `/settings` | `SettingsPage`: sign-in method; a Google user can switch to password after re-authenticating with Google |
@@ -238,6 +239,44 @@ link there and in the TUI File menu opens Triage and is gated on
   one is going. Refresh now starts a run and selects it; it is disabled while a
   run is going and for a paused source, and a 409 shows its message. Entry links
   go through `isSafeLink` like post titles.
+
+## Reading list
+
+Saved links, analyzed by the AI ([spec](../specs/0009-reading-list.md),
+[backend](reading.md)). **Reading** is a top-level section next to Notes and
+Blogs, gated on `useAskEnabled()` like Blogs in the `Sections` nav, the mobile
+`⋯` menu and the TUI File menu. Code: `pages/ReadingPage.tsx`,
+`components/reading/`, `api/reading.ts`.
+
+- **Views**: `/reading` (To read), `/reading/archive`, `/reading/promoted`, one
+  `ReadingPage` with a `state` prop. `?category=` (an id or `unfiled`) narrows
+  any view and is kept when switching view.
+- **To read** with no filter shows one collapsible `<section>` per category
+  that has links, then Unfiled, from `GET /reading/link/counts`. Each section
+  is its own `LinkList`. Archive and Promoted are a single `LinkList`.
+- **Sidebar** (desktop): every category with its count for the view, Unfiled,
+  and Manage categories (`ManageCategoriesDialog`). **Mobile**: a category
+  `<select>` with the same counts, and Manage categories next to it.
+- **`LinkList`** is one `useInfiniteQuery` per state and filter, paged by the
+  server's cursor with a Show more button. While a link on it is `pending` it
+  polls every `PENDING_POLL_MS`, but never when AI is off (nothing analyzes
+  links then: the card says Waiting for analysis) and not past `MAX_POLL_MS`
+  without a change. When a pending link is done it invalidates every
+  `['reading']` query, since the link may move section.
+- **`LinkCard`**: title (opens the URL in a new tab, editable), domain, type,
+  added date, status, summary, category picker, notes (saved on blur), and the
+  actions of its state. Any change invalidates `['reading']`: no optimistic
+  updates. URLs go through `isSafeLink`; everything else is text.
+- **`AddLinkBox`** (To read only): on a duplicate (409) it loads the existing
+  link from the `link_id` in `ApiError.body` and links to it
+  (`linkLocation`: its view and category, `#link-<id>`); the card that matches
+  the hash scrolls into view and is outlined. A bad URL (422) shows the
+  API's message.
+- **`PromoteDialog`**: suggested notes (`/suggestions`, unavailable without
+  AI), keyword search with `/search/notes` (paged with More results) where
+  notes without the `update` permission are disabled, a new note in a
+  notebook with `create_notes` (every page of notebooks is loaded), and Copy
+  as markdown (`lib/readingLinks.ts`). Promoting navigates to the note.
 
 ## Theming
 
