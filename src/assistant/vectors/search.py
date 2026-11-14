@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.engine import make_url
 
+from assistant.config import Config
 from assistant.models.database import get_database_url
 from assistant.notes.permissions import viewable_scope
 from assistant.vectors.store import (
@@ -104,6 +105,16 @@ def create_vector_store(embeddings: Embeddings) -> VectorStore:
     )
 
 
+def create_note_searcher(config: Config | None = None) -> NoteSearcher | None:
+    """Build a searcher from config, or `None` when AI is disabled."""
+    ai_config = (config or Config()).get_ai_config()
+    if not ai_config["enabled"]:
+        return None
+    from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415
+
+    return NoteSearcher(OpenAIEmbeddings(model=ai_config["embedding_model"]))
+
+
 class NoteSearcher:
     """Finds the chunks closest to a query among the notes a user can view."""
 
@@ -132,6 +143,7 @@ class NoteSearcher:
         query: str,
         *,
         k: int = DEFAULT_K,
+        scope: ViewableScope | None = None,
     ) -> list[ChunkHit]:
         """Search the chunks of every note `user` can view.
 
@@ -140,12 +152,14 @@ class NoteSearcher:
             user: The user asking.
             query: Free text.
             k: Maximum number of chunks.
+            scope: Search only these notes instead, e.g. `editable_scope`.
+                It must be computed for `user`.
 
         Returns:
             The closest chunks, best first. `score` is the cosine distance
             (lower is closer).
         """
-        where = scope_filter(viewable_scope(session, user))
+        where = scope_filter(scope or viewable_scope(session, user))
         if where is None:
             return []
         results = self.store.similarity_search_with_score(query, k=k, filter=where)

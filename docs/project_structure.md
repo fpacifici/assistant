@@ -31,7 +31,8 @@ assistant/
 │   └── src/
 │       ├── api/                # API client layer
 │       ├── components/         # React components (Layout, NoteEditor, etc.)
-│       │   └── blogs/          # Blog post cards, lists and forms
+│       │   ├── blogs/          # Blog post cards, lists and forms
+│       │   └── reading/        # Reading link cards, lists and the promote dialog
 │       ├── contexts/           # React context providers
 │       ├── hooks/              # Reusable hooks (unsaved-changes guard)
 │       ├── layout/             # Layout mode (mobile/desktop) detection

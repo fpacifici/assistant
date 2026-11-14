@@ -211,12 +211,13 @@ def viewable_note_filter(principal: User) -> ColumnElement[bool]:
 
 @dataclass(frozen=True, slots=True)
 class ViewableScope:
-    """Everything a principal can view, as notebook and note id sets.
+    """Everything a principal can view (or edit), as notebook and note id sets.
 
     A note is viewable if its notebook is in `notebook_ids` (VIEW_NOTES or
     OWN_NOTES on the notebook) or it is in `note_ids` (a direct VIEW_NOTE
     grant). The same rule as `viewable_note_filter`, for filtering data
     stored outside the notes tables (e.g. note embeddings).
+    `editable_scope` returns the same shape for the notes one can edit.
     """
 
     notebook_ids: frozenset[uuid.UUID]
@@ -242,6 +243,32 @@ def viewable_scope(session: Session, principal: User) -> ViewableScope:
             Entitlement.principal_id == principal.uid,
             Entitlement.note_id.is_not(None),
             _grants_any(frozenset({PermissionName.VIEW_NOTE})),
+        ),
+    )
+    return ViewableScope(
+        notebook_ids=frozenset(i for i in notebook_ids if i is not None),
+        note_ids=frozenset(i for i in note_ids if i is not None),
+    )
+
+
+def editable_scope(session: Session, principal: User) -> ViewableScope:
+    """The notebooks and individually shared notes the principal can edit.
+
+    A note is editable (UPDATE) through OWN_NOTES on its notebook, which
+    expands to the `note_owner` bundle, or through a direct grant of UPDATE.
+    """
+    notebook_ids = session.scalars(
+        select(Entitlement.notebook_id).where(
+            Entitlement.principal_id == principal.uid,
+            Entitlement.notebook_id.is_not(None),
+            _grants_any(frozenset({PermissionName.OWN_NOTES})),
+        ),
+    )
+    note_ids = session.scalars(
+        select(Entitlement.note_id).where(
+            Entitlement.principal_id == principal.uid,
+            Entitlement.note_id.is_not(None),
+            _grants_any(frozenset({PermissionName.UPDATE})),
         ),
     )
     return ViewableScope(
@@ -320,6 +347,7 @@ __all__ = [
     "ROLE_PERMISSIONS",
     "ViewableScope",
     "can_view_notebook",
+    "editable_scope",
     "note_permissions",
     "notebook_permissions",
     "require_note_access",

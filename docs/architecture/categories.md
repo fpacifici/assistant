@@ -43,5 +43,5 @@ DELETE /category/{id}                           -> 204 (items move to Unfiled)
 `components/ManageCategoriesDialog.tsx` creates, renames, describes and
 deletes categories, and marks those with no description. The Blogs tab opens
 it from the sources page. The category list is cached under the
-`['categories']` query key; a change also invalidates `['blogs']`, since
-sources show their category.
+`['categories']` query key; a change also invalidates `['blogs']` and `['reading']`, since
+sources and links show their category, and Reading counts per category.
