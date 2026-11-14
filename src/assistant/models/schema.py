@@ -1406,3 +1406,4 @@ class ReadingLink(Base):
 
     owner: Mapped[User] = relationship("User", back_populates="reading_links")
     category: Mapped[Category | None] = relationship("Category")
+    note: Mapped[Note | None] = relationship("Note")

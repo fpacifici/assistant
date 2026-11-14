@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
@@ -11,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from assistant.models.schema import RoleName, User
 from assistant.notes.entitlements import grant_entitlement
-from assistant.notes.permissions import ViewableScope, viewable_scope
+from assistant.notes.permissions import ViewableScope, editable_scope, viewable_scope
 from assistant.notes.service import add_markdown_node, create_note, create_notebook
 from assistant.vectors.indexer import VectorIndexer
 from assistant.vectors.search import NoteSearcher, async_database_url, scope_filter
@@ -108,6 +109,84 @@ def test_viewable_scope_of_a_stranger_is_empty(db_session: Session) -> None:
     carol = _user(db_session, "carol@test.com")
 
     assert viewable_scope(db_session, carol).is_empty
+
+
+# --- Editable scope ---
+
+
+def test_editable_scope_of_owner_editor_and_viewers(db_session: Session) -> None:
+    alice = _user(db_session, "alice@test.com")
+    bob = _user(db_session, "bob@test.com")
+    carol = _user(db_session, "carol@test.com")
+    dan = _user(db_session, "dan@test.com")
+    notebook = create_notebook(db_session, "Alice", alice)
+    note = create_note(db_session, notebook_id=notebook.id, owner=alice, title="T")
+    other = create_note(db_session, notebook_id=notebook.id, owner=alice, title="U")
+    grant_entitlement(
+        db_session,
+        alice,
+        note_id=note.id,
+        grantee_email=bob.email,
+        role_name=RoleName.NOTE_EDITOR,
+    )
+    grant_entitlement(
+        db_session,
+        alice,
+        note_id=other.id,
+        grantee_email=carol.email,
+        role_name=RoleName.NOTE_VIEWER,
+    )
+    grant_entitlement(
+        db_session,
+        alice,
+        notebook_id=notebook.id,
+        grantee_email=dan.email,
+        role_name=RoleName.NOTEBOOK_VIEWER,
+    )
+
+    alice_scope = editable_scope(db_session, alice)
+    assert alice_scope.notebook_ids == {notebook.id}
+    bob_scope = editable_scope(db_session, bob)
+    assert (bob_scope.notebook_ids, bob_scope.note_ids) == (frozenset(), {note.id})
+    assert editable_scope(db_session, carol).is_empty
+    assert editable_scope(db_session, dan).is_empty
+
+
+def test_editable_scope_of_a_notebook_editor(db_session: Session) -> None:
+    alice = _user(db_session, "alice@test.com")
+    bob = _user(db_session, "bob@test.com")
+    notebook = create_notebook(db_session, "Alice", alice)
+    grant_entitlement(
+        db_session,
+        alice,
+        notebook_id=notebook.id,
+        grantee_email=bob.email,
+        role_name=RoleName.NOTEBOOK_EDITOR,
+    )
+
+    assert editable_scope(db_session, bob).notebook_ids == {notebook.id}
+
+
+def test_search_uses_the_scope_it_is_given(db_session: Session) -> None:
+    alice = _user(db_session, "alice@test.com")
+    create_notebook(db_session, "Alice", alice)
+    searcher = NoteSearcher(DeterministicFakeEmbedding(size=EMBEDDING_DIMENSIONS))
+    store = MagicMock()
+    store.similarity_search_with_score.return_value = []
+    searcher._store = store
+    note_id = uuid.uuid4()
+
+    searcher.search(
+        db_session,
+        alice,
+        "q",
+        k=3,
+        scope=ViewableScope(frozenset(), frozenset({note_id})),
+    )
+
+    store.similarity_search_with_score.assert_called_once_with(
+        "q", k=3, filter={"note_id": {"$in": [str(note_id)]}}
+    )
 
 
 # --- Searching (Postgres, committed data: the store has its own connections) ---

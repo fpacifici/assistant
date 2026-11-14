@@ -17,7 +17,7 @@ import ConfirmDialog from './ConfirmDialog';
 import type { Category } from '../types';
 
 /** Query prefixes that show categories or what is filed under them. */
-const AFFECTED_KEYS = [CATEGORIES_KEY, ['blogs']] as const;
+const AFFECTED_KEYS = [CATEGORIES_KEY, ['blogs'], ['reading']] as const;
 
 function useInvalidateCategories() {
   const queryClient = useQueryClient();

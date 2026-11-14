@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from assistant.models.schema import (
     ReadingAnalysisStatus,
@@ -41,7 +41,10 @@ class LinkUpdate(BaseModel):
 
 
 class LinkResponse(BaseModel):
-    """A link. `title` is null until something names it: show the URL."""
+    """A link. `title` is null until something names it: show the URL.
+
+    `note_notebook_id` is the notebook of the promoted note, to link to it.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,6 +59,7 @@ class LinkResponse(BaseModel):
     last_error: str | None
     state: ReadingLinkState
     note_id: uuid.UUID | None
+    note_notebook_id: uuid.UUID | None = None
     created_at: datetime
     decided_at: datetime | None
 
@@ -70,3 +74,46 @@ class CategoryCount(BaseModel):
 
     category_id: uuid.UUID | None
     count: int
+
+
+NoteTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+]
+
+
+class NoteSuggestionResponse(BaseModel):
+    """A note the caller can edit, with the passage that matched."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    note_id: uuid.UUID
+    notebook_id: uuid.UUID
+    title: str
+    notebook_name: str
+    passage: str
+
+
+class PromoteRequest(BaseModel):
+    """Either an existing note, or a notebook and a title for a new one."""
+
+    note_id: uuid.UUID | None = None
+    notebook_id: uuid.UUID | None = None
+    title: NoteTitle | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self) -> PromoteRequest:
+        new_note = self.notebook_id is not None and self.title is not None
+        if (self.note_id is not None) == new_note or (
+            self.note_id is not None and (self.notebook_id or self.title)
+        ):
+            msg = "Give note_id, or notebook_id and title"
+            raise ValueError(msg)
+        return self
+
+
+class PromoteResponse(BaseModel):
+    """The promoted link, and where its note is."""
+
+    link: LinkResponse
+    note_id: uuid.UUID
+    notebook_id: uuid.UUID

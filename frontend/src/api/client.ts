@@ -8,7 +8,12 @@ export function apiUrl(path: string): string {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  /** The JSON error body, for endpoints that send more than `detail`. */
+  constructor(
+    public status: number,
+    message: string,
+    public body: Record<string, unknown> = {},
+  ) {
     super(message);
   }
 }
@@ -31,7 +36,7 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.detail || response.statusText);
+    throw new ApiError(response.status, body.detail || response.statusText, body);
   }
 
   if (response.status === 204) return undefined as T;
