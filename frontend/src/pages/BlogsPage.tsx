@@ -1,27 +1,24 @@
 /**
  * Blog posts: Triage (`/blogs/triage`), All (`/blogs`) and Relevant
- * (`/blogs/relevant`). The filters live in the URL: `?directory=` (an id,
+ * (`/blogs/relevant`). The filters live in the URL: `?category=` (an id,
  * `unfiled` or `all`), `?source=` (an archived source), `?tag=` and `?read=`
  * (`read` or `unread`).
  *
- * Triage shows the new posts of every directory at once, with a directory
+ * Triage shows the new posts of every category at once, with a category
  * picker in the toolbar instead of the sidebar. Its tab always opens it on
- * all directories.
+ * all categories.
  *
- * Desktop: the app header above a directory sidebar and the posts. Mobile: one
- * level at a time, the directories, then the posts of the chosen one; Triage
+ * Desktop: the app header above a category sidebar and the posts. Mobile: one
+ * level at a time, the categories, then the posts of the chosen one; Triage
  * goes straight to the posts. TUI mode shows the desktop page.
  */
 
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { fetchDirectories } from '../api/blogs';
 import type { PostFilters } from '../api/blogs';
+import { CATEGORIES_KEY, fetchCategories } from '../api/categories';
 import { fetchTags } from '../api/tags';
-import BlogDirectoryList, {
-  ALL_DIRECTORIES,
-  UNFILED,
-} from '../components/blogs/BlogDirectoryList';
+import CategoryList, { ALL_CATEGORIES, UNFILED } from '../components/blogs/CategoryList';
 import PostList from '../components/blogs/PostList';
 import DesktopHeader from '../components/DesktopHeader';
 import MobileTopBar from '../components/MobileTopBar';
@@ -91,17 +88,17 @@ function ReadFilter() {
   );
 }
 
-function DirectoryFilter() {
-  const { data: directories = [] } = useQuery({
-    queryKey: ['blogs', 'directories'],
-    queryFn: fetchDirectories,
+function CategoryFilter() {
+  const { data: categories = [] } = useQuery({
+    queryKey: [...CATEGORIES_KEY],
+    queryFn: fetchCategories,
   });
   return (
-    <ParamSelect param="directory" label="Filter by directory">
-      <option value="">All directories</option>
-      {directories.map((directory) => (
-        <option key={directory.id} value={directory.id}>
-          {directory.name}
+    <ParamSelect param="category" label="Filter by category">
+      <option value="">All categories</option>
+      {categories.map((category) => (
+        <option key={category.id} value={category.id}>
+          {category.name}
         </option>
       ))}
       <option value={UNFILED}>Unfiled</option>
@@ -117,7 +114,7 @@ function Toolbar({ view }: { view: PostView }) {
         {TABS.map((tab) => (
           <Link
             key={tab.view}
-            // Triage always opens on every directory.
+            // Triage always opens on every category.
             to={{ pathname: tab.to, search: tab.view === 'new' ? '' : search }}
             className={`blogs-tab${tab.view === view ? ' active' : ''}`}
             aria-current={tab.view === view ? 'page' : undefined}
@@ -127,7 +124,7 @@ function Toolbar({ view }: { view: PostView }) {
         ))}
       </nav>
       {view === 'new' ? (
-        <DirectoryFilter />
+        <CategoryFilter />
       ) : (
         <>
           <ReadFilter />
@@ -142,10 +139,10 @@ function Toolbar({ view }: { view: PostView }) {
 }
 
 function filtersFrom(searchParams: URLSearchParams, view: PostView): PostFilters {
-  const directory = searchParams.get('directory');
+  const category = searchParams.get('category');
   const filters: PostFilters = {};
-  if (directory === UNFILED) filters.unfiled = true;
-  else if (directory && directory !== ALL_DIRECTORIES) filters.directoryId = directory;
+  if (category === UNFILED) filters.unfiled = true;
+  else if (category && category !== ALL_CATEGORIES) filters.categoryId = category;
   if (view === 'new') return filters;
   const source = searchParams.get('source');
   if (source) filters.sourceId = source;
@@ -163,7 +160,7 @@ export default function BlogsPage({ view }: { view: PostView }) {
   const triage = view === 'new';
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
-  const chosen = triage || searchParams.has('directory') || searchParams.has('source');
+  const chosen = triage || searchParams.has('category') || searchParams.has('source');
 
   const posts = (
     <div className="blogs-main">
@@ -181,12 +178,12 @@ export default function BlogsPage({ view }: { view: PostView }) {
       {isMobile ? <MobileTopBar title="Blogs" backTo={backTo} /> : <DesktopHeader />}
       <main className="blogs-page">
         {isMobile ? (
-          chosen ? posts : <BlogDirectoryList />
+          chosen ? posts : <CategoryList />
         ) : triage ? (
           posts
         ) : (
           <div className="blogs-layout">
-            <BlogDirectoryList />
+            <CategoryList />
             {posts}
           </div>
         )}

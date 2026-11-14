@@ -1,7 +1,8 @@
 """Blog API routes.
 
 Everything but HTTP work is in `assistant.blogs.service`, and for the
-collection log in `assistant.blogs.runs`.
+collection log in `assistant.blogs.runs`. Categories have their own routes,
+in `assistant.api.routes.categories`.
 """
 
 from __future__ import annotations
@@ -17,9 +18,6 @@ from assistant.api.schemas.blogs import (
     BulkPostStateUpdate,
     CollectionRunDetailResponse,
     CollectionRunResponse,
-    DirectoryCreate,
-    DirectoryResponse,
-    DirectoryUpdate,
     PostListResponse,
     PostReadUpdate,
     PostResponse,
@@ -36,16 +34,12 @@ from assistant.blogs.service import (
     PostView,
     SourceChanges,
     add_tag_to_post,
-    create_directory,
-    delete_directory,
     delete_source,
     get_source,
-    list_directories,
     list_posts,
     list_sources,
     register_source,
     remove_tag_from_post,
-    rename_directory,
     set_post_read,
     set_post_state,
     set_posts_state,
@@ -57,41 +51,6 @@ from assistant.chat.exceptions import AIDisabledError
 from assistant.models.schema import BlogPost, Tag
 
 router = APIRouter()
-
-
-# --- Directories ---
-
-
-@router.get("/directory", response_model=list[DirectoryResponse])
-def list_directories_endpoint(
-    session: SessionDep, user: CurrentUser
-) -> list[DirectoryResponse]:
-    return [DirectoryResponse.model_validate(d) for d in list_directories(session, user)]
-
-
-@router.post("/directory", status_code=201, response_model=DirectoryResponse)
-def create_directory_endpoint(
-    body: DirectoryCreate, session: SessionDep, user: CurrentUser
-) -> DirectoryResponse:
-    return DirectoryResponse.model_validate(create_directory(session, user, body.name))
-
-
-@router.patch("/directory/{directory_id}", response_model=DirectoryResponse)
-def rename_directory_endpoint(
-    directory_id: uuid.UUID,
-    body: DirectoryUpdate,
-    session: SessionDep,
-    user: CurrentUser,
-) -> DirectoryResponse:
-    directory = rename_directory(session, user, directory_id, body.name)
-    return DirectoryResponse.model_validate(directory)
-
-
-@router.delete("/directory/{directory_id}", status_code=204)
-def delete_directory_endpoint(
-    directory_id: uuid.UUID, session: SessionDep, user: CurrentUser
-) -> None:
-    delete_directory(session, user, directory_id)
 
 
 # --- Sources ---
@@ -120,7 +79,7 @@ def register_source_endpoint(
         title=body.title,
         remarks=body.remarks,
         preferences=body.preferences,
-        directory_id=body.directory_id,
+        category_id=body.category_id,
         lookback_days=body.lookback_days,
     )
     return SourceResponse.model_validate(source)
@@ -248,7 +207,7 @@ def list_posts_endpoint(  # noqa: PLR0913
     session: SessionDep,
     user: CurrentUser,
     view: Annotated[PostView, Query()] = PostView.ALL,
-    directory_id: Annotated[uuid.UUID | None, Query()] = None,
+    category_id: Annotated[uuid.UUID | None, Query()] = None,
     unfiled: Annotated[bool, Query()] = False,
     source_id: Annotated[uuid.UUID | None, Query()] = None,
     tag: Annotated[uuid.UUID | None, Query()] = None,
@@ -262,7 +221,7 @@ def list_posts_endpoint(  # noqa: PLR0913
         user,
         view=view,
         filters=PostFilters(
-            directory_id=directory_id,
+            category_id=category_id,
             unfiled=unfiled,
             source_id=source_id,
             tag_id=tag,

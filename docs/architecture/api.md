@@ -516,14 +516,10 @@ it with `fetch` rather than `EventSource`.
 
 ### Blogs
 
-Directories and sources of the caller. Another user's item is a 404. See
-[`blogs.md`](blogs.md).
+Sources of the caller. Another user's item is a 404. See
+[`blogs.md`](blogs.md). Sources are filed under [categories](#categories).
 
 ```
-GET    /blog/directory                     -> DirectoryResponse[] (by name)
-POST   /blog/directory        {"name"}     -> 201 DirectoryResponse
-PATCH  /blog/directory/{id}   {"name"}     -> DirectoryResponse
-DELETE /blog/directory/{id}                -> 204 (sources move to Unfiled)
 GET    /blog/source?archived=false         -> SourceResponse[] (by title)
 POST   /blog/source                        -> 201 SourceResponse
 GET    /blog/source/{id}                   -> SourceResponse with useful_post_count
@@ -531,13 +527,12 @@ PATCH  /blog/source/{id}                   -> SourceResponse
 DELETE /blog/source/{id}?keep_useful=false -> 204
 ```
 
-- A directory name already in use is a 409.
 - `POST /blog/source` takes `url`, and optionally `title`, `remarks`,
-  `preferences`, `directory_id` and `lookback_days` (default 7). It resolves
+  `preferences`, `category_id` and `lookback_days` (default 7). It resolves
   the URL before answering. A URL with nothing to collect, or a single post, is
   a 422 with a message to show; a feed the caller already registered is a 409.
 - `PATCH /blog/source/{id}` takes `title`, `remarks`, `preferences`,
-  `directory_id` (`null` moves to Unfiled) and `enabled`. `collect_since` can't
+  `category_id` (`null` moves to Unfiled) and `enabled`. `collect_since` can't
   be changed.
 - `archived=true` lists the archived sources that still have useful posts.
   An archived source is otherwise a 404.
@@ -546,7 +541,7 @@ DELETE /blog/source/{id}?keep_useful=false -> 204
 Posts:
 
 ```
-GET    /blog/post?view=all|relevant|new&directory_id=&unfiled=&source_id=&tag=&cursor=&limit=
+GET    /blog/post?view=all|relevant|new&category_id=&unfiled=&source_id=&tag=&cursor=&limit=
                                            -> {"posts": PostResponse[], "next_cursor"}
 PATCH  /blog/post/{id}    {"state"}        -> PostResponse
 POST   /blog/post/bulk-state               -> {"updated": n}
@@ -558,7 +553,7 @@ DELETE /blog/post/{id}/tag/{tag_id}        -> 204
 
 - `state` is `new`, `useful` or `not_useful`. Setting `new` is the undo.
 - Pass `next_cursor` back as `cursor`. A cursor only works for its own `view`;
-  a bad one, or `directory_id` together with `unfiled`, is a 422.
+  a bad one, or `category_id` together with `unfiled`, is a 422.
 - `source_id` is how an archived source is filtered, see
   `GET /blog/source?archived=true`.
 - A post waiting for analysis is neither listed nor found. A failed one is
@@ -566,6 +561,21 @@ DELETE /blog/post/{id}/tag/{tag_id}        -> 204
 - PostResponse is `{"id", "source_id", "source_title", "url", "title",
   "published_at", "summary", "match_level", "motivation", "status", "state",
   "evaluated_at", "tags"}`.
+
+### Categories
+
+The caller's single-level folders, shared by blogs and the reading list. See
+[`categories.md`](categories.md).
+
+```
+GET    /category                                -> CategoryResponse[] (by name)
+POST   /category       {"name", "description"}  -> 201 CategoryResponse
+PUT    /category/{id}  {"name", "description"}  -> CategoryResponse
+DELETE /category/{id}                           -> 204 (items move to Unfiled)
+```
+
+- A name already in use is a 409. Another user's category is a 404.
+- `PUT` replaces both fields; a missing or blank `description` clears it.
 
 ### Error Responses
 
@@ -583,7 +593,7 @@ Status codes:
 - 404: Resource not found, or the caller cannot even view it (a subject
   that exists but is invisible to the caller is indistinguishable from one
   that doesn't exist)
-- 409: Conflict (duplicate email, version conflict, duplicate directory or source)
+- 409: Conflict (duplicate email, version conflict, duplicate category or source)
 - 413: Upload too large
 - 422: Validation error (missing/invalid fields or headers)
 - 503: AI features are disabled on this server (`/ask` routes)

@@ -17,11 +17,14 @@ from assistant.auth.exceptions import (
 from assistant.blogs.exceptions import (
     BlogNotFoundError,
     CollectionBusyError,
-    DuplicateDirectoryError,
     DuplicateSourceError,
     InvalidPostQueryError,
     SourcePausedError,
     SourceResolutionError,
+)
+from assistant.categories.exceptions import (
+    CategoryNotFoundError,
+    DuplicateCategoryError,
 )
 from assistant.chat.exceptions import AIDisabledError, ChatThreadNotFoundError
 from assistant.invites.exceptions import (
@@ -49,13 +52,14 @@ logger = logging.getLogger(__name__)
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(BlogNotFoundError)
-    async def blog_not_found_handler(
+    @app.exception_handler(CategoryNotFoundError)
+    async def owned_not_found_handler(
         request: Request,  # noqa: ARG001
-        exc: BlogNotFoundError,  # noqa: ARG001
+        exc: Exception,  # noqa: ARG001
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
-    @app.exception_handler(DuplicateDirectoryError)
+    @app.exception_handler(DuplicateCategoryError)
     @app.exception_handler(DuplicateSourceError)
     @app.exception_handler(CollectionBusyError)
     @app.exception_handler(SourcePausedError)

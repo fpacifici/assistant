@@ -33,6 +33,7 @@ When working on the backend:
 - The AI agent and its API: [`Ask AI`](docs/architecture/ask.md)
 - Writing or calling Go code: [`Go backend`](docs/architecture/go.md)
 - Blog sources and the job that collects them: [`Blogs`](docs/architecture/blogs.md)
+- Categories shared by blogs and the reading list: [`Categories`](docs/architecture/categories.md)
 
 When working on the frontend:
 

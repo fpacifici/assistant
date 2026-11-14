@@ -164,6 +164,7 @@ the webui.
 - [`Search`](search.md)
 - [`Vector search`](vectors.md)
 - [`Ask AI`](ask.md)
+- [`Categories`](categories.md)
 - [`Blogs`](blogs.md)
 - [`Adapters (import)`](adapters.md)
 - [`Go backend code`](go.md)

@@ -4,16 +4,16 @@ Users register blogs and feeds as sources. A job started from the command line
 collects new posts, and the user triages them in the Blogs section. The behaviour
 is in the [spec](../specs/0008-blogs.md). Code: `src/assistant/blogs/`.
 
-Nothing is shared: directories and sources have an `owner_id`, posts reach
-their owner through the source, and there are no entitlements. A service
+Nothing is shared: sources have an `owner_id`, posts reach their owner through
+the source, and there are no entitlements. A source is filed under at most one
+of the user's [categories](categories.md), shared with the reading list. A service
 function loads the row filtered by owner, so another user's row is a 404.
 
 ## Storage
 
 | Table | Content |
 | --- | --- |
-| `blog_directories` | A user's single-level folders. `name` is unique per user. |
-| `blog_sources` | What to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
+| `blog_sources` | `category_id` (`SET NULL` when the category goes), what to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
 | `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict, `read_at` when the user marked it read. |
 | `post_tags` | Tags on posts, from the same per-user vocabulary as notes. |
 | `blog_collection_runs` | The collection log: one row per source each time the job or a refresh reads it. `outcome` is null while the source is read, `finished_at` while its posts are analyzed. Runs expire after 24 hours (`RUN_TTL`), and within that the latest 20 per source are kept. |

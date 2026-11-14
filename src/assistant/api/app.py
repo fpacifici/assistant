@@ -17,6 +17,7 @@ from assistant.api.exceptions import register_exception_handlers
 from assistant.api.routes.ask import router as ask_router
 from assistant.api.routes.auth import router as auth_router
 from assistant.api.routes.blogs import router as blogs_router
+from assistant.api.routes.categories import router as categories_router
 from assistant.api.routes.files import router as files_router
 from assistant.api.routes.gocore import router as gocore_router
 from assistant.api.routes.imports import router as imports_router
@@ -146,6 +147,7 @@ def create_app(  # noqa: PLR0913
     app.include_router(tags_router, prefix="/tag", tags=["tags"])
     app.include_router(search_router, prefix="/search", tags=["search"])
     app.include_router(ask_router, prefix="/ask", tags=["ask"])
+    app.include_router(categories_router, prefix="/category", tags=["categories"])
     app.include_router(blogs_router, prefix="/blog", tags=["blogs"])
     app.include_router(gocore_router, prefix="/gocore", tags=["gocore"])
 

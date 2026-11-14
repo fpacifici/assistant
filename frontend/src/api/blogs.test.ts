@@ -22,9 +22,9 @@ describe('fetchPosts', () => {
   });
 
   it('sends every filter and the cursor', () => {
-    void fetchPosts('all', { directoryId: 'd', sourceId: 's', tagId: 't', unfiled: true }, 'c');
+    void fetchPosts('all', { categoryId: 'd', sourceId: 's', tagId: 't', unfiled: true }, 'c');
     expect(apiFetch).toHaveBeenCalledWith(
-      '/blog/post?view=all&limit=20&directory_id=d&unfiled=true&source_id=s&tag=t&cursor=c',
+      '/blog/post?view=all&limit=20&category_id=d&unfiled=true&source_id=s&tag=t&cursor=c',
     );
   });
 

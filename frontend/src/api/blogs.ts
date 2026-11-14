@@ -1,6 +1,5 @@
 import { apiFetch } from './client';
 import type {
-  BlogDirectory,
   CollectionRun,
   CollectionRunDetail,
   BlogPost,
@@ -16,31 +15,6 @@ export const POST_PAGE_SIZE = 20;
 
 /** The largest bulk verdict the API takes at once. */
 export const MAX_BULK_POSTS = 500;
-
-// --- Directories ---
-
-export function fetchDirectories(): Promise<BlogDirectory[]> {
-  return apiFetch<BlogDirectory[]>('/blog/directory');
-}
-
-export function createDirectory(name: string): Promise<BlogDirectory> {
-  return apiFetch<BlogDirectory>('/blog/directory', {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
-}
-
-export function renameDirectory(id: string, name: string): Promise<BlogDirectory> {
-  return apiFetch<BlogDirectory>(`/blog/directory/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
-}
-
-/** Delete a directory. Its sources move to Unfiled. */
-export function deleteDirectory(id: string): Promise<void> {
-  return apiFetch<void>(`/blog/directory/${id}`, { method: 'DELETE' });
-}
 
 // --- Sources ---
 
@@ -58,7 +32,7 @@ export interface SourceInput {
   title?: string;
   remarks?: string;
   preferences?: string;
-  directory_id?: string | null;
+  category_id?: string | null;
   lookback_days?: number;
 }
 
@@ -74,7 +48,7 @@ export interface SourceChanges {
   title?: string;
   remarks?: string;
   preferences?: string;
-  directory_id?: string | null;
+  category_id?: string | null;
   enabled?: boolean;
 }
 
@@ -109,7 +83,7 @@ export function refreshSource(sourceId: string): Promise<CollectionRun> {
 // --- Posts ---
 
 export interface PostFilters {
-  directoryId?: string;
+  categoryId?: string;
   unfiled?: boolean;
   sourceId?: string;
   tagId?: string;
@@ -123,7 +97,7 @@ export function fetchPosts(
   cursor?: string,
 ): Promise<PostPage> {
   const params = new URLSearchParams({ view, limit: String(POST_PAGE_SIZE) });
-  if (filters.directoryId) params.set('directory_id', filters.directoryId);
+  if (filters.categoryId) params.set('category_id', filters.categoryId);
   if (filters.unfiled) params.set('unfiled', 'true');
   if (filters.sourceId) params.set('source_id', filters.sourceId);
   if (filters.tagId) params.set('tag', filters.tagId);

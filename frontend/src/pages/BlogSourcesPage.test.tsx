@@ -22,11 +22,15 @@ vi.mock('../api/invites', () => ({
 
 vi.mock('../api/ask', () => ({ fetchAskStatus: vi.fn().mockResolvedValue({ enabled: true }) }));
 
+vi.mock('../api/categories', () => ({
+  CATEGORIES_KEY: ['categories'],
+  fetchCategories: vi.fn(),
+  createCategory: vi.fn(),
+  updateCategory: vi.fn(),
+  deleteCategory: vi.fn(),
+}));
+
 vi.mock('../api/blogs', () => ({
-  fetchDirectories: vi.fn(),
-  createDirectory: vi.fn(),
-  renameDirectory: vi.fn(),
-  deleteDirectory: vi.fn(),
   fetchSources: vi.fn(),
   fetchSource: vi.fn(),
   createSource: vi.fn(),
@@ -34,22 +38,13 @@ vi.mock('../api/blogs', () => ({
   deleteSource: vi.fn(),
 }));
 
-import {
-  createDirectory,
-  createSource,
-  deleteDirectory,
-  deleteSource,
-  fetchDirectories,
-  fetchSource,
-  fetchSources,
-  renameDirectory,
-  updateSource,
-} from '../api/blogs';
+import { createSource, deleteSource, fetchSource, fetchSources, updateSource } from '../api/blogs';
+import { fetchCategories } from '../api/categories';
 
 function source(fields: Partial<BlogSource> = {}): BlogSource {
   return {
     id: 's1',
-    directory_id: null,
+    category_id: null,
     url: 'https://blog.example.com',
     feed_url: 'https://blog.example.com/feed.xml',
     kind: 'feed',
@@ -74,15 +69,14 @@ function render() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(fetchDirectories).mockResolvedValue([
-    { id: 'd1', name: 'Tech', created_at: '2026-10-01T00:00:00Z' },
+  vi.mocked(fetchCategories).mockResolvedValue([
+    { id: 'd1', name: 'Tech', description: null, created_at: '2026-10-01T00:00:00Z' },
   ]);
   vi.mocked(fetchSources).mockResolvedValue([source()]);
   vi.mocked(fetchSource).mockResolvedValue(source({ useful_post_count: 3 }));
   vi.mocked(createSource).mockResolvedValue(source());
   vi.mocked(updateSource).mockResolvedValue(source());
   vi.mocked(deleteSource).mockResolvedValue(undefined);
-  vi.mocked(deleteDirectory).mockResolvedValue(undefined);
 });
 
 // --- Status ---
@@ -138,7 +132,7 @@ describe('adding a source', () => {
     await user.type(screen.getByLabelText('Blog or feed URL'), 'https://new.example.com');
     await user.type(screen.getByLabelText(/^Preferences/), 'Only compilers');
     await screen.findByRole('option', { name: 'Tech' });
-    await user.selectOptions(screen.getByLabelText('Directory'), 'Tech');
+    await user.selectOptions(screen.getByLabelText('Category'), 'Tech');
     await user.click(screen.getByRole('button', { name: 'Add blog' }));
 
     await waitFor(() =>
@@ -147,7 +141,7 @@ describe('adding a source', () => {
         title: undefined,
         remarks: '',
         preferences: 'Only compilers',
-        directory_id: 'd1',
+        category_id: 'd1',
         lookback_days: 7,
       }),
     );
@@ -188,7 +182,7 @@ describe('editing a source', () => {
         title: 'Renamed',
         remarks: '',
         preferences: 'Databases',
-        directory_id: null,
+        category_id: null,
       }),
     );
   });
@@ -248,64 +242,18 @@ describe('deleting a source', () => {
   });
 });
 
-// --- Directories ---
+// --- Categories ---
 
-describe('directories', () => {
-  it('adds a directory', async () => {
-    vi.mocked(createDirectory).mockResolvedValue({
-      id: 'd2',
-      name: 'News',
-      created_at: '2026-10-01T00:00:00Z',
-    });
+describe('categories', () => {
+  it('opens Manage categories', async () => {
     const user = userEvent.setup();
     render();
 
-    await user.type(await screen.findByLabelText('Directory name'), 'News');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-
-    await waitFor(() => expect(createDirectory).toHaveBeenCalledWith('News'));
-  });
-
-  it('shows a duplicate name error', async () => {
-    vi.mocked(createDirectory).mockRejectedValue(
-      new ApiError(409, "A directory named 'Tech' already exists"),
-    );
-    const user = userEvent.setup();
-    render();
-
-    await user.type(await screen.findByLabelText('Directory name'), 'Tech');
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-
-    expect(await screen.findByText(/already exists/)).toBeInTheDocument();
-  });
-
-  it('renames a directory', async () => {
-    vi.mocked(renameDirectory).mockResolvedValue({
-      id: 'd1',
-      name: 'Science',
-      created_at: '2026-10-01T00:00:00Z',
-    });
-    const user = userEvent.setup();
-    render();
-
-    await user.click(await screen.findByRole('button', { name: 'Rename Tech' }));
-    const input = screen.getByLabelText('New name for Tech');
-    await user.clear(input);
-    await user.type(input, 'Science{Enter}');
-
-    await waitFor(() => expect(renameDirectory).toHaveBeenCalledWith('d1', 'Science'));
-  });
-
-  it('confirms before deleting, saying where the blogs go', async () => {
-    const user = userEvent.setup();
-    render();
-
-    await user.click(await screen.findByRole('button', { name: 'Delete Tech' }));
-    const dialog = screen.getByRole('alertdialog');
-    expect(within(dialog).getByText(/move to Unfiled/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
-
-    await waitFor(() => expect(deleteDirectory).toHaveBeenCalledWith('d1'));
+    await user.click(await screen.findByRole('button', { name: 'Manage categories' }));
+    const dialog = screen.getByRole('dialog', { name: 'Manage categories' });
+    expect(await within(dialog).findByText('Tech')).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 
