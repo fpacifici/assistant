@@ -8,6 +8,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
+from assistant.models.schema import (
+    ReadingAnalysisStatus,
+    ReadingLinkState,
+    ReadingLinkType,
+)
 from assistant.reading.service import MAX_TITLE_LENGTH, MAX_URL_LENGTH
 
 LinkUrl = Annotated[
@@ -43,13 +48,13 @@ class LinkResponse(BaseModel):
     id: uuid.UUID
     url: str
     title: str | None
-    link_type: str | None
+    link_type: ReadingLinkType | None
     category_id: uuid.UUID | None
     summary: str | None
     user_notes: str | None
-    analysis_status: str
+    analysis_status: ReadingAnalysisStatus
     last_error: str | None
-    state: str
+    state: ReadingLinkState
     note_id: uuid.UUID | None
     created_at: datetime
     decided_at: datetime | None

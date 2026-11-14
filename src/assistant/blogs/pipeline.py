@@ -42,7 +42,7 @@ from assistant.blogs.discovery import (
 from assistant.blogs.exceptions import FetchError
 from assistant.blogs.extraction import extract_page, html_to_text
 from assistant.blogs.fetch import fetch
-from assistant.blogs.identity import is_http_url, post_key
+from assistant.blogs.identity import post_key
 from assistant.blogs.runs import (
     LoggedEntry,
     close_interrupted_runs,
@@ -67,6 +67,7 @@ from assistant.models.schema import (
     BlogSourceKind,
     BlogTextSource,
 )
+from assistant.web.urls import is_http_url
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator

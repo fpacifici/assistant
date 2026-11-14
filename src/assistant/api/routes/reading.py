@@ -86,6 +86,7 @@ def link_counts_endpoint(
 def get_link_endpoint(
     link_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> LinkResponse:
+    """One of the caller's links, in any state."""
     return LinkResponse.model_validate(get_link(session, user, link_id))
 
 

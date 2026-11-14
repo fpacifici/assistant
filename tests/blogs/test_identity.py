@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from assistant.blogs.identity import canonical_path, post_key
+from assistant.blogs.identity import post_key
 
 # --- Without a guid ---
 
@@ -34,10 +34,6 @@ def test_tracking_is_dropped_next_to_an_identifying_parameter() -> None:
     assert post_key("https://a.example/?utm_campaign=c&p=9") == post_key(
         "https://a.example/?p=9"
     )
-
-
-def test_query_order_and_fragment_do_not_matter() -> None:
-    assert canonical_path("https://a.example/x?b=2&a=1#top") == "/x?a=1&b=2"
 
 
 # --- With a guid ---

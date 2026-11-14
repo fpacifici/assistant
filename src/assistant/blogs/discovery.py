@@ -27,8 +27,8 @@ from defusedxml.ElementTree import ParseError
 
 from assistant.blogs.exceptions import FetchError, SourceResolutionError
 from assistant.blogs.fetch import fetch
-from assistant.blogs.identity import canonical_path
 from assistant.models.schema import BlogSourceKind
+from assistant.web.urls import canonical_path
 
 if TYPE_CHECKING:
     # Only a type: all parsing goes through defusedxml.

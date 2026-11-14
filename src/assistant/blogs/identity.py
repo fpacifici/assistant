@@ -3,73 +3,15 @@
 A post is identified within its source by `post_key`, which survives a domain
 move: the key is the SHA-256 of the entry's guid or, when there is no guid or
 the guid is a URL, of the URL's path. The query string counts only when it
-identifies the post (`?p=123`), not when it tracks a click (`?utm_source=x`).
+identifies the post (`?p=123`), not when it tracks a click (`?utm_source=x`):
+see `assistant.web.urls.canonical_path`.
 """
 
 from __future__ import annotations
 
 import hashlib
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-_TRACKING_PREFIXES = ("utm_", "mc_", "pk_", "mtm_", "at_")
-_TRACKING_PARAMS = frozenset(
-    {
-        "cmpid",
-        "dclid",
-        "fbclid",
-        "gclid",
-        "igshid",
-        "msclkid",
-        "ref",
-        "ref_src",
-        "share",
-        "source",
-        "src",
-        "twclid",
-        "yclid",
-    }
-)
-
-
-def _is_tracking(name: str) -> bool:
-    lowered = name.lower()
-    return lowered in _TRACKING_PARAMS or lowered.startswith(_TRACKING_PREFIXES)
-
-
-def canonical_path(url: str) -> str:
-    """The domain-free identity of a URL: its path and identifying query.
-
-    The trailing slash and the fragment are dropped, and query parameters are
-    sorted, so spelling variants of one link compare equal.
-    """
-    parts = urlsplit(url)
-    path = parts.path.rstrip("/") or "/"
-    query = sorted(
-        (name, value)
-        for name, value in parse_qsl(parts.query, keep_blank_values=True)
-        if not _is_tracking(name)
-    )
-    return f"{path}?{urlencode(query)}" if query else path
-
-
-def strip_tracking(url: str) -> str:
-    """The URL without its tracking parameters, otherwise as given."""
-    parts = urlsplit(url)
-    query = [
-        (name, value)
-        for name, value in parse_qsl(parts.query, keep_blank_values=True)
-        if not _is_tracking(name)
-    ]
-    return urlunsplit(parts._replace(query=urlencode(query)))
-
-
-def is_http_url(value: str) -> bool:
-    """Whether a string is an absolute `http(s)` URL."""
-    try:
-        parts = urlsplit(value)
-    except ValueError:
-        return False
-    return parts.scheme.lower() in {"http", "https"} and bool(parts.netloc)
+from assistant.web.urls import canonical_path, is_http_url
 
 
 def post_key(url: str, guid: str | None = None) -> str:

@@ -6,9 +6,12 @@ goes on after one commits first (to the test's savepoint).
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+
+import pytest
 
 from assistant.models.schema import (
     Category,
@@ -184,9 +187,19 @@ def test_category_and_unfiled_together_are_refused(
     assert response.status_code == 422
 
 
-def test_bad_cursor_is_refused(client: TestClient, auth_headers: Headers) -> None:
+@pytest.mark.parametrize(
+    "cursor",
+    [
+        "not-a-cursor",
+        base64.urlsafe_b64encode(b'["yesterday", 1]').decode(),
+        base64.urlsafe_b64encode(b'{"a": 1}').decode(),
+    ],
+)
+def test_bad_cursor_is_refused(
+    client: TestClient, auth_headers: Headers, cursor: str
+) -> None:
     response = client.get(
-        "/reading/link", params={"cursor": "not-a-cursor"}, headers=auth_headers
+        "/reading/link", params={"cursor": cursor}, headers=auth_headers
     )
     assert response.status_code == 422
 

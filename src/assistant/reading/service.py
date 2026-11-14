@@ -15,16 +15,15 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
-import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 from urllib.parse import urlsplit
 
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import and_, func, or_, select
 
-from assistant.blogs.identity import canonical_path, is_http_url, strip_tracking
 from assistant.categories.service import get_category
 from assistant.models.schema import ReadingLink, ReadingLinkState
 from assistant.reading.exceptions import (
@@ -34,10 +33,14 @@ from assistant.reading.exceptions import (
     InvalidLinkUrlError,
     LinkNotFoundError,
 )
+from assistant.text import blank_to_none
+from assistant.web.urls import canonical_path, is_http_url, strip_tracking
 
 if TYPE_CHECKING:
-    from sqlalchemy import ColumnElement, Select
-    from sqlalchemy.orm import Session
+    from collections.abc import Callable
+
+    from sqlalchemy import ColumnElement, Select, UnaryExpression
+    from sqlalchemy.orm import InstrumentedAttribute, Session
 
     from assistant.models.schema import User
 
@@ -46,11 +49,11 @@ MAX_TITLE_LENGTH = 1024
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 # What each action can start from.
-_DISCARDABLE = frozenset({ReadingLinkState.TO_READ.value})
-_RESTORABLE = frozenset({ReadingLinkState.DISCARDED.value})
-_DELETABLE = frozenset(
-    {ReadingLinkState.DISCARDED.value, ReadingLinkState.PROMOTED.value}
-)
+_DISCARDABLE = frozenset({ReadingLinkState.TO_READ})
+_RESTORABLE = frozenset({ReadingLinkState.DISCARDED})
+_DELETABLE = frozenset({ReadingLinkState.DISCARDED, ReadingLinkState.PROMOTED})
+# A cursor is the last link's sort value and id: JSON, then base64.
+_CURSOR = TypeAdapter(tuple[datetime, uuid.UUID])
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,12 +78,6 @@ class LinkChanges(TypedDict, total=False):
     title: str | None
     category_id: uuid.UUID | None
     user_notes: str | None
-
-
-def _clean(text: str | None) -> str | None:
-    """Blank free text means there is none."""
-    stripped = text.strip() if text else ""
-    return stripped or None
 
 
 # --- URLs ---
@@ -176,48 +173,72 @@ def add_link(session: Session, owner: User, url: str) -> ReadingLink:
 # --- Listing ---
 
 
-def _sort_column(state: ReadingLinkState) -> Any:  # noqa: ANN401
-    """To read sorts by when the link was added, the others by the decision."""
-    if state is ReadingLinkState.TO_READ:
-        return ReadingLink.created_at
-    return ReadingLink.decided_at
+@dataclass(frozen=True, slots=True)
+class _ViewOrder:
+    """How a view sorts: a time column, a direction, and its value on a link.
 
-
-def _encode_cursor(state: ReadingLinkState, link: ReadingLink) -> str:
-    sort_value = link.created_at if state is ReadingLinkState.TO_READ else link.decided_at
-    assert sort_value is not None  # decided links have a decision time
-    key = [sort_value.isoformat(), str(link.id)]
-    return base64.urlsafe_b64encode(json.dumps(key).encode()).decode()
-
-
-def _after_cursor(state: ReadingLinkState, cursor: str) -> ColumnElement[bool]:
-    """The rows after a cursor, in the view's order.
-
-    Raises:
-        InvalidLinkQueryError: If the cursor is not valid.
+    The link id breaks ties, in the same direction.
     """
-    msg = "This cursor is not valid"
-    try:
-        key: Any = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-        if not isinstance(key, list) or len(key) != 2:  # noqa: PLR2004
-            raise InvalidLinkQueryError(msg)
-        sort_value, link_id = datetime.fromisoformat(key[0]), uuid.UUID(key[1])
-    except (binascii.Error, ValueError, TypeError, AttributeError) as exc:
-        raise InvalidLinkQueryError(msg) from exc
-    column = _sort_column(state)
-    if state is ReadingLinkState.TO_READ:
+
+    column: InstrumentedAttribute[datetime] | InstrumentedAttribute[datetime | None]
+    ascending: bool
+    sort_value: Callable[[ReadingLink], datetime | None]
+
+    def order_by(
+        self,
+    ) -> tuple[
+        UnaryExpression[datetime] | UnaryExpression[datetime | None],
+        UnaryExpression[uuid.UUID],
+    ]:
+        """The ORDER BY clauses: the time column, then the id."""
+        if self.ascending:
+            return self.column.asc(), ReadingLink.id.asc()
+        return self.column.desc(), ReadingLink.id.desc()
+
+    def encode(self, link: ReadingLink) -> str:
+        value = self.sort_value(link)
+        assert value is not None  # decided links have a decision time
+        return base64.urlsafe_b64encode(_CURSOR.dump_json((value, link.id))).decode()
+
+    def after(self, cursor: str) -> ColumnElement[bool]:
+        """The rows after a cursor, in this order.
+
+        Raises:
+            InvalidLinkQueryError: If the cursor is not valid.
+        """
+        try:
+            value, link_id = _CURSOR.validate_json(base64.urlsafe_b64decode(cursor))
+        except (binascii.Error, ValueError, ValidationError) as exc:
+            msg = "This cursor is not valid"
+            raise InvalidLinkQueryError(msg) from exc
+        if self.ascending:
+            return or_(
+                self.column > value,
+                and_(self.column == value, ReadingLink.id > link_id),
+            )
         return or_(
-            column > sort_value, and_(column == sort_value, ReadingLink.id > link_id)
+            self.column < value, and_(self.column == value, ReadingLink.id < link_id)
         )
-    return or_(column < sort_value, and_(column == sort_value, ReadingLink.id < link_id))
+
+
+# To read: by when the link was added, oldest first. The others: by the
+# decision, most recent first.
+_DECIDED = _ViewOrder(ReadingLink.decided_at, False, lambda link: link.decided_at)
+_ORDERS = {
+    ReadingLinkState.TO_READ: _ViewOrder(
+        ReadingLink.created_at, True, lambda link: link.created_at
+    ),
+    ReadingLinkState.DISCARDED: _DECIDED,
+    ReadingLinkState.PROMOTED: _DECIDED,
+}
 
 
 def _filtered(
     session: Session,
     owner: User,
-    stmt: Select[Any],
+    stmt: Select[tuple[ReadingLink]],
     filters: LinkFilters,
-) -> Select[Any]:
+) -> Select[tuple[ReadingLink]]:
     """Apply filters, refusing a category that is not the caller's.
 
     Raises:
@@ -252,22 +273,18 @@ def list_links(  # noqa: PLR0913
         InvalidLinkQueryError: On a bad cursor or conflicting filters.
         CategoryNotFoundError: If a filter names someone else's category.
     """
+    order = _ORDERS[state]
     stmt = select(ReadingLink).where(
-        ReadingLink.owner_id == owner.uid, ReadingLink.state == state.value
+        ReadingLink.owner_id == owner.uid, ReadingLink.state == state
     )
     stmt = _filtered(session, owner, stmt, filters or LinkFilters())
     if cursor is not None:
-        stmt = stmt.where(_after_cursor(state, cursor))
-    column = _sort_column(state)
-    if state is ReadingLinkState.TO_READ:
-        stmt = stmt.order_by(column.asc(), ReadingLink.id.asc())
-    else:
-        stmt = stmt.order_by(column.desc(), ReadingLink.id.desc())
-    rows = list(session.scalars(stmt.limit(limit + 1)))
+        stmt = stmt.where(order.after(cursor))
+    rows = list(session.scalars(stmt.order_by(*order.order_by()).limit(limit + 1)))
     links = rows[:limit]
     return LinkPage(
         links=links,
-        next_cursor=_encode_cursor(state, links[-1]) if len(rows) > limit else None,
+        next_cursor=order.encode(links[-1]) if len(rows) > limit else None,
     )
 
 
@@ -282,7 +299,7 @@ def link_counts(
     """
     stmt = (
         select(ReadingLink.category_id, func.count(ReadingLink.id))
-        .where(ReadingLink.owner_id == owner.uid, ReadingLink.state == state.value)
+        .where(ReadingLink.owner_id == owner.uid, ReadingLink.state == state)
         .group_by(ReadingLink.category_id)
     )
     return dict(session.execute(stmt).tuples().all())
@@ -306,7 +323,7 @@ def update_link(
     """
     link = get_link(session, owner, link_id, lock=True)
     if "title" in changes:
-        title = _clean(changes["title"])
+        title = blank_to_none(changes["title"])
         link.title = title[:MAX_TITLE_LENGTH] if title else None
         link.title_edited = title is not None
     if "category_id" in changes:
@@ -316,7 +333,7 @@ def update_link(
         link.category_id = category_id
         link.category_set_by_user = True
     if "user_notes" in changes:
-        link.user_notes = _clean(changes["user_notes"])
+        link.user_notes = blank_to_none(changes["user_notes"])
     session.flush()
     return link
 
@@ -325,15 +342,17 @@ def update_link(
 
 
 _STATE_LABELS = {
-    ReadingLinkState.TO_READ.value: "still to read",
-    ReadingLinkState.DISCARDED.value: "in the archive",
-    ReadingLinkState.PROMOTED.value: "promoted",
+    ReadingLinkState.TO_READ: "still to read",
+    ReadingLinkState.DISCARDED: "in the archive",
+    ReadingLinkState.PROMOTED: "promoted",
 }
 
 
-def _require_state(link: ReadingLink, allowed: frozenset[str], action: str) -> None:
+def _require_state(
+    link: ReadingLink, allowed: frozenset[ReadingLinkState], action: str
+) -> None:
     if link.state not in allowed:
-        label = _STATE_LABELS.get(link.state, link.state)
+        label = _STATE_LABELS[link.state]
         msg = f"This link is {label}: it can't be {action}"
         raise InvalidLinkStateError(msg)
 
@@ -347,7 +366,7 @@ def discard_link(session: Session, owner: User, link_id: uuid.UUID) -> ReadingLi
     """
     link = get_link(session, owner, link_id, lock=True)
     _require_state(link, _DISCARDABLE, "discarded")
-    link.state = ReadingLinkState.DISCARDED.value
+    link.state = ReadingLinkState.DISCARDED
     link.decided_at = datetime.now(UTC)
     session.flush()
     return link
@@ -362,7 +381,7 @@ def restore_link(session: Session, owner: User, link_id: uuid.UUID) -> ReadingLi
     """
     link = get_link(session, owner, link_id, lock=True)
     _require_state(link, _RESTORABLE, "restored")
-    link.state = ReadingLinkState.TO_READ.value
+    link.state = ReadingLinkState.TO_READ
     link.decided_at = None
     session.flush()
     return link
