@@ -42,6 +42,7 @@ from assistant.models.schema import (
     Tag,
 )
 from assistant.notes.tags import find_or_create_tag, get_tag
+from assistant.text import blank_to_none
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -103,12 +104,6 @@ class SourceChanges(TypedDict, total=False):
     preferences: str | None
     category_id: uuid.UUID | None
     enabled: bool
-
-
-def _clean(text: str | None) -> str | None:
-    """Blank free text means there is none."""
-    stripped = text.strip() if text else ""
-    return stripped or None
 
 
 # --- Sources ---
@@ -212,9 +207,9 @@ def register_source(  # noqa: PLR0913
         url=url,
         feed_url=resolved.feed_url,
         kind=resolved.kind.value,
-        title=_clean(title) or resolved.title,
-        remarks=_clean(remarks),
-        preferences=_clean(preferences),
+        title=blank_to_none(title) or resolved.title,
+        remarks=blank_to_none(remarks),
+        preferences=blank_to_none(preferences),
         collect_since=datetime.now(UTC) - timedelta(days=lookback_days),
     )
     session.add(source)
@@ -237,11 +232,11 @@ def update_source(
     """
     source = get_source(session, owner, source_id)
     if "title" in changes:
-        source.title = _clean(changes["title"]) or source.title
+        source.title = blank_to_none(changes["title"]) or source.title
     if "remarks" in changes:
-        source.remarks = _clean(changes["remarks"])
+        source.remarks = blank_to_none(changes["remarks"])
     if "preferences" in changes:
-        source.preferences = _clean(changes["preferences"])
+        source.preferences = blank_to_none(changes["preferences"])
     if "enabled" in changes:
         source.enabled = changes["enabled"]
     if "category_id" in changes:

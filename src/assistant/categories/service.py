@@ -14,6 +14,7 @@ from sqlalchemy import func, select, update
 
 from assistant.categories.exceptions import CategoryNotFoundError, DuplicateCategoryError
 from assistant.models.schema import BlogSource, Category
+from assistant.text import blank_to_none
 
 if TYPE_CHECKING:
     import uuid
@@ -21,12 +22,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from assistant.models.schema import User
-
-
-def _clean(text: str | None) -> str | None:
-    """Blank free text means there is none."""
-    stripped = text.strip() if text else ""
-    return stripped or None
 
 
 def list_categories(session: Session, owner: User) -> list[Category]:
@@ -74,7 +69,9 @@ def create_category(
         DuplicateCategoryError: If `owner` already has one with this name.
     """
     _require_free_name(session, owner, name)
-    category = Category(owner_id=owner.uid, name=name, description=_clean(description))
+    category = Category(
+        owner_id=owner.uid, name=name, description=blank_to_none(description)
+    )
     session.add(category)
     session.flush()
     return category
@@ -99,7 +96,7 @@ def update_category(
     category = get_category(session, owner, category_id)
     _require_free_name(session, owner, name, ignore=category.id)
     category.name = name
-    category.description = _clean(description)
+    category.description = blank_to_none(description)
     session.flush()
     return category
 
