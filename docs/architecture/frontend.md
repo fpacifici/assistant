@@ -267,7 +267,8 @@ Blogs, gated on `useAskEnabled()` like Blogs in the `Sections` nav, the mobile
   added date, status, summary, category picker, notes (saved on blur), and the
   actions of its state. Any change invalidates `['reading']`: no optimistic
   updates. URLs go through `isSafeLink`; everything else is text.
-- **`AddLinkBox`** (To read only): on a duplicate (409) it loads the existing
+- **`AddLinkBox`** (To read only): the URL and optional notes, sent together
+  and both cleared once saved. On a duplicate (409) it loads the existing
   link from the `link_id` in `ApiError.body` and links to it
   (`linkLocation`: its view and category, `#link-<id>`); the card that matches
   the hash scrolls into view and is outlined. A bad URL (422) shows the

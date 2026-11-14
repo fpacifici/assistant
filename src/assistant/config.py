@@ -736,9 +736,9 @@ class Config:
             - `reading.summary_words` -> `READING_SUMMARY_WORDS`
 
         Returns:
-            A `ReadingConfig` mapping, defaulting to 100 words.
+            A `ReadingConfig` mapping, defaulting to 35 words.
         """
-        return {"summary_words": int(self.get("reading.summary_words", 100))}
+        return {"summary_words": int(self.get("reading.summary_words", 35))}
 
     def _get_sample_rate(self, key: str, default: float = 1.0) -> float:
         """Read a `[0.0, 1.0]` sample rate, accepting YAML ints like `1`.

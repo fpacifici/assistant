@@ -257,7 +257,7 @@ def _bearer_headers(user_id: str) -> dict[str, str]:
 def cmd_add_link(args: argparse.Namespace) -> None:
     response = httpx.post(
         f"{args.base_url}/reading/link",
-        json={"url": args.url},
+        json={"url": args.url, "user_notes": args.notes},
         headers=_bearer_headers(args.user_id),
         timeout=_TIMEOUT,
     )
@@ -388,6 +388,7 @@ def _register_reading_commands(
     p = subparsers.add_parser("add-link", help="Save a link to the reading list")
     p.add_argument("--url", required=True)
     p.add_argument("--user-id", required=True)
+    p.add_argument("--notes", help="Your notes on the link")
     p.set_defaults(func=cmd_add_link)
 
     p = subparsers.add_parser("list-links", help="List reading links of one state")

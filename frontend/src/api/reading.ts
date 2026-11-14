@@ -18,10 +18,11 @@ export const LINK_PAGE_SIZE = 20;
 export type LinkFilter = { categoryId: string } | { unfiled: true } | Record<string, never>;
 
 /** Save a link. A URL already saved is a 409 whose `body.link_id` is the existing link. */
-export function addLink(url: string): Promise<ReadingLink> {
+/** Save a link, with the user's notes on it (blank is none). */
+export function addLink(url: string, userNotes = ''): Promise<ReadingLink> {
   return apiFetch<ReadingLink>('/reading/link', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, user_notes: userNotes.trim() || null }),
   });
 }
 

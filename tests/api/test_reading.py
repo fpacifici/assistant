@@ -96,6 +96,34 @@ def test_add_link_is_pending_and_to_read(
     assert link["title"] is None
     assert link["category_id"] is None
     assert link["link_type"] is None
+    assert link["user_notes"] is None
+
+
+def test_add_link_with_notes(client: TestClient, auth_headers: Headers) -> None:
+    response = client.post(
+        "/reading/link",
+        json={"url": URL, "user_notes": "Read section 3"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["user_notes"] == "Read section 3"
+
+
+def test_blank_notes_on_add_are_none(client: TestClient, auth_headers: Headers) -> None:
+    response = client.post(
+        "/reading/link", json={"url": URL, "user_notes": "   "}, headers=auth_headers
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["user_notes"] is None
+
+
+def test_notes_on_add_are_limited(client: TestClient, auth_headers: Headers) -> None:
+    response = client.post(
+        "/reading/link",
+        json={"url": URL, "user_notes": "x" * 10_001},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
 
 
 def test_duplicate_points_to_the_existing_link(

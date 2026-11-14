@@ -175,8 +175,12 @@ def get_link(
     return link
 
 
-def add_link(session: Session, owner: User, url: str) -> ReadingLink:
+def add_link(
+    session: Session, owner: User, url: str, *, user_notes: str | None = None
+) -> ReadingLink:
     """Save a URL as a link to read. It is analyzed once the transaction commits.
+
+    `user_notes` are the user's notes on the link; blank is none.
 
     Raises:
         InvalidLinkUrlError: If it is not an absolute http(s) URL.
@@ -191,7 +195,12 @@ def add_link(session: Session, owner: User, url: str) -> ReadingLink:
     )
     if existing is not None:
         raise DuplicateLinkError(existing)
-    link = ReadingLink(owner_id=owner.uid, url=normalized, url_key=key)
+    link = ReadingLink(
+        owner_id=owner.uid,
+        url=normalized,
+        url_key=key,
+        user_notes=blank_to_none(user_notes),
+    )
     session.add(link)
     session.flush()
     queue_for_analysis(session, link.id)

@@ -583,7 +583,7 @@ Links the caller saved to read later. Another user's link is a 404. See the
 [spec](../specs/0009-reading-list.md).
 
 ```
-POST   /reading/link               {"url"}   -> 201 LinkResponse (analysis_status "pending")
+POST   /reading/link   {"url", "user_notes"?} -> 201 LinkResponse (analysis_status "pending")
 GET    /reading/link?state=to_read|discarded|promoted&category_id=&unfiled=&cursor=&limit=
                                              -> {"links": LinkResponse[], "next_cursor"}
 GET    /reading/link/counts?state=           -> [{"category_id", "count"}] (null is Unfiled)

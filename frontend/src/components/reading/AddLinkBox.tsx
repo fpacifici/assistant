@@ -1,5 +1,6 @@
 /**
- * Saves a link. It appears at once, being analyzed, and fills in when done.
+ * Saves a link, with the user's notes on it if they wrote any. It appears at
+ * once, being analyzed, and fills in when done.
  * A link already saved, in any state, is refused, and the box links to it.
  */
 
@@ -18,9 +19,9 @@ class DuplicateLink extends Error {
 }
 
 /** Save the URL; on a duplicate, load the link already saved. */
-async function save(url: string): Promise<ReadingLink> {
+async function save(url: string, notes: string): Promise<ReadingLink> {
   try {
-    return await addLink(url);
+    return await addLink(url, notes);
   } catch (err) {
     const existing = err instanceof ApiError && err.status === 409 ? err.body.link_id : null;
     if (typeof existing !== 'string') throw err;
@@ -31,10 +32,12 @@ async function save(url: string): Promise<ReadingLink> {
 export default function AddLinkBox() {
   const queryClient = useQueryClient();
   const [url, setUrl] = useState('');
+  const [notes, setNotes] = useState('');
   const add = useMutation({
-    mutationFn: () => save(url.trim()),
+    mutationFn: () => save(url.trim(), notes),
     onSuccess: () => {
       setUrl('');
+      setNotes('');
       return queryClient.invalidateQueries({ queryKey: [...READING_KEY] });
     },
   });
@@ -59,6 +62,14 @@ export default function AddLinkBox() {
       <button type="submit" className="btn-secondary" disabled={!url.trim() || add.isPending}>
         {add.isPending ? 'Adding…' : 'Add link'}
       </button>
+      <textarea
+        aria-label="Notes on the link"
+        placeholder="Your notes (optional): why you saved it, what to look for"
+        rows={notes ? 2 : 1}
+        maxLength={10000}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+      />
       {add.error instanceof DuplicateLink ? (
         <p className="auth-error">
           {add.error.message}:{' '}

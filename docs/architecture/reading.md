@@ -153,5 +153,5 @@ ai:
   blog_model: openai:gpt-6-luna  # AI_BLOG_MODEL, also used for links
 
 reading:
-  summary_words: 100  # READING_SUMMARY_WORDS
+  summary_words: 35  # READING_SUMMARY_WORDS
 ```

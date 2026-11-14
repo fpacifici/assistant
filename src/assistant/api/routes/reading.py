@@ -66,7 +66,7 @@ def add_link_endpoint(
 
     409 with the existing link's `link_id` if the URL is already saved.
     """
-    return _link_response(add_link(session, user, body.url))
+    return _link_response(add_link(session, user, body.url, user_notes=body.user_notes))
 
 
 @router.get("/link", response_model=LinkListResponse)
