@@ -15,7 +15,8 @@ from assistant.blogs.discovery import (
     parse_sitemap,
     resolve_source,
 )
-from assistant.blogs.exceptions import BlockedUrlError, FetchError, SourceResolutionError
+from assistant.blogs.exceptions import SourceResolutionError
+from assistant.fetch import BlockedUrlError, FetchError
 from assistant.models.schema import BlogSourceKind
 from tests.blogs.fakes import FakeWeb
 

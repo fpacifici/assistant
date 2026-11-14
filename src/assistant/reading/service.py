@@ -25,7 +25,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import and_, func, or_, select
 
 from assistant.categories.service import get_category
-from assistant.models.schema import ReadingLink, ReadingLinkState
+from assistant.models.schema import ReadingAnalysisStatus, ReadingLink, ReadingLinkState
 from assistant.reading.exceptions import (
     DuplicateLinkError,
     InvalidLinkQueryError,
@@ -33,6 +33,7 @@ from assistant.reading.exceptions import (
     InvalidLinkUrlError,
     LinkNotFoundError,
 )
+from assistant.reading.worker import queue_for_analysis
 from assistant.text import blank_to_none
 from assistant.web.urls import canonical_path, is_http_url, strip_tracking
 
@@ -149,7 +150,7 @@ def get_link(
 
 
 def add_link(session: Session, owner: User, url: str) -> ReadingLink:
-    """Save a URL as a link to read, waiting for analysis.
+    """Save a URL as a link to read. It is analyzed once the transaction commits.
 
     Raises:
         InvalidLinkUrlError: If it is not an absolute http(s) URL.
@@ -167,6 +168,27 @@ def add_link(session: Session, owner: User, url: str) -> ReadingLink:
     link = ReadingLink(owner_id=owner.uid, url=normalized, url_key=key)
     session.add(link)
     session.flush()
+    queue_for_analysis(session, link.id)
+    return link
+
+
+def retry_analysis(session: Session, owner: User, link_id: uuid.UUID) -> ReadingLink:
+    """Analyze a link again, in any state, after the transaction commits.
+
+    Attempts start over, and the analysis chooses the category again (after
+    the user edited category descriptions, say), even one the user set. A
+    title the user edited is kept.
+
+    Raises:
+        LinkNotFoundError: If the link is missing or someone else's.
+    """
+    link = get_link(session, owner, link_id, lock=True)
+    link.analysis_status = ReadingAnalysisStatus.PENDING
+    link.attempts = 0
+    link.last_error = None
+    link.category_set_by_user = False
+    session.flush()
+    queue_for_analysis(session, link.id)
     return link
 
 

@@ -1,7 +1,8 @@
-"""The safe fetcher, the only code in the blogs package that opens a URL.
+"""The safe fetcher, the only code that opens a URL users gave.
 
-URLs come from users and from fetched content, so every request is treated
-as hostile (SSRF, oversized or endless responses):
+Blogs and the reading list use it. URLs come from users and from fetched
+content, so every request is treated as hostile (SSRF, oversized or endless
+responses):
 
 - Only `http` and `https`, and no credentials in the URL.
 - The host is resolved, every address must be public, and the connection goes
@@ -9,8 +10,9 @@ as hostile (SSRF, oversized or endless responses):
   target. TLS is still verified against the host name.
 - Redirects are followed here, at most `MAX_REDIRECTS`, with the same checks
   on every hop.
-- A whole request is limited to `TIMEOUT_SECONDS` and `MAX_BYTES`. The limit
-  applies to decompressed bytes, so a small gzip bomb stops too.
+- A whole request is limited to `TIMEOUT_SECONDS` and `MAX_BYTES` unless the
+  caller asks for other limits (a PDF needs more). The size limit applies to
+  decompressed bytes, so a small gzip bomb stops too.
 """
 
 from __future__ import annotations
@@ -24,8 +26,6 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import requests
 from requests.adapters import HTTPAdapter
-
-from assistant.blogs.exceptions import BlockedUrlError, FetchError
 
 if TYPE_CHECKING:
     from typing import Any
@@ -46,6 +46,14 @@ _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 type _Address = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
+class FetchError(Exception):
+    """A URL could not be fetched. The message never has response content."""
+
+
+class BlockedUrlError(FetchError):
+    """A URL is not allowed: bad scheme, credentials, or a non-public address."""
+
+
 @dataclass(frozen=True, slots=True)
 class FetchResult:
     """A finished request.
@@ -53,9 +61,10 @@ class FetchResult:
     Attributes:
         url: The final URL, after redirects.
         status: The final HTTP status. Anything is possible except a redirect.
-        content: The decompressed body, at most `MAX_BYTES`.
+        content: The decompressed body, at most the request's size limit.
         etag: The `ETag` header, if any.
         last_modified: The `Last-Modified` header, if any.
+        content_type: The `Content-Type` header, if any, as sent.
     """
 
     url: str
@@ -63,6 +72,14 @@ class FetchResult:
     content: bytes
     etag: str | None = None
     last_modified: str | None = None
+    content_type: str | None = None
+
+    @property
+    def media_type(self) -> str | None:
+        """The `Content-Type` without its parameters, lowercased."""
+        if not self.content_type:
+            return None
+        return self.content_type.split(";", 1)[0].strip().lower() or None
 
     @property
     def not_modified(self) -> bool:
@@ -187,11 +204,11 @@ def _checked_parts(url: str) -> tuple[str, str, int]:
     return scheme, parts.hostname, port or (443 if scheme == "https" else 80)
 
 
-def _read_limited(response: requests.Response, deadline: float) -> bytes:
+def _read_limited(response: requests.Response, deadline: float, max_bytes: int) -> bytes:
     body = bytearray()
     for chunk in response.iter_content(chunk_size=_CHUNK_BYTES):
         body.extend(chunk)
-        if len(body) > MAX_BYTES:
+        if len(body) > max_bytes:
             msg = "The response is too large"
             raise FetchError(msg)
         if time.monotonic() > deadline:
@@ -200,11 +217,18 @@ def _read_limited(response: requests.Response, deadline: float) -> bytes:
     return bytes(body)
 
 
+@dataclass(frozen=True, slots=True)
+class _Limits:
+    deadline: float
+    timeout: float
+    max_bytes: int
+
+
 def _request_address(
     url: str,
     address: str,
     headers: dict[str, str],
-    deadline: float,
+    limits: _Limits,
 ) -> tuple[requests.Response, bytes]:
     """Make one request to a validated address, without following redirects."""
     scheme, host, port = _checked_parts(url)
@@ -225,18 +249,18 @@ def _request_address(
                 **headers,
                 "Host": host_header if default_port else f"{host_header}:{port}",
             },
-            timeout=TIMEOUT_SECONDS,
+            timeout=limits.timeout,
             allow_redirects=False,
             stream=True,
         )
         with response:
-            return response, _read_limited(response, deadline)
+            return response, _read_limited(response, limits.deadline, limits.max_bytes)
 
 
 def _request_once(
     url: str,
     headers: dict[str, str],
-    deadline: float,
+    limits: _Limits,
 ) -> tuple[requests.Response, bytes]:
     """Make one request, trying each validated address until one connects.
 
@@ -246,10 +270,10 @@ def _request_once(
     _, host, port = _checked_parts(url)
     error: requests.RequestException | None = None
     for address in resolve_host(host, port):
-        if time.monotonic() > deadline:
+        if time.monotonic() > limits.deadline:
             break
         try:
-            return _request_address(url, address, headers, deadline)
+            return _request_address(url, address, headers, limits)
         except requests.ConnectionError as exc:
             error = exc
         except requests.RequestException as exc:
@@ -264,6 +288,8 @@ def fetch(
     *,
     etag: str | None = None,
     last_modified: str | None = None,
+    max_bytes: int = MAX_BYTES,
+    timeout: float = TIMEOUT_SECONDS,
 ) -> FetchResult:
     """Fetch a URL under the rules in the module docstring.
 
@@ -271,6 +297,8 @@ def fetch(
         url: The URL.
         etag: Validator for a conditional GET.
         last_modified: Validator for a conditional GET.
+        max_bytes: The largest decompressed body accepted.
+        timeout: Seconds for the whole request, redirects included.
 
     Returns:
         The final response, whatever its status.
@@ -285,10 +313,12 @@ def fetch(
     if last_modified:
         headers["If-Modified-Since"] = last_modified
 
-    deadline = time.monotonic() + TIMEOUT_SECONDS
+    limits = _Limits(
+        deadline=time.monotonic() + timeout, timeout=timeout, max_bytes=max_bytes
+    )
     current = url
     for _ in range(MAX_REDIRECTS + 1):
-        response, body = _request_once(current, headers, deadline)
+        response, body = _request_once(current, headers, limits)
         location = response.headers.get("Location")
         if response.status_code not in _REDIRECT_CODES or not location:
             return FetchResult(
@@ -297,6 +327,7 @@ def fetch(
                 content=body,
                 etag=response.headers.get("ETag"),
                 last_modified=response.headers.get("Last-Modified"),
+                content_type=response.headers.get("Content-Type"),
             )
         current = urljoin(current, location)
     msg = "Too many redirects"

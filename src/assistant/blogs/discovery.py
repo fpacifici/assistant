@@ -25,8 +25,8 @@ from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import ParseError
 
-from assistant.blogs.exceptions import FetchError, SourceResolutionError
-from assistant.blogs.fetch import fetch
+from assistant.blogs.exceptions import SourceResolutionError
+from assistant.fetch import FetchError, fetch
 from assistant.models.schema import BlogSourceKind
 from assistant.web.urls import canonical_path
 
