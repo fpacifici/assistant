@@ -577,6 +577,41 @@ DELETE /category/{id}                           -> 204 (items move to Unfiled)
 - A name already in use is a 409. Another user's category is a 404.
 - `PUT` replaces both fields; a missing or blank `description` clears it.
 
+### Reading list
+
+Links the caller saved to read later. Another user's link is a 404. See the
+[spec](../specs/0009-reading-list.md).
+
+```
+POST   /reading/link               {"url"}   -> 201 LinkResponse (analysis_status "pending")
+GET    /reading/link?state=to_read|discarded|promoted&category_id=&unfiled=&cursor=&limit=
+                                             -> {"links": LinkResponse[], "next_cursor"}
+GET    /reading/link/counts?state=           -> [{"category_id", "count"}] (null is Unfiled)
+GET    /reading/link/{id}                    -> LinkResponse
+PATCH  /reading/link/{id}                    -> LinkResponse
+       {"title", "category_id", "user_notes"}   (any subset)
+POST   /reading/link/{id}/discard            -> LinkResponse (from to_read only)
+POST   /reading/link/{id}/restore            -> LinkResponse (from discarded only)
+DELETE /reading/link/{id}                    -> 204 (from discarded or promoted only)
+```
+
+- The URL must be `http` or `https`, otherwise a 422. Tracking parameters are
+  dropped before it is stored.
+- A URL the caller already saved, in any state, is a 409 whose body has the
+  existing link's `link_id` next to `detail`. Spelling variants count as the
+  same URL: scheme, host case, default port, trailing slash, fragment,
+  tracking parameters and parameter order are ignored.
+- To read is oldest first; Archive (`discarded`) and Promoted most recently
+  decided first. Pass `next_cursor` back as `cursor`; a cursor only works for
+  its own `state`. A bad cursor, or `category_id` with `unfiled`, is a 422.
+- A state change that is not valid from the link's state is a 409.
+- `PATCH` wins over the analysis: a title or category set here is never
+  overwritten. `title: null` or `""` goes back to the automatic title.
+- LinkResponse is `{"id", "url", "title", "link_type", "category_id",
+  "summary", "user_notes", "analysis_status", "last_error", "state",
+  "note_id", "created_at", "decided_at"}`. `title` and `link_type` are null
+  until the analysis sets them.
+
 ### Error Responses
 
 All error responses follow the format:

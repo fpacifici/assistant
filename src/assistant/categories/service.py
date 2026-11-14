@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import func, select, update
 
 from assistant.categories.exceptions import CategoryNotFoundError, DuplicateCategoryError
-from assistant.models.schema import BlogSource, Category
+from assistant.models.schema import BlogSource, Category, ReadingLink
 from assistant.text import blank_to_none
 
 if TYPE_CHECKING:
@@ -114,6 +114,11 @@ def delete_category(session: Session, owner: User, category_id: uuid.UUID) -> No
     session.execute(
         update(BlogSource)
         .where(BlogSource.category_id == category.id)
+        .values(category_id=None),
+    )
+    session.execute(
+        update(ReadingLink)
+        .where(ReadingLink.category_id == category.id)
         .values(category_id=None),
     )
     session.delete(category)

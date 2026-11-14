@@ -18,6 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -148,6 +149,33 @@ class BlogEmbedStatus(str, Enum):
     FAILED = "failed"
 
 
+class ReadingLinkType(str, Enum):
+    """What a reading link points at, decided by the analysis."""
+
+    WEB = "web"
+    PDF = "pdf"
+    TEXT = "text"
+    YOUTUBE = "youtube"
+    OTHER = "other"
+
+
+class ReadingAnalysisStatus(str, Enum):
+    """Where a reading link is in the analysis pipeline."""
+
+    PENDING = "pending"
+    DONE = "done"
+    NOT_SUMMARIZABLE = "not_summarizable"
+    FAILED = "failed"
+
+
+class ReadingLinkState(str, Enum):
+    """The user's decision on a reading link."""
+
+    TO_READ = "to_read"
+    DISCARDED = "discarded"
+    PROMOTED = "promoted"
+
+
 class BlogRunTrigger(str, Enum):
     """What started a collection run."""
 
@@ -272,6 +300,11 @@ class User(Base):
     )
     blog_sources: Mapped[list[BlogSource]] = relationship(
         "BlogSource",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+    reading_links: Mapped[list[ReadingLink]] = relationship(
+        "ReadingLink",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
@@ -1275,3 +1308,101 @@ class PostTag(Base):
 
     post: Mapped[BlogPost] = relationship("BlogPost", back_populates="tag_links")
     tag: Mapped[Tag] = relationship("Tag", back_populates="post_links")
+
+
+def _string_enum(enum: type[Enum]) -> SqlEnum:
+    """A Python enum stored as its values in a VARCHAR(20).
+
+    No database enum type and no CHECK constraint: the column stays a plain
+    string, and the ORM reads and writes enum members.
+    """
+    return SqlEnum(
+        enum,
+        native_enum=False,
+        create_constraint=False,
+        length=20,
+        values_callable=lambda members: [member.value for member in members],
+        validate_strings=True,
+    )
+
+
+class ReadingLink(Base):
+    """A link one user saved to read or watch later.
+
+    The content is never stored: only what the analysis derived from it.
+    `analysis_status` is the pipeline's progress and `state` the user's
+    decision; they and `link_type` are enum columns stored as strings. `title_edited` and
+    `category_set_by_user` keep an analysis from overwriting what the user
+    chose. `decided_at` is when the link was discarded or promoted.
+    """
+
+    __tablename__ = "reading_links"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "url_key", name="uq_reading_link_owner_url_key"),
+        Index(
+            "ix_reading_links_owner_state_category_created",
+            "owner_id",
+            "state",
+            "category_id",
+            "created_at",
+        ),
+        {"schema": "assistant"},
+    )
+
+    id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid_module.uuid4,
+    )
+    owner_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        nullable=False,
+    )
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    # See `assistant.reading.service.url_key`.
+    url_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    title_edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    link_type: Mapped[ReadingLinkType | None] = mapped_column(
+        _string_enum(ReadingLinkType), nullable=True
+    )
+    category_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.categories.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    category_set_by_user: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    user_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    analysis_status: Mapped[ReadingAnalysisStatus] = mapped_column(
+        _string_enum(ReadingAnalysisStatus),
+        nullable=False,
+        default=ReadingAnalysisStatus.PENDING,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Generic, never anything from the response or the model provider.
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    state: Mapped[ReadingLinkState] = mapped_column(
+        _string_enum(ReadingLinkState),
+        nullable=False,
+        default=ReadingLinkState.TO_READ,
+    )
+    note_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="reading_links")
+    category: Mapped[Category | None] = relationship("Category")
