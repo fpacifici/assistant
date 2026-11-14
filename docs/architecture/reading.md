@@ -84,6 +84,11 @@ longer pending and exits with 1 if any failed.
 | `pdf` | `application/pdf`, or `%PDF-` in an unnamed binary | `pypdf`: metadata title (else the first line), pages in order until 20 000 characters, then it stops |
 | `other` | anything else | nothing |
 
+A site that refuses the request, with a 4xx other than 408, 425 or 429 (often
+the 403 of a bot challenge), would refuse it again: the link is not retried,
+but categorized from its URL alone and `not_summarizable`, typed `pdf` when
+the path ends in `.pdf` and `web` otherwise.
+
 An encrypted PDF that needs a password, or one `pypdf` can't parse, is an
 `ExtractionError`. A PDF locked only against editing opens with an empty
 password.
@@ -110,7 +115,9 @@ processor reads the link and the categories, works, then reloads the row with
 
 **Failures.** Any failure increments `attempts` and stores a generic
 `last_error` (a fetch or extraction message, or `Could not analyze
-(<exception class>)`), is logged and goes to Sentry. Below 3 attempts the link
+(<exception class>)`) and is logged. Only failures of our own (the model
+call, a bug) go to Sentry as errors: a site that is down or a PDF that can't
+be read is not something to fix. Below 3 attempts the link
 stays `pending` and the worker queues it again after 30 s, then 120 s. At 3
 it is `failed`: no summary, and Unfiled unless the user chose a category.
 Retries waiting at shutdown are dropped; the links stay pending for the CLI.

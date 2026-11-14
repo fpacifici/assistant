@@ -14,6 +14,7 @@ from assistant.models.schema import ReadingLinkType
 from assistant.reading.extraction import (
     FETCH_TIMEOUT_SECONDS,
     MAX_LINK_BYTES,
+    ExtractedLink,
     ExtractionError,
     extract_link,
     is_youtube,
@@ -134,9 +135,22 @@ def test_links_are_fetched_with_the_pdf_limits() -> None:
     }
 
 
-def test_http_error_raises() -> None:
-    with pytest.raises(FetchError, match="HTTP 404"):
-        extract_link(ARTICLE, FakeFetcher())
+@pytest.mark.parametrize("status", [500, 503, 408, 425, 429])
+def test_errors_worth_retrying_raise(status: int) -> None:
+    with pytest.raises(FetchError, match=f"HTTP {status}"):
+        extract_link(ARTICLE, FakeFetcher({ARTICLE: status}))
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 410, 451])
+def test_a_refused_link_is_a_web_page_with_nothing_to_read(status: int) -> None:
+    assert extract_link(ARTICLE, FakeFetcher({ARTICLE: status})) == ExtractedLink(
+        ReadingLinkType.WEB
+    )
+
+
+def test_a_refused_pdf_is_typed_from_its_path() -> None:
+    url = "https://example.com/papers/Paper.PDF"
+    assert extract_link(url, FakeFetcher({url: 403})).link_type is ReadingLinkType.PDF
 
 
 # --- Web pages and text ---
