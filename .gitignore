@@ -80,8 +80,9 @@ docs/.doctrees/
 
 # Data downloaded
 data/
-# Rust
-rust/target/
+# Go shared library and its cgo header, built by `make go-build`
+src/assistant/golib/libassistant_go.so
+src/assistant/golib/libassistant_go.h
 
 # Frontend
 frontend/node_modules/

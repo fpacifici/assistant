@@ -33,11 +33,11 @@ Google sign-in (OpenID Connect) is also supported, and a user can swap
 between password and Google sign-in — see
 [`Authentication`](authentication.md).
 
-### Rust
+### Go
 
-`GET /rustcore/greeting?name=Ada`
+`GET /gocore/greeting?name=Ada`
 
-Toy endpoint proving the path from FastAPI to [Rust code](rust.md). Returns
+Toy endpoint proving the path from FastAPI to [Go code](go.md). Returns
 `{"message": "Hello, Ada!"}`. Requires authentication; an empty `name` is 422.
 
 ### User

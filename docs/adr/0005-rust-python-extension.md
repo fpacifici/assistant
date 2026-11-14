@@ -1,7 +1,7 @@
 # ADR-0005: Rust code runs in-process as a Python extension
 
 ## Status
-Accepted
+Superseded by [ADR-0006](0006-go-shared-library.md)
 
 ## Context
 We want to write some backend code in Rust while keeping the API in FastAPI, so

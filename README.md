@@ -18,7 +18,7 @@ keep track of blogs and feeds you configure to include as sources.
 
 - Python 3.13 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
-- [Rust](https://rustup.rs), installed with rustup
+- [Go](https://go.dev/dl/) (version in `go/go.mod`) and a C compiler for cgo
 
 ### Setup
 

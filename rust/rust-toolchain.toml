@@ -1,4 +1,0 @@
-# Keep in sync with the rust-builder image in docker/backend/Dockerfile.
-[toolchain]
-channel = "1.95"
-components = ["clippy", "rustfmt"]

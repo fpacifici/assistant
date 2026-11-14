@@ -45,4 +45,5 @@ ADRs should be named: `XXXX-short-title.md` where XXXX is a sequential number (e
 - `0002-postgres-fts-search.md` - Keyword search on Postgres full text search behind a search service
 - `0003-pgvector-note-embeddings.md` - Note embeddings in pgvector, written after commit by a background worker
 - `0004-blog-post-text-in-documents.md` - Blog post text is a file per post in the documents directory, removed by the job
-- `0005-rust-python-extension.md` - Rust code runs in-process as a Python extension built with PyO3
+- `0005-rust-python-extension.md` - Rust code runs in-process as a Python extension built with PyO3 (superseded by 0006)
+- `0006-go-shared-library.md` - Go code runs in-process as a C shared library loaded with ctypes

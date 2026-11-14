@@ -16,12 +16,14 @@ assistant/
 │       ├── data/               # Static data assets
 │       │   └── documents/
 │       ├── evals/              # Evaluation framework
+│       ├── golib/              # ctypes wrappers of the Go shared library
 │       ├── models/             # SQLAlchemy ORM models & DB schema
 │       ├── notes/              # Notes service layer (CRUD, positions, users)
 │       ├── tui/                # Terminal UI (Textual chat app)
 │       └── vectors/            # Note embeddings (pgvector), indexer, worker
-├── rust/                       # Rust crate, the assistant_rust extension module
-│   └── src/                    # PyO3 bindings (lib.rs) and logic modules
+├── go/                         # Go module, built into a C shared library
+│   ├── bindings/               # C ABI exports (package main, cgo)
+│   └── greeting/               # Logic packages, free of cgo
 ├── frontend/                   # React/TypeScript web UI (Vite)
 │   └── src/
 │       ├── api/                # API client layer

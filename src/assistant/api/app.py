@@ -18,12 +18,12 @@ from assistant.api.routes.ask import router as ask_router
 from assistant.api.routes.auth import router as auth_router
 from assistant.api.routes.blogs import router as blogs_router
 from assistant.api.routes.files import router as files_router
+from assistant.api.routes.gocore import router as gocore_router
 from assistant.api.routes.imports import router as imports_router
 from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
-from assistant.api.routes.rustcore import router as rustcore_router
 from assistant.api.routes.search import router as search_router
 from assistant.api.routes.tags import router as tags_router
 from assistant.api.routes.users import router as users_router
@@ -147,6 +147,6 @@ def create_app(  # noqa: PLR0913
     app.include_router(search_router, prefix="/search", tags=["search"])
     app.include_router(ask_router, prefix="/ask", tags=["ask"])
     app.include_router(blogs_router, prefix="/blog", tags=["blogs"])
-    app.include_router(rustcore_router, prefix="/rustcore", tags=["rustcore"])
+    app.include_router(gocore_router, prefix="/gocore", tags=["gocore"])
 
     return app

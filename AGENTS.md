@@ -16,7 +16,7 @@ The repo structure is in [`Project Structure`](docs/project_structure.md)
 **Layout**: src layout with the package at `src/assistant/`
 **Python Version**: >= 3.13
 **Package Manager**: uv
-**Rust Code**: crate in `rust/`, a Python extension module built by `uv sync`
+**Go Code**: module in `go/`, a C shared library built by `make go-build` and loaded with ctypes
 
 ## Architecture
 
@@ -31,7 +31,7 @@ When working on the backend:
 - Keyword search: [`Search`](docs/architecture/search.md)
 - Embeddings for the AI agent: [`Vector search`](docs/architecture/vectors.md)
 - The AI agent and its API: [`Ask AI`](docs/architecture/ask.md)
-- Writing or calling Rust code: [`Rust backend`](docs/architecture/rust.md)
+- Writing or calling Go code: [`Go backend`](docs/architecture/go.md)
 - Blog sources and the job that collects them: [`Blogs`](docs/architecture/blogs.md)
 
 When working on the frontend:
@@ -112,10 +112,10 @@ make pre-commit-run
 
 Every time you apply a change, run the relevant checks before committing.
 
-**Backend changes** (anything under `src/`, `tests/` or `rust/`):
+**Backend changes** (anything under `src/`, `tests/` or `go/`):
 
 ```bash
-make check   # runs typecheck + lint + rust-check + test
+make check   # runs typecheck + lint + go-check + test
 ```
 
 **Frontend changes** (anything under `frontend/`):
@@ -136,10 +136,10 @@ make frontend-test    # runs vitest
 - Aim for high coverage but focus on meaningful tests
 - Mock external dependencies
 
-#### Rust tests
+#### Go tests
 
-- Place tests in a `#[cfg(test)]` module next to the logic they cover
-- Run with `make rust-test`
+- Place tests in a `*_test.go` file next to the logic they cover
+- Run with `make go-test`
 
 #### Frontend tests
 
@@ -287,8 +287,8 @@ pytest tests/test_specific.py
 pytest tests/test_specific.py::test_function_name
 ```
 
-Bare `pytest` tests the last build of the Rust extension: run
-`make rust-build` first after changing `rust/`.
+Bare `pytest` tests the last build of the Go library: run
+`make go-build` first after changing `go/`.
 
 ### Updating Documentation
 

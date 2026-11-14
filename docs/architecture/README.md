@@ -124,8 +124,8 @@ flowchart LR
   end
 ```
 
-The `Notes Server` is a python package, which calls [Rust code](rust.md)
-through an extension module. It contains two CLI scripts:
+The `Notes Server` is a python package, which calls [Go code](go.md)
+through a C shared library. It contains two CLI scripts:
 
 - One runs the API Server.
 
@@ -166,4 +166,4 @@ the webui.
 - [`Ask AI`](ask.md)
 - [`Blogs`](blogs.md)
 - [`Adapters (import)`](adapters.md)
-- [`Rust backend code`](rust.md)
+- [`Go backend code`](go.md)

@@ -37,19 +37,23 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      # rustup on the runner installs the version in rust/rust-toolchain.toml
-      - name: Set up Rust
-        run: rustup toolchain install --no-self-update
-        working-directory: rust
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.mod
 
-      - name: Sync dependencies and build the Rust extension
+      - name: Sync dependencies
         run: uv sync --all-extras
+
+      - name: Build the Go library
+        run: make go-build
 
       - name: Run pre-commit
         run: .venv/bin/pre-commit run --all-files
 
-      - name: Run Rust tests
-        run: make rust-test
+      - name: Run Go tests
+        run: make go-test
 
       - name: Run tests
         run: uv run pytest tests
@@ -59,6 +63,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Dockerfile fails if the image cannot call into the Rust extension.
+      # The Dockerfile fails if the image cannot call into the Go library.
       - name: Build API image
         run: make docker-build
