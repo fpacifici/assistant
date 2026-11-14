@@ -25,6 +25,7 @@ from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
+from assistant.api.routes.reading import router as reading_router
 from assistant.api.routes.search import router as search_router
 from assistant.api.routes.tags import router as tags_router
 from assistant.api.routes.users import router as users_router
@@ -149,6 +150,7 @@ def create_app(  # noqa: PLR0913
     app.include_router(ask_router, prefix="/ask", tags=["ask"])
     app.include_router(categories_router, prefix="/category", tags=["categories"])
     app.include_router(blogs_router, prefix="/blog", tags=["blogs"])
+    app.include_router(reading_router, prefix="/reading", tags=["reading"])
     app.include_router(gocore_router, prefix="/gocore", tags=["gocore"])
 
     return app

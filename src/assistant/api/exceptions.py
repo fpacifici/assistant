@@ -43,6 +43,13 @@ from assistant.notes.exceptions import (
     PermissionDeniedError,
     UserNotFoundError,
 )
+from assistant.reading.exceptions import (
+    DuplicateLinkError,
+    InvalidLinkQueryError,
+    InvalidLinkStateError,
+    InvalidLinkUrlError,
+    LinkNotFoundError,
+)
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
@@ -53,6 +60,7 @@ logger = logging.getLogger(__name__)
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(BlogNotFoundError)
     @app.exception_handler(CategoryNotFoundError)
+    @app.exception_handler(LinkNotFoundError)
     async def owned_not_found_handler(
         request: Request,  # noqa: ARG001
         exc: Exception,  # noqa: ARG001
@@ -63,6 +71,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(DuplicateSourceError)
     @app.exception_handler(CollectionBusyError)
     @app.exception_handler(SourcePausedError)
+    @app.exception_handler(InvalidLinkStateError)
     async def blog_duplicate_handler(
         request: Request,  # noqa: ARG001
         exc: Exception,
@@ -71,11 +80,23 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(SourceResolutionError)
     @app.exception_handler(InvalidPostQueryError)
+    @app.exception_handler(InvalidLinkQueryError)
+    @app.exception_handler(InvalidLinkUrlError)
     async def blog_invalid_handler(
         request: Request,  # noqa: ARG001
         exc: Exception,
     ) -> JSONResponse:
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(DuplicateLinkError)
+    async def duplicate_link_handler(
+        request: Request,  # noqa: ARG001
+        exc: DuplicateLinkError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "link_id": str(exc.link_id)},
+        )
 
     @app.exception_handler(ChatThreadNotFoundError)
     async def chat_thread_not_found_handler(

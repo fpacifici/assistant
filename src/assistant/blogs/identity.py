@@ -9,7 +9,7 @@ identifies the post (`?p=123`), not when it tracks a click (`?utm_source=x`).
 from __future__ import annotations
 
 import hashlib
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _TRACKING_PREFIXES = ("utm_", "mc_", "pk_", "mtm_", "at_")
 _TRACKING_PARAMS = frozenset(
@@ -50,6 +50,17 @@ def canonical_path(url: str) -> str:
         if not _is_tracking(name)
     )
     return f"{path}?{urlencode(query)}" if query else path
+
+
+def strip_tracking(url: str) -> str:
+    """The URL without its tracking parameters, otherwise as given."""
+    parts = urlsplit(url)
+    query = [
+        (name, value)
+        for name, value in parse_qsl(parts.query, keep_blank_values=True)
+        if not _is_tracking(name)
+    ]
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 def is_http_url(value: str) -> bool:

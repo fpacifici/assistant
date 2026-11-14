@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
 
 import httpx
 
@@ -243,6 +244,43 @@ def cmd_delete_node(args: argparse.Namespace) -> None:
     _print_response(response)
 
 
+def _bearer_headers(user_id: str) -> dict[str, str]:
+    """Sign an access token for `user_id` with this machine's `JWT_SECRET`.
+
+    For a local server sharing the secret, as in development.
+    """
+    from assistant.auth.service import create_access_token  # noqa: PLC0415
+
+    return {"Authorization": f"Bearer {create_access_token(uuid.UUID(user_id))}"}
+
+
+def cmd_add_link(args: argparse.Namespace) -> None:
+    response = httpx.post(
+        f"{args.base_url}/reading/link",
+        json={"url": args.url},
+        headers=_bearer_headers(args.user_id),
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
+def cmd_list_links(args: argparse.Namespace) -> None:
+    params: dict[str, str | int] = {"state": args.state, "limit": args.limit}
+    if args.category_id:
+        params["category_id"] = args.category_id
+    if args.unfiled:
+        params["unfiled"] = "true"
+    if args.cursor:
+        params["cursor"] = args.cursor
+    response = httpx.get(
+        f"{args.base_url}/reading/link",
+        params=params,
+        headers=_bearer_headers(args.user_id),
+        timeout=_TIMEOUT,
+    )
+    _print_response(response)
+
+
 def _register_user_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -344,6 +382,27 @@ def _register_tag_commands(
     p.set_defaults(func=cmd_untag_note)
 
 
+def _register_reading_commands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    p = subparsers.add_parser("add-link", help="Save a link to the reading list")
+    p.add_argument("--url", required=True)
+    p.add_argument("--user-id", required=True)
+    p.set_defaults(func=cmd_add_link)
+
+    p = subparsers.add_parser("list-links", help="List reading links of one state")
+    p.add_argument("--user-id", required=True)
+    p.add_argument(
+        "--state", choices=["to_read", "discarded", "promoted"], default="to_read"
+    )
+    category = p.add_mutually_exclusive_group()
+    category.add_argument("--category-id")
+    category.add_argument("--unfiled", action="store_true")
+    p.add_argument("--cursor", help="next_cursor of the previous page")
+    p.add_argument("--limit", type=int, default=20)
+    p.set_defaults(func=cmd_list_links)
+
+
 def _register_node_commands(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -405,6 +464,7 @@ def main() -> int:
     _register_note_commands(subparsers)
     _register_tag_commands(subparsers)
     _register_node_commands(subparsers)
+    _register_reading_commands(subparsers)
 
     p = subparsers.add_parser("search")
     p.add_argument("--q", required=True, help="Search string, e.g. 'berlin tag:travel'")
