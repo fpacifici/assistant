@@ -21,7 +21,7 @@ what the analysis derived from it.
 | `link_type` | `web`, `pdf`, `text`, `youtube` or `other`. Null until analyzed. |
 | `category_id`, `category_set_by_user` | The category (`SET NULL` when it goes), and whether the user chose it. |
 | `summary`, `user_notes` | The model's summary; the user's own scratchpad, never copied anywhere. |
-| `analysis_status`, `attempts`, `last_error` | The pipeline: `pending`, `done`, `not_summarizable` or `failed`. The error is generic. |
+| `analysis_status`, `attempts`, `last_error` | The pipeline: `pending`, `done`, `not_summarizable`, `refused` or `failed`. The error is generic; on a `refused` link it is the reason. |
 | `state`, `decided_at` | The user's decision: `to_read`, `discarded` or `promoted`, and when it was made. |
 | `note_id` | The note a promoted link went to (`SET NULL` when the note is deleted: the link stays promoted). |
 
@@ -86,8 +86,11 @@ longer pending and exits with 1 if any failed.
 
 A site that refuses the request, with a 4xx other than 408, 425 or 429 (often
 the 403 of a bot challenge), would refuse it again: the link is not retried,
-but categorized from its URL alone and `not_summarizable`, typed `pdf` when
-the path ends in `.pdf` and `web` otherwise.
+but categorized from its URL alone and `refused`, typed `pdf` when the path
+ends in `.pdf` and `web` otherwise. `last_error` keeps why, in our words:
+"The site blocks automated reading" when `rejection.blocker` (below) names a
+protection, "The site answered HTTP <status>" otherwise. The card shows
+**Blocked by site** and the reason.
 
 Every error status is logged as a warning with why the site said no
 (`web/rejection.py`): `rejection.blocker` names the bot protection that

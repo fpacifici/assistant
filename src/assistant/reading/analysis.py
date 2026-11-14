@@ -251,6 +251,8 @@ class Outcome(StrEnum):
 
     DONE = "done"
     NOT_SUMMARIZABLE = "not_summarizable"
+    # The site refused the request: categorized from the URL.
+    REFUSED = "refused"
     # Failed, and will be tried again: still `pending`.
     RETRY = "retry"
     # Failed for the last time.
@@ -283,6 +285,17 @@ def _summarizable(extracted: ExtractedLink) -> str | None:
         return None
     text = extracted.text.strip()
     return text if len(text) >= MIN_TEXT_CHARS else None
+
+
+def _status(
+    extracted: ExtractedLink, *, summarized: bool
+) -> tuple[Outcome, ReadingAnalysisStatus]:
+    """How an analysis that ran ends: summarized, refused, or filed only."""
+    if summarized:
+        return Outcome.DONE, ReadingAnalysisStatus.DONE
+    if extracted.refusal is not None:
+        return Outcome.REFUSED, ReadingAnalysisStatus.REFUSED
+    return Outcome.NOT_SUMMARIZABLE, ReadingAnalysisStatus.NOT_SUMMARIZABLE
 
 
 class LinkProcessor:
@@ -387,13 +400,9 @@ class LinkProcessor:
                     session, snapshot.owner_id, verdict.category_id
                 )
             link.summary = verdict.summary
-            outcome = Outcome.DONE if summarized else Outcome.NOT_SUMMARIZABLE
-            link.analysis_status = (
-                ReadingAnalysisStatus.DONE
-                if summarized
-                else ReadingAnalysisStatus.NOT_SUMMARIZABLE
-            )
-            link.last_error = None
+            outcome, link.analysis_status = _status(extracted, summarized=summarized)
+            # A refusal is the reason the link has no summary: the card says it.
+            link.last_error = extracted.refusal
             session.commit()
             return outcome
 

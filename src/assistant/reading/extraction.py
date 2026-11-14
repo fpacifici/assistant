@@ -31,7 +31,11 @@ from pypdf.errors import PyPdfError
 from assistant.models.schema import ReadingLinkType
 from assistant.web.fetch import FetchError, FetchResult, fetch
 from assistant.web.pages import extract_page
-from assistant.web.rejection import describe_rejection, summarize_rejection
+from assistant.web.rejection import (
+    NO_BLOCKER,
+    describe_rejection,
+    summarize_rejection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,8 @@ class ExtractedLink:
         text: The text to summarize. None for YouTube and other types.
         author: A video's channel, as context for the category.
         partial: The text is only the beginning of a longer document.
+        refusal: Why the site refused the request, in our words (never from
+            the response), when it did. Nothing else is known then.
     """
 
     link_type: ReadingLinkType
@@ -82,6 +88,7 @@ class ExtractedLink:
     text: str | None = None
     author: str | None = None
     partial: bool = False
+    refusal: str | None = None
 
 
 def _clean_title(title: str | None) -> str | None:
@@ -217,6 +224,13 @@ def _refused(status: int) -> bool:
     return status in _HTTP_CLIENT_ERRORS and status not in _TRANSIENT_CLIENT_ERRORS
 
 
+def _refusal(status: int, blocker: str) -> str:
+    """Why the site refused, for the user: generic, never from the response."""
+    if blocker != NO_BLOCKER:
+        return "The site blocks automated reading"
+    return f"The site answered HTTP {status}"
+
+
 def _type_from_url(url: str) -> ReadingLinkType:
     """The type of a link that can't be fetched, from its path."""
     if urlsplit(url).path.lower().endswith(".pdf"):
@@ -254,8 +268,11 @@ def extract_link(url: str, fetcher: Fetcher = fetch) -> ExtractedLink:
             summarize_rejection(details),
             extra=details,
         )
-    if _refused(result.status):
-        return ExtractedLink(_type_from_url(url))
+        if _refused(result.status):
+            return ExtractedLink(
+                _type_from_url(url),
+                refusal=_refusal(result.status, str(details["rejection.blocker"])),
+            )
     result.raise_for_status()
     link_type = _link_type(result)
     if link_type is ReadingLinkType.WEB:
