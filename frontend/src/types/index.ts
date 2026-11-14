@@ -95,15 +95,18 @@ export interface SearchResponse {
   limit: number;
 }
 
-export interface BlogDirectory {
+/** A user's folder, shared by blog sources and reading links. */
+export interface Category {
   id: string;
   name: string;
+  /** What the reading list's AI reads to file a link here. */
+  description: string | null;
   created_at: string;
 }
 
 export interface BlogSource {
   id: string;
-  directory_id: string | null;
+  category_id: string | null;
   url: string;
   feed_url: string;
   kind: 'feed' | 'sitemap';

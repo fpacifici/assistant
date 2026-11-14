@@ -85,7 +85,7 @@ Routes are declared in `src/routes.tsx`.
 | `/search?q=…` | `SearchPage`: note search results (see Search below) |
 | `/ask?thread=…` | `AskPage`: questions to the AI agent about the notes (see Ask AI below) |
 | `/blogs/triage`, `/blogs`, `/blogs/relevant` | `BlogsPage`: Triage (new posts), All and Relevant (see Blogs below). `/blogs/review` redirects to Triage |
-| `/blogs/sources` | `BlogSourcesPage`: add, edit, pause and delete sources and directories |
+| `/blogs/sources` | `BlogSourcesPage`: add, edit, pause and delete sources; Manage categories |
 | `/blogs/sources/:sourceId/log?run=…` | `BlogSourceLogPage`: the collection history of one source, with Refresh now |
 | `/notebooks/:notebookId/notes/:noteId/window` | `NoteWindow`: the note editor alone, in its own browser window |
 | `/invites` | `InvitesPage`: send, resend and void invites |
@@ -203,14 +203,16 @@ link there and in the TUI File menu opens Triage and is gated on
 `useAskEnabled()`. The pages themselves and the API are not. Code: `pages/BlogsPage.tsx`, `pages/BlogSourcesPage.tsx`,
 `components/blogs/`.
 
-- **Filters** live in the URL: `?directory=` (an id, `unfiled` or `all`),
+- **Filters** live in the URL: `?category=` (an id, `unfiled` or `all`),
   `?source=` (an archived source), `?tag=` and `?read=` (`read` or `unread`).
   Switching between All and Relevant keeps them.
-- **Triage** (view `new`) shows the new posts of every directory, with no
-  sidebar: a directory `<select>` in the toolbar narrows it. It only reads
-  `directory`, and its tab always opens it with no filter.
-- **Mobile** shows one level at a time: `BlogDirectoryList` at `/blogs`, and the
-  posts alone once a `directory` or `source` is chosen, with the back link
+- **Triage** (view `new`) shows the new posts of every category, with no
+  sidebar: a category `<select>` in the toolbar narrows it. It only reads
+  `category`, and its tab always opens it with no filter.
+- **Categories** are edited in `ManageCategoriesDialog`, opened from the
+  sources page (see [Categories](categories.md)).
+- **Mobile** shows one level at a time: `CategoryList` at `/blogs`, and the
+  posts alone once a `category` or `source` is chosen, with the back link
   dropping it. Triage goes straight to the posts. **TUI** mode shows the
   desktop page.
 - **Read** is separate from the verdict: Mark read / Mark to read on the card

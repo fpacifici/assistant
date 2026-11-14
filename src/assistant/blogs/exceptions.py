@@ -8,18 +8,10 @@ class BlogsError(Exception):
 
 
 class BlogNotFoundError(BlogsError):
-    """A directory, source or post does not exist or belongs to another user.
+    """A source or post does not exist or belongs to another user.
 
     The two cases are indistinguishable to the caller.
     """
-
-
-class DuplicateDirectoryError(BlogsError):
-    """The user already has a directory with this name."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        super().__init__(f"A directory named {name!r} already exists")
 
 
 class DuplicateSourceError(BlogsError):

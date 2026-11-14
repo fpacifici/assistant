@@ -25,9 +25,13 @@ vi.mock('../api/ask', () => ({ fetchAskStatus: vi.fn().mockResolvedValue({ enabl
 
 vi.mock('../api/tags', () => ({ fetchTags: vi.fn() }));
 
+vi.mock('../api/categories', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/categories')>()),
+  fetchCategories: vi.fn(),
+}));
+
 vi.mock('../api/blogs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/blogs')>()),
-  fetchDirectories: vi.fn(),
   fetchSources: vi.fn(),
   fetchPosts: vi.fn(),
   setPostState: vi.fn(),
@@ -39,7 +43,6 @@ vi.mock('../api/blogs', async (importOriginal) => ({
 
 import {
   addPostTag,
-  fetchDirectories,
   fetchPosts,
   fetchSources,
   removePostTag,
@@ -47,6 +50,7 @@ import {
   setPostsState,
   setPostState,
 } from '../api/blogs';
+import { fetchCategories } from '../api/categories';
 import { fetchTags } from '../api/tags';
 
 function post(id: string, fields: Partial<BlogPost> = {}): BlogPost {
@@ -81,8 +85,8 @@ const WORK = { id: 't1', name: 'Work' };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(fetchDirectories).mockResolvedValue([
-    { id: 'd1', name: 'Tech', created_at: '2026-10-01T00:00:00Z' },
+  vi.mocked(fetchCategories).mockResolvedValue([
+    { id: 'd1', name: 'Tech', description: null, created_at: '2026-10-01T00:00:00Z' },
   ]);
   vi.mocked(fetchSources).mockResolvedValue([]);
   vi.mocked(fetchTags).mockResolvedValue([WORK]);
@@ -143,9 +147,9 @@ describe('BlogsPage views', () => {
     expect(screen.queryByLabelText('Filter by read')).not.toBeInTheDocument();
   });
 
-  it('opens Triage on every directory, whatever the current filter', async () => {
+  it('opens Triage on every category, whatever the current filter', async () => {
     const { router } = renderWithProviders(<BlogsPage view="all" />, {
-      initialEntries: ['/blogs?directory=d1'],
+      initialEntries: ['/blogs?category=d1'],
     });
     const user = userEvent.setup();
 
@@ -155,16 +159,16 @@ describe('BlogsPage views', () => {
     expect(router.state.location.search).toBe('');
   });
 
-  it('keeps the directory when switching view', async () => {
+  it('keeps the category when switching view', async () => {
     const { router } = renderWithProviders(<BlogsPage view="all" />, {
-      initialEntries: ['/blogs?directory=d1'],
+      initialEntries: ['/blogs?category=d1'],
     });
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('link', { name: 'Relevant' }));
 
     expect(router.state.location.pathname).toBe('/blogs/relevant');
-    expect(router.state.location.search).toBe('?directory=d1');
+    expect(router.state.location.search).toBe('?category=d1');
   });
 
   it('shows an error when posts cannot be loaded', async () => {
@@ -178,7 +182,7 @@ describe('BlogsPage views', () => {
 // --- Filters ---
 
 describe('BlogsPage filters', () => {
-  it('filters by directory from the sidebar', async () => {
+  it('filters by category from the sidebar', async () => {
     const user = userEvent.setup();
     const { router } = renderWithProviders(<BlogsPage view="all" />, {
       initialEntries: ['/blogs'],
@@ -186,9 +190,9 @@ describe('BlogsPage filters', () => {
 
     await user.click(await screen.findByRole('link', { name: 'Tech' }));
 
-    expect(router.state.location.search).toBe('?directory=d1');
+    expect(router.state.location.search).toBe('?category=d1');
     await waitFor(() =>
-      expect(fetchPosts).toHaveBeenCalledWith('all', { directoryId: 'd1' }, undefined),
+      expect(fetchPosts).toHaveBeenCalledWith('all', { categoryId: 'd1' }, undefined),
     );
   });
 
@@ -230,30 +234,30 @@ describe('BlogsPage filters', () => {
 // --- Triage ---
 
 describe('Triage', () => {
-  it('shows the posts of every directory with no sidebar', async () => {
+  it('shows the posts of every category with no sidebar', async () => {
     showPosts(post('a'));
     renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
     expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Directories' })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Filter by directory')).toHaveValue('');
+    expect(screen.queryByRole('navigation', { name: 'Categories' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by category')).toHaveValue('');
   });
 
-  it('filters by one directory, then back to all', async () => {
+  it('filters by one category, then back to all', async () => {
     const user = userEvent.setup();
     const { router } = renderWithProviders(<BlogsPage view="new" />, {
       initialEntries: ['/blogs/triage'],
     });
 
     await screen.findByRole('option', { name: 'Tech' });
-    await user.selectOptions(screen.getByLabelText('Filter by directory'), 'Tech');
+    await user.selectOptions(screen.getByLabelText('Filter by category'), 'Tech');
 
-    expect(router.state.location.search).toBe('?directory=d1');
+    expect(router.state.location.search).toBe('?category=d1');
     await waitFor(() =>
-      expect(fetchPosts).toHaveBeenCalledWith('new', { directoryId: 'd1' }, undefined),
+      expect(fetchPosts).toHaveBeenCalledWith('new', { categoryId: 'd1' }, undefined),
     );
 
-    await user.selectOptions(screen.getByLabelText('Filter by directory'), 'All directories');
+    await user.selectOptions(screen.getByLabelText('Filter by category'), 'All categories');
     expect(router.state.location.search).toBe('');
   });
 
@@ -261,7 +265,7 @@ describe('Triage', () => {
     const user = userEvent.setup();
     renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage'] });
 
-    await user.selectOptions(await screen.findByLabelText('Filter by directory'), 'Unfiled');
+    await user.selectOptions(await screen.findByLabelText('Filter by category'), 'Unfiled');
 
     await waitFor(() =>
       expect(fetchPosts).toHaveBeenCalledWith('new', { unfiled: true }, undefined),
@@ -579,7 +583,7 @@ describe('Mark visible as not useful', () => {
   it('asks first, and sends the ids on screen', async () => {
     showPosts(post('a'), post('b'));
     const user = userEvent.setup();
-    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage?directory=d1'] });
+    renderWithProviders(<BlogsPage view="new" />, { initialEntries: ['/blogs/triage?category=d1'] });
 
     await user.click(await screen.findByRole('button', { name: 'Mark visible as not useful' }));
     expect(setPostsState).not.toHaveBeenCalled();
@@ -626,7 +630,7 @@ describe('infinite scroll', () => {
 // --- Mobile ---
 
 describe('mobile layout', () => {
-  it('shows the directories first, not the posts', async () => {
+  it('shows the categories first, not the posts', async () => {
     renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'], layout: 'mobile' });
 
     expect(await screen.findByRole('link', { name: 'Tech' })).toBeInTheDocument();
@@ -634,15 +638,15 @@ describe('mobile layout', () => {
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/notebooks');
   });
 
-  it('shows the posts alone once a directory is chosen', async () => {
+  it('shows the posts alone once a category is chosen', async () => {
     showPosts(post('a'));
     renderWithProviders(<BlogsPage view="all" />, {
-      initialEntries: ['/blogs?directory=d1'],
+      initialEntries: ['/blogs?category=d1'],
       layout: 'mobile',
     });
 
     expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Directories' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Categories' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/blogs');
   });
 
@@ -654,15 +658,15 @@ describe('mobile layout', () => {
     });
 
     expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Filter by directory')).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by category')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/notebooks');
   });
 
-  it('reaches every post from All directories', async () => {
+  it('reaches every post from All categories', async () => {
     const user = userEvent.setup();
     renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'], layout: 'mobile' });
 
-    await user.click(await screen.findByRole('link', { name: 'All directories' }));
+    await user.click(await screen.findByRole('link', { name: 'All categories' }));
 
     await waitFor(() => expect(fetchPosts).toHaveBeenCalledWith('all', {}, undefined));
   });
@@ -676,7 +680,7 @@ describe('TUI layout', () => {
     renderWithProviders(<BlogsPage view="all" />, { initialEntries: ['/blogs'], layout: 'tui' });
 
     expect(await screen.findByRole('link', { name: 'Post a' })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Directories' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Categories' })).toBeInTheDocument();
   });
 
   it('links back to the notes', async () => {

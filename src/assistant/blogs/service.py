@@ -1,4 +1,4 @@
-"""Blog directories, sources and posts of one user.
+"""Blog sources and posts of one user. Their categories are in `assistant.categories`.
 
 Nothing here is shared, so there are no entitlements: every function takes
 the owner and loads rows filtered by it, and someone else's row is simply not
@@ -20,19 +20,18 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from sqlalchemy import and_, case, delete, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select
 from sqlalchemy.orm import contains_eager
 
 from assistant.blogs.discovery import resolve_source
 from assistant.blogs.exceptions import (
     BlogNotFoundError,
-    DuplicateDirectoryError,
     DuplicateSourceError,
     InvalidPostQueryError,
 )
 from assistant.blogs.store import delete_post_chunks
+from assistant.categories.service import get_category
 from assistant.models.schema import (
-    BlogDirectory,
     BlogEmbedStatus,
     BlogMatchLevel,
     BlogPost,
@@ -79,7 +78,7 @@ class PostView(StrEnum):
 class PostFilters:
     """What narrows a post list. All of them are the caller's own."""
 
-    directory_id: uuid.UUID | None = None
+    category_id: uuid.UUID | None = None
     unfiled: bool = False
     source_id: uuid.UUID | None = None
     tag_id: uuid.UUID | None = None
@@ -102,7 +101,7 @@ class SourceChanges(TypedDict, total=False):
     title: str
     remarks: str | None
     preferences: str | None
-    directory_id: uuid.UUID | None
+    category_id: uuid.UUID | None
     enabled: bool
 
 
@@ -110,94 +109,6 @@ def _clean(text: str | None) -> str | None:
     """Blank free text means there is none."""
     stripped = text.strip() if text else ""
     return stripped or None
-
-
-# --- Directories ---
-
-
-def list_directories(session: Session, owner: User) -> list[BlogDirectory]:
-    """Return `owner`'s directories, ordered by name, ignoring case."""
-    stmt = (
-        select(BlogDirectory)
-        .where(BlogDirectory.owner_id == owner.uid)
-        .order_by(func.lower(BlogDirectory.name), BlogDirectory.id)
-    )
-    return list(session.scalars(stmt))
-
-
-def get_directory(
-    session: Session, owner: User, directory_id: uuid.UUID
-) -> BlogDirectory:
-    """Return one of `owner`'s directories.
-
-    Raises:
-        BlogNotFoundError: If it is missing or someone else's.
-    """
-    directory = session.get(BlogDirectory, directory_id)
-    if directory is None or directory.owner_id != owner.uid:
-        raise BlogNotFoundError(str(directory_id))
-    return directory
-
-
-def _require_free_name(
-    session: Session,
-    owner: User,
-    name: str,
-    *,
-    ignore: uuid.UUID | None = None,
-) -> None:
-    existing = session.scalar(
-        select(BlogDirectory).where(
-            BlogDirectory.owner_id == owner.uid, BlogDirectory.name == name
-        ),
-    )
-    if existing is not None and existing.id != ignore:
-        raise DuplicateDirectoryError(name)
-
-
-def create_directory(session: Session, owner: User, name: str) -> BlogDirectory:
-    """Create a directory.
-
-    Raises:
-        DuplicateDirectoryError: If `owner` already has one with this name.
-    """
-    _require_free_name(session, owner, name)
-    directory = BlogDirectory(owner_id=owner.uid, name=name)
-    session.add(directory)
-    session.flush()
-    return directory
-
-
-def rename_directory(
-    session: Session, owner: User, directory_id: uuid.UUID, name: str
-) -> BlogDirectory:
-    """Rename a directory.
-
-    Raises:
-        BlogNotFoundError: If it is missing or someone else's.
-        DuplicateDirectoryError: If `owner` has another one with this name.
-    """
-    directory = get_directory(session, owner, directory_id)
-    _require_free_name(session, owner, name, ignore=directory.id)
-    directory.name = name
-    session.flush()
-    return directory
-
-
-def delete_directory(session: Session, owner: User, directory_id: uuid.UUID) -> None:
-    """Delete a directory. Its sources move to Unfiled.
-
-    Raises:
-        BlogNotFoundError: If it is missing or someone else's.
-    """
-    directory = get_directory(session, owner, directory_id)
-    session.execute(
-        update(BlogSource)
-        .where(BlogSource.directory_id == directory.id)
-        .values(directory_id=None),
-    )
-    session.delete(directory)
-    session.flush()
 
 
 # --- Sources ---
@@ -260,7 +171,7 @@ def register_source(  # noqa: PLR0913
     title: str | None = None,
     remarks: str | None = None,
     preferences: str | None = None,
-    directory_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
 ) -> BlogSource:
     """Resolve a URL and register it as a source.
@@ -272,19 +183,19 @@ def register_source(  # noqa: PLR0913
         title: Defaults to the feed or page title.
         remarks: Free text for the user.
         preferences: What the user wants from this source.
-        directory_id: One of `owner`'s directories; `None` is Unfiled.
+        category_id: One of `owner`'s categories; `None` is Unfiled.
         lookback_days: Collection starts this many days ago. Fixed from now on.
 
     Returns:
         The new source.
 
     Raises:
-        BlogNotFoundError: If the directory is missing or someone else's.
+        CategoryNotFoundError: If the category is missing or someone else's.
         SourceResolutionError: If the URL has nothing to collect.
         DuplicateSourceError: If `owner` already registered the resolved feed.
     """
-    if directory_id is not None:
-        get_directory(session, owner, directory_id)
+    if category_id is not None:
+        get_category(session, owner, category_id)
     resolved = resolve_source(url)
     existing = session.scalar(
         select(BlogSource.id).where(
@@ -297,7 +208,7 @@ def register_source(  # noqa: PLR0913
         raise DuplicateSourceError
     source = BlogSource(
         owner_id=owner.uid,
-        directory_id=directory_id,
+        category_id=category_id,
         url=url,
         feed_url=resolved.feed_url,
         kind=resolved.kind.value,
@@ -320,8 +231,9 @@ def update_source(
     """Edit, pause or move a source. New preferences apply to new posts only.
 
     Raises:
-        BlogNotFoundError: If the source or the directory it moves to is
-            missing or someone else's.
+        BlogNotFoundError: If the source is missing or someone else's.
+        CategoryNotFoundError: If the category it moves to is missing or
+            someone else's.
     """
     source = get_source(session, owner, source_id)
     if "title" in changes:
@@ -332,11 +244,11 @@ def update_source(
         source.preferences = _clean(changes["preferences"])
     if "enabled" in changes:
         source.enabled = changes["enabled"]
-    if "directory_id" in changes:
-        directory_id = changes["directory_id"]
-        if directory_id is not None:
-            get_directory(session, owner, directory_id)
-        source.directory_id = directory_id
+    if "category_id" in changes:
+        category_id = changes["category_id"]
+        if category_id is not None:
+            get_category(session, owner, category_id)
+        source.category_id = category_id
     session.flush()
     return source
 
@@ -425,18 +337,19 @@ def _filtered(
     """Apply filters, refusing anything that is not the caller's.
 
     Raises:
-        InvalidPostQueryError: If the directory and Unfiled are both asked for.
-        BlogNotFoundError: If a directory or source is not the caller's.
+        InvalidPostQueryError: If a category and Unfiled are both asked for.
+        CategoryNotFoundError: If a category is not the caller's.
+        BlogNotFoundError: If a source is not the caller's.
         TagNotFoundError: If a tag is not the caller's.
     """
-    if filters.directory_id is not None and filters.unfiled:
-        msg = "Choose a directory or Unfiled, not both"
+    if filters.category_id is not None and filters.unfiled:
+        msg = "Choose a category or Unfiled, not both"
         raise InvalidPostQueryError(msg)
-    if filters.directory_id is not None:
-        get_directory(session, owner, filters.directory_id)
-        stmt = stmt.where(BlogSource.directory_id == filters.directory_id)
+    if filters.category_id is not None:
+        get_category(session, owner, filters.category_id)
+        stmt = stmt.where(BlogSource.category_id == filters.category_id)
     if filters.unfiled:
-        stmt = stmt.where(BlogSource.directory_id.is_(None))
+        stmt = stmt.where(BlogSource.category_id.is_(None))
     if filters.source_id is not None:
         source = session.get(BlogSource, filters.source_id)
         if source is None or source.owner_id != owner.uid:
@@ -481,7 +394,8 @@ def list_posts(  # noqa: PLR0913
 
     Raises:
         InvalidPostQueryError: On a bad cursor or conflicting filters.
-        BlogNotFoundError: If a filter names someone else's directory or source.
+        CategoryNotFoundError: If a filter names someone else's category.
+        BlogNotFoundError: If a filter names someone else's source.
         TagNotFoundError: If a filter names someone else's tag.
     """
     stmt = (

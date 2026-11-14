@@ -265,8 +265,8 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    blog_directories: Mapped[list[BlogDirectory]] = relationship(
-        "BlogDirectory",
+    categories: Mapped[list[Category]] = relationship(
+        "Category",
         back_populates="owner",
         cascade="all, delete-orphan",
     )
@@ -958,12 +958,16 @@ class ChatThread(Base):
     user: Mapped[User] = relationship("User", back_populates="chat_threads")
 
 
-class BlogDirectory(Base):
-    """A user's folder of blog sources. Directories are a single level."""
+class Category(Base):
+    """A user's single-level folder, shared by blog sources and reading links.
 
-    __tablename__ = "blog_directories"
+    `description` is free text the reading list's model reads to choose a
+    category for a link.
+    """
+
+    __tablename__ = "categories"
     __table_args__ = (
-        UniqueConstraint("owner_id", "name", name="uq_blog_directory_owner_name"),
+        UniqueConstraint("owner_id", "name", name="uq_category_owner_name"),
         {"schema": "assistant"},
     )
 
@@ -978,13 +982,14 @@ class BlogDirectory(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
 
-    owner: Mapped[User] = relationship("User", back_populates="blog_directories")
+    owner: Mapped[User] = relationship("User", back_populates="categories")
 
 
 class BlogSource(Base):
@@ -1020,9 +1025,9 @@ class BlogSource(Base):
         ForeignKey("assistant.users.uid", ondelete="CASCADE"),
         nullable=False,
     )
-    directory_id: Mapped[uuid_module.UUID | None] = mapped_column(
+    category_id: Mapped[uuid_module.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assistant.blog_directories.id", ondelete="SET NULL"),
+        ForeignKey("assistant.categories.id", ondelete="SET NULL"),
         nullable=True,
     )
     # What the user typed, and what it resolved to.
@@ -1053,7 +1058,7 @@ class BlogSource(Base):
     )
 
     owner: Mapped[User] = relationship("User", back_populates="blog_sources")
-    directory: Mapped[BlogDirectory | None] = relationship("BlogDirectory")
+    category: Mapped[Category | None] = relationship("Category")
     posts: Mapped[list[BlogPost]] = relationship(
         "BlogPost",
         back_populates="source",

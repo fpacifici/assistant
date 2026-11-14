@@ -3022,7 +3022,7 @@ ul {
   min-height: 0;
 }
 
-.blog-directories {
+.blog-categories {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3034,20 +3034,20 @@ ul {
   background: var(--surface-muted);
 }
 
-.blog-directories ul {
+.blog-categories ul {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.blog-directories h2 {
+.blog-categories h2 {
   margin: 12px 10px 4px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
 }
 
-.blog-directory-link {
+.blog-category-link {
   display: block;
   padding: 6px 10px;
   border-radius: 4px;
@@ -3056,11 +3056,11 @@ ul {
   overflow-wrap: anywhere;
 }
 
-.blog-directory-link:hover {
+.blog-category-link:hover {
   background: var(--hover);
 }
 
-.blog-directory-link.active {
+.blog-category-link.active {
   background: var(--active);
 }
 
@@ -3297,8 +3297,7 @@ ul {
   gap: 8px;
 }
 
-.source-row,
-.directory-row {
+.source-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3331,12 +3330,6 @@ ul {
   gap: 6px;
 }
 
-.directory-row-name {
-  flex: 1;
-  min-width: 120px;
-  overflow-wrap: anywhere;
-}
-
 .delete-source-actions {
   display: flex;
   flex-direction: column;
@@ -3347,7 +3340,6 @@ ul {
 .blogs-add,
 .post-verdict button,
 .source-row-actions button,
-.directory-row button,
 .source-form-actions button {
   width: auto;
   margin: 0;
@@ -3376,19 +3368,14 @@ ul {
   font-size: 14px;
 }
 
-.directory-row .create-form {
-  flex: 1;
-  margin: 0;
-}
-
-[data-layout="mobile"] .blog-directories {
+[data-layout="mobile"] .blog-categories {
   width: auto;
   flex: 1;
   border-right: none;
   background: transparent;
 }
 
-[data-layout="mobile"] .blog-directory-link {
+[data-layout="mobile"] .blog-category-link {
   display: flex;
   align-items: center;
   min-height: 48px;
@@ -3420,8 +3407,7 @@ ul {
   font-size: 16px; /* >= 16px stops iOS zooming into the field */
 }
 
-[data-layout="mobile"] .source-row-actions button,
-[data-layout="mobile"] .directory-row button {
+[data-layout="mobile"] .source-row-actions button {
   min-height: 44px;
 }
 
@@ -3644,4 +3630,109 @@ ul {
   font-size: 13px;
   font-style: italic;
   color: var(--text-muted);
+}
+
+/* --- Categories --- */
+
+.blogs-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.modal.manage-categories {
+  width: 520px;
+}
+
+.category-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.category-form input,
+.category-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.category-form-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.category-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.category-form-actions button,
+.category-row-actions button {
+  width: auto;
+  margin: 0;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.category-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.category-row.editing {
+  display: block;
+}
+
+.category-row-info {
+  flex: 1;
+  min-width: 160px;
+  overflow-wrap: anywhere;
+}
+
+.category-row-name {
+  font-weight: 600;
+}
+
+.category-row-description {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.category-row-description.missing {
+  font-style: italic;
+  color: var(--warning, var(--text-faint));
+}
+
+.category-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+[data-layout="mobile"] .category-form input,
+[data-layout="mobile"] .category-form textarea {
+  font-size: 16px; /* >= 16px stops iOS zooming into the field */
+}
+
+[data-layout="mobile"] .category-row-actions button,
+[data-layout="mobile"] .category-form-actions button {
+  min-height: 44px;
 }

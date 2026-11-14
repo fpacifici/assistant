@@ -1,4 +1,4 @@
-"""Tests for the blog directory and source endpoints.
+"""Tests for the blog source endpoints.
 
 An error response rolls the test session back, users included, so a test that
 goes on after one commits first (to the test's savepoint).
@@ -51,8 +51,8 @@ def _make_source(client: TestClient, headers: Headers, **fields: object) -> dict
     return response.json()
 
 
-def _make_directory(client: TestClient, headers: Headers, name: str = "Tech") -> dict:
-    response = client.post("/blog/directory", json={"name": name}, headers=headers)
+def _make_category(client: TestClient, headers: Headers, name: str = "Tech") -> dict:
+    response = client.post("/category", json={"name": name}, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -74,81 +74,6 @@ def _add_post(
     session.add(post)
     session.flush()
     return post
-
-
-# --- Directories ---
-
-
-def test_create_and_list_directories(client: TestClient, auth_headers: Headers) -> None:
-    _make_directory(client, auth_headers, "zebra")
-    _make_directory(client, auth_headers, "Apple")
-    listed = client.get("/blog/directory", headers=auth_headers).json()
-    assert [d["name"] for d in listed] == ["Apple", "zebra"]
-
-
-def test_directory_name_is_unique_per_user(
-    client: TestClient,
-    auth_headers: Headers,
-    other_auth_headers: Headers,
-    db_session: Session,
-) -> None:
-    _make_directory(client, auth_headers)
-    db_session.commit()
-    again = client.post("/blog/directory", json={"name": "Tech"}, headers=auth_headers)
-    assert again.status_code == 409
-    _make_directory(client, other_auth_headers)
-
-
-def test_blank_directory_name_is_refused(
-    client: TestClient, auth_headers: Headers
-) -> None:
-    response = client.post("/blog/directory", json={"name": "  "}, headers=auth_headers)
-    assert response.status_code == 422
-
-
-def test_rename_directory(
-    client: TestClient, auth_headers: Headers, db_session: Session
-) -> None:
-    first = _make_directory(client, auth_headers, "One")
-    _make_directory(client, auth_headers, "Two")
-    db_session.commit()
-    url = f"/blog/directory/{first['id']}"
-    assert (
-        client.patch(url, json={"name": "Two"}, headers=auth_headers).status_code == 409
-    )
-    assert (
-        client.patch(url, json={"name": "One"}, headers=auth_headers).status_code == 200
-    )
-    renamed = client.patch(url, json={"name": "Three"}, headers=auth_headers)
-    assert renamed.json()["name"] == "Three"
-
-
-def test_deleting_a_directory_moves_sources_to_unfiled(
-    client: TestClient, auth_headers: Headers
-) -> None:
-    directory = _make_directory(client, auth_headers)
-    source = _make_source(client, auth_headers, directory_id=directory["id"])
-    response = client.delete(f"/blog/directory/{directory['id']}", headers=auth_headers)
-    assert response.status_code == 204
-    read = client.get(f"/blog/source/{source['id']}", headers=auth_headers)
-    assert read.json()["directory_id"] is None
-
-
-def test_another_users_directory_is_not_found(
-    client: TestClient,
-    auth_headers: Headers,
-    other_auth_headers: Headers,
-    db_session: Session,
-) -> None:
-    directory = _make_directory(client, auth_headers)
-    db_session.commit()
-    url = f"/blog/directory/{directory['id']}"
-    assert (
-        client.patch(url, json={"name": "x"}, headers=other_auth_headers).status_code
-        == 404
-    )
-    assert client.delete(url, headers=other_auth_headers).status_code == 404
-    assert client.get("/blog/directory", headers=other_auth_headers).json() == []
 
 
 # --- Registering sources ---
@@ -174,20 +99,20 @@ def test_register_uses_resolved_values_and_defaults(
 def test_register_keeps_the_users_fields(
     client: TestClient, auth_headers: Headers
 ) -> None:
-    directory = _make_directory(client, auth_headers)
+    category = _make_category(client, auth_headers)
     source = _make_source(
         client,
         auth_headers,
         title="Mine",
         remarks="a note",
         preferences="only databases",
-        directory_id=directory["id"],
+        category_id=category["id"],
         lookback_days=0,
     )
     assert source["title"] == "Mine"
     assert source["remarks"] == "a note"
     assert source["preferences"] == "only databases"
-    assert source["directory_id"] == directory["id"]
+    assert source["category_id"] == category["id"]
 
 
 def test_blank_preferences_count_as_none(
@@ -235,13 +160,13 @@ def test_two_users_can_register_the_same_feed(
     assert first["id"] != second["id"]
 
 
-def test_register_into_another_users_directory_is_not_found(
+def test_register_into_another_users_category_is_not_found(
     client: TestClient, auth_headers: Headers, other_auth_headers: Headers
 ) -> None:
-    directory = _make_directory(client, auth_headers)
+    category = _make_category(client, auth_headers)
     response = client.post(
         "/blog/source",
-        json={"url": "https://x.example", "directory_id": directory["id"]},
+        json={"url": "https://x.example", "category_id": category["id"]},
         headers=other_auth_headers,
     )
     assert response.status_code == 404
@@ -251,7 +176,7 @@ def test_register_into_another_users_directory_is_not_found(
 
 
 def test_edit_pause_and_move(client: TestClient, auth_headers: Headers) -> None:
-    directory = _make_directory(client, auth_headers)
+    category = _make_category(client, auth_headers)
     source = _make_source(client, auth_headers, preferences="old", remarks="keep")
     url = f"/blog/source/{source['id']}"
     edited = client.patch(
@@ -260,18 +185,18 @@ def test_edit_pause_and_move(client: TestClient, auth_headers: Headers) -> None:
             "title": "New",
             "preferences": "new",
             "enabled": False,
-            "directory_id": directory["id"],
+            "category_id": category["id"],
         },
         headers=auth_headers,
     ).json()
     assert edited["title"] == "New"
     assert edited["preferences"] == "new"
     assert edited["enabled"] is False
-    assert edited["directory_id"] == directory["id"]
+    assert edited["category_id"] == category["id"]
     assert edited["remarks"] == "keep"
 
-    moved = client.patch(url, json={"directory_id": None}, headers=auth_headers).json()
-    assert moved["directory_id"] is None
+    moved = client.patch(url, json={"category_id": None}, headers=auth_headers).json()
+    assert moved["category_id"] is None
     assert moved["title"] == "New"
 
 
@@ -313,14 +238,14 @@ def test_another_users_source_is_not_found(
     assert client.get("/blog/source", headers=other_auth_headers).json() == []
 
 
-def test_cannot_move_into_another_users_directory(
+def test_cannot_move_into_another_users_category(
     client: TestClient, auth_headers: Headers, other_auth_headers: Headers
 ) -> None:
     source = _make_source(client, auth_headers)
-    directory = _make_directory(client, other_auth_headers)
+    category = _make_category(client, other_auth_headers)
     response = client.patch(
         f"/blog/source/{source['id']}",
-        json={"directory_id": directory["id"]},
+        json={"category_id": category["id"]},
         headers=auth_headers,
     )
     assert response.status_code == 404
@@ -328,7 +253,6 @@ def test_cannot_move_into_another_users_directory(
 
 def test_requires_authentication(client: TestClient) -> None:
     assert client.get("/blog/source").status_code == 401
-    assert client.get("/blog/directory").status_code == 401
 
 
 # --- Deleting sources ---
@@ -417,7 +341,7 @@ def test_deleting_a_user_deletes_their_blogs(
     test_user: User,
 ) -> None:
     source = _make_source(client, auth_headers)
-    _make_directory(client, auth_headers)
+    _make_category(client, auth_headers)
     _add_post(db_session, source["id"], "a")
     delete_user(db_session, test_user.uid)
     assert db_session.query(BlogSource).count() == 0

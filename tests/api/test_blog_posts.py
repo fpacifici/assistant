@@ -13,13 +13,13 @@ from assistant.blogs.chunking import PostChunk
 from assistant.blogs.service import MAX_BULK_POSTS
 from assistant.blogs.store import post_chunk_embedding, replace_post_chunks
 from assistant.models.schema import (
-    BlogDirectory,
     BlogEmbedStatus,
     BlogPost,
     BlogPostState,
     BlogPostStatus,
     BlogSource,
     BlogSourceKind,
+    Category,
     Tag,
     User,
 )
@@ -67,12 +67,12 @@ def _source(
     session: Session,
     owner: User,
     *,
-    directory: BlogDirectory | None = None,
+    category: Category | None = None,
     **fields: object,
 ) -> BlogSource:
     source = BlogSource(
         owner_id=owner.uid,
-        directory_id=directory.id if directory else None,
+        category_id=category.id if category else None,
         url="https://blog.example.com",
         feed_url=f"https://blog.example.com/{uuid.uuid4()}.xml",
         kind=BlogSourceKind.FEED.value,
@@ -261,28 +261,28 @@ def test_two_users_collect_separately(  # noqa: PLR0913
 # --- Filters ---
 
 
-def test_filter_by_directory_and_unfiled(
+def test_filter_by_category_and_unfiled(
     pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
 ) -> None:
-    directory = BlogDirectory(owner_id=owner.uid, name="Tech")
-    pg_session.add(directory)
+    category = Category(owner_id=owner.uid, name="Tech")
+    pg_session.add(category)
     pg_session.flush()
-    filed = _post(pg_session, _source(pg_session, owner, directory=directory))
+    filed = _post(pg_session, _source(pg_session, owner, category=category))
     unfiled = _post(pg_session, _source(pg_session, owner))
 
-    assert _ids(pg_client, headers, directory_id=directory.id) == [str(filed.id)]
+    assert _ids(pg_client, headers, category_id=category.id) == [str(filed.id)]
     assert _ids(pg_client, headers, unfiled=True) == [str(unfiled.id)]
 
 
-def test_directory_filter_applies_to_new(
+def test_category_filter_applies_to_new(
     pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
 ) -> None:
-    directory = BlogDirectory(owner_id=owner.uid, name="Tech")
-    pg_session.add(directory)
+    category = Category(owner_id=owner.uid, name="Tech")
+    pg_session.add(category)
     pg_session.flush()
-    filed = _post(pg_session, _source(pg_session, owner, directory=directory))
+    filed = _post(pg_session, _source(pg_session, owner, category=category))
     _post(pg_session, _source(pg_session, owner))
-    assert _ids(pg_client, headers, view="new", directory_id=directory.id) == [
+    assert _ids(pg_client, headers, view="new", category_id=category.id) == [
         str(filed.id)
     ]
 
@@ -317,15 +317,15 @@ def test_archived_useful_posts_show_their_source_name(
     assert card["source_title"] == "Blog"
 
 
-def test_directory_and_unfiled_together_are_refused(
+def test_category_and_unfiled_together_are_refused(
     pg_client: TestClient, pg_session: Session, owner: User, headers: Headers
 ) -> None:
-    directory = BlogDirectory(owner_id=owner.uid, name="Tech")
-    pg_session.add(directory)
+    category = Category(owner_id=owner.uid, name="Tech")
+    pg_session.add(category)
     pg_session.flush()
     response = pg_client.get(
         "/blog/post",
-        params={"directory_id": directory.id, "unfiled": True},
+        params={"category_id": category.id, "unfiled": True},
         headers=headers,
     )
     assert response.status_code == 422
@@ -338,14 +338,14 @@ def test_someone_elses_filters_are_not_found(
     stranger: User,
     stranger_headers: Headers,
 ) -> None:
-    directory = BlogDirectory(owner_id=owner.uid, name="Tech")
-    pg_session.add(directory)
+    category = Category(owner_id=owner.uid, name="Tech")
+    pg_session.add(category)
     source = _source(pg_session, owner)
     tag, _ = find_or_create_tag(pg_session, owner, "mine")
     pg_session.flush()
     assert stranger.uid != owner.uid
     for params in (
-        {"directory_id": directory.id},
+        {"category_id": category.id},
         {"source_id": source.id},
         {"tag": tag.id},
     ):

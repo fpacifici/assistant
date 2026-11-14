@@ -5,7 +5,8 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createSource, fetchDirectories, updateSource } from '../../api/blogs';
+import { createSource, updateSource } from '../../api/blogs';
+import { CATEGORIES_KEY, fetchCategories } from '../../api/categories';
 import type { BlogSource } from '../../types';
 
 const DEFAULT_LOOKBACK_DAYS = 7;
@@ -22,17 +23,17 @@ export default function SourceForm({ source, onDone, onCancel }: SourceFormProps
   const [title, setTitle] = useState(source?.title ?? '');
   const [remarks, setRemarks] = useState(source?.remarks ?? '');
   const [preferences, setPreferences] = useState(source?.preferences ?? '');
-  const [directoryId, setDirectoryId] = useState(source?.directory_id ?? '');
+  const [categoryId, setCategoryId] = useState(source?.category_id ?? '');
   const [lookbackDays, setLookbackDays] = useState(DEFAULT_LOOKBACK_DAYS);
 
-  const { data: directories = [] } = useQuery({
-    queryKey: ['blogs', 'directories'],
-    queryFn: fetchDirectories,
+  const { data: categories = [] } = useQuery({
+    queryKey: [...CATEGORIES_KEY],
+    queryFn: fetchCategories,
   });
 
   const save = useMutation({
     mutationFn: () => {
-      const shared = { remarks, preferences, directory_id: directoryId || null };
+      const shared = { remarks, preferences, category_id: categoryId || null };
       if (source) return updateSource(source.id, { ...shared, title });
       return createSource({
         ...shared,
@@ -78,12 +79,12 @@ export default function SourceForm({ source, onDone, onCancel }: SourceFormProps
         />
       </label>
       <label>
-        Directory
-        <select value={directoryId} onChange={(e) => setDirectoryId(e.target.value)}>
+        Category
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">Unfiled</option>
-          {directories.map((directory) => (
-            <option key={directory.id} value={directory.id}>
-              {directory.name}
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
             </option>
           ))}
         </select>
