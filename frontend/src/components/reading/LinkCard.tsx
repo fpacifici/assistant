@@ -45,6 +45,13 @@ function Status({ link }: { link: ReadingLink }) {
       return <span className="link-status failed">Analysis failed</span>;
     case 'not_summarizable':
       return <span className="link-status">No summary</span>;
+    case 'refused':
+      // The site would not let the server read it (a bot check, mostly).
+      return (
+        <span className="link-status refused" title={link.last_error ?? undefined}>
+          Blocked by site
+        </span>
+      );
     default:
       return null;
   }
@@ -53,10 +60,12 @@ function Status({ link }: { link: ReadingLink }) {
 function Summary({ link }: { link: ReadingLink }) {
   if (link.summary) return <p className="post-card-summary">{link.summary}</p>;
   if (link.analysis_status === 'pending') return null;
+  const reasons: Partial<Record<ReadingLink['analysis_status'], string>> = {
+    failed: `Could not analyze this link${link.last_error ? `: ${link.last_error}` : ''}.`,
+    refused: `${link.last_error ?? 'The site refused to be read'}, so it was filed from its address only. Open it to read it.`,
+  };
   const reason =
-    link.analysis_status === 'failed'
-      ? `Could not analyze this link${link.last_error ? `: ${link.last_error}` : ''}.`
-      : 'Not summarized: filed from its title and address.';
+    reasons[link.analysis_status] ?? 'Not summarized: filed from its title and address.';
   return <p className="post-card-summary unavailable">{reason}</p>;
 }
 

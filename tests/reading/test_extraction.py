@@ -144,8 +144,21 @@ def test_errors_worth_retrying_raise(status: int) -> None:
 @pytest.mark.parametrize("status", [401, 403, 404, 410, 451])
 def test_a_refused_link_is_a_web_page_with_nothing_to_read(status: int) -> None:
     assert extract_link(ARTICLE, FakeFetcher({ARTICLE: status})) == ExtractedLink(
-        ReadingLinkType.WEB
+        ReadingLinkType.WEB, refusal=f"The site answered HTTP {status}"
     )
+
+
+def test_a_bot_check_is_named_in_the_refusal() -> None:
+    def fetcher(url: str, **_: object) -> FetchResult:
+        return FetchResult(
+            url=url,
+            status=403,
+            content=b"<title>Just a moment...</title><script src="
+            b'"https://challenges.cloudflare.com/x.js"></script>',
+        )
+
+    refusal = extract_link(ARTICLE, fetcher).refusal
+    assert refusal == "The site blocks automated reading"
 
 
 @pytest.mark.parametrize("status", [403, 503])

@@ -165,6 +165,8 @@ class ReadingAnalysisStatus(str, Enum):
     PENDING = "pending"
     DONE = "done"
     NOT_SUMMARIZABLE = "not_summarizable"
+    # The site refused the request: categorized from the URL, not retried.
+    REFUSED = "refused"
     FAILED = "failed"
 
 

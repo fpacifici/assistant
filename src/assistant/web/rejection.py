@@ -37,6 +37,8 @@ DIAGNOSTIC_HEADERS = (
     "www-authenticate",
 )
 MAX_VALUE_CHARS = 200
+# `rejection.blocker` when nothing in the response names a protection.
+NO_BLOCKER = "none_detected"
 # Enough to find a <title> in the head of a challenge page.
 _TITLE_SCAN_BYTES = 64 * 1024
 _TITLE = re.compile(rb"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
@@ -83,7 +85,7 @@ def _blocker(result: FetchResult, title: str | None) -> str:
         ("x-iinfo" in headers, "imperva"),
         (challenge_title, "unknown_challenge"),
     )
-    return next((name for matched, name in signs if matched), "none_detected")
+    return next((name for matched, name in signs if matched), NO_BLOCKER)
 
 
 def describe_rejection(result: FetchResult) -> dict[str, str | int]:
