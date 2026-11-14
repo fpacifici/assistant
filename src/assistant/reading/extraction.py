@@ -31,6 +31,7 @@ from pypdf.errors import PyPdfError
 from assistant.models.schema import ReadingLinkType
 from assistant.web.fetch import FetchError, FetchResult, fetch
 from assistant.web.pages import extract_page
+from assistant.web.rejection import describe_rejection, summarize_rejection
 
 logger = logging.getLogger(__name__)
 
@@ -244,8 +245,16 @@ def extract_link(url: str, fetcher: Fetcher = fetch) -> ExtractedLink:
     if is_youtube(url):
         return _youtube(url, fetcher)
     result = fetcher(url, max_bytes=MAX_LINK_BYTES, timeout=FETCH_TIMEOUT_SECONDS)
+    if not result.ok:
+        # Why the site said no: bot protection, mostly. Logs only.
+        details = describe_rejection(result)
+        logger.warning(
+            "Reading link rejected: %s (%s)",
+            url,
+            summarize_rejection(details),
+            extra=details,
+        )
     if _refused(result.status):
-        logger.info("Reading link refused with HTTP %s: %s", result.status, url)
         return ExtractedLink(_type_from_url(url))
     result.raise_for_status()
     link_type = _link_type(result)

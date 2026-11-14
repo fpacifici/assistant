@@ -89,6 +89,17 @@ the 403 of a bot challenge), would refuse it again: the link is not retried,
 but categorized from its URL alone and `not_summarizable`, typed `pdf` when
 the path ends in `.pdf` and `web` otherwise.
 
+Every error status is logged as a warning with why the site said no
+(`web/rejection.py`): `rejection.blocker` names the bot protection that
+answered when the response gives it away (`cloudflare_challenge`,
+`cloudflare_block`, `datadome`, `aws_waf`, `akamai`, `imperva`,
+`unknown_challenge`, or `none_detected`), with `rejection.title` (the page
+title), `http.status`, `http.url` and a fixed list of headers (`server`,
+`cf-ray`, `cf-mitigated`, `retry-after`, ...; never cookies) as
+`http.header.<name>`. They are log attributes, searchable in Sentry Logs.
+Values come from the response, so they are cut at 200 characters and never
+shown to the user.
+
 An encrypted PDF that needs a password, or one `pypdf` can't parse, is an
 `ExtractionError`. A PDF locked only against editing opens with an empty
 password.

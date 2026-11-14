@@ -289,6 +289,11 @@ def test_content_type_is_returned(
     assert result.media_type == media_type
 
 
+def test_headers_are_kept_lowercased(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
+    http.return_value = _response(403, headers={"CF-Mitigated": "challenge"})
+    assert fetch("https://example.com/").headers == {"cf-mitigated": "challenge"}
+
+
 def test_a_slow_drip_hits_the_total_deadline(dns: MagicMock, http: MagicMock) -> None:  # noqa: ARG001
     response = _response()
     response.iter_content.return_value = iter(lambda: b"x", None)

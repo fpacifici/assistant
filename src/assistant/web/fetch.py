@@ -20,7 +20,7 @@ from __future__ import annotations
 import ipaddress
 import socket
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
@@ -28,6 +28,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from typing import Any
 
 MAX_REDIRECTS = 5
@@ -65,6 +66,8 @@ class FetchResult:
         etag: The `ETag` header, if any.
         last_modified: The `Last-Modified` header, if any.
         content_type: The `Content-Type` header, if any, as sent.
+        headers: Every response header, names lowercased. For diagnosing a
+            rejection: never shown to a user.
     """
 
     url: str
@@ -73,6 +76,7 @@ class FetchResult:
     etag: str | None = None
     last_modified: str | None = None
     content_type: str | None = None
+    headers: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def media_type(self) -> str | None:
@@ -328,6 +332,7 @@ def fetch(
                 etag=response.headers.get("ETag"),
                 last_modified=response.headers.get("Last-Modified"),
                 content_type=response.headers.get("Content-Type"),
+                headers={k.lower(): v for k, v in response.headers.items()},
             )
         current = urljoin(current, location)
     msg = "Too many redirects"
