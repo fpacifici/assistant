@@ -3888,6 +3888,14 @@ ul {
   color: var(--danger);
 }
 
+/* Filed, but the site would not be read: the user can still open it. */
+.link-status.refused {
+  border: 1px solid var(--warning);
+  background: transparent;
+  color: var(--warning);
+  cursor: help;
+}
+
 .link-fields {
   display: flex;
   flex-wrap: wrap;

@@ -285,6 +285,20 @@ def test_too_little_text_is_filed_without_a_summary(
     assert "<document>" not in _prompts(structured)[1]
 
 
+def test_a_link_refused_before_is_cleared_when_it_is_read(
+    db_session_factory: Callable[[], AbstractContextManager[Session]],
+    db_session: Session,
+    link: ReadingLink,
+) -> None:
+    link.last_error = "The site blocks automated reading"
+    db_session.commit()
+    extract = FakeExtract(ExtractedLink(ReadingLinkType.WEB, text=TEXT))
+    processor, _ = _processor(db_session_factory, extract)
+    assert processor.process(link.id) is Outcome.DONE
+    db_session.refresh(link)
+    assert link.last_error is None
+
+
 def test_youtube_is_categorized_only(
     db_session_factory: Callable[[], AbstractContextManager[Session]],
     db_session: Session,
@@ -438,15 +452,18 @@ def test_a_refused_link_is_filed_from_its_url_without_retries(
     link: ReadingLink,
     category: Category,
 ) -> None:
-    extract = FakeExtract(ExtractedLink(ReadingLinkType.WEB))
+    extract = FakeExtract(
+        ExtractedLink(ReadingLinkType.WEB, refusal="The site blocks automated reading")
+    )
     processor, structured = _processor(
         db_session_factory,
         extract,
         LinkAnalysis(title="Scaling git", category_id="c1", summary="Invented."),
     )
-    assert processor.process(link.id) is Outcome.NOT_SUMMARIZABLE
+    assert processor.process(link.id) is Outcome.REFUSED
     db_session.refresh(link)
-    assert link.analysis_status == ReadingAnalysisStatus.NOT_SUMMARIZABLE.value
+    assert link.analysis_status == ReadingAnalysisStatus.REFUSED.value
+    assert link.last_error == "The site blocks automated reading"
     assert link.attempts == 0
     assert link.category_id == category.id
     assert link.summary is None

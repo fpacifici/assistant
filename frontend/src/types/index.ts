@@ -215,7 +215,7 @@ export interface PostPage {
 export type LinkState = 'to_read' | 'discarded' | 'promoted';
 export type LinkType = 'web' | 'pdf' | 'text' | 'youtube' | 'other';
 /** `pending` while the AI analyzes the link. */
-export type AnalysisStatus = 'pending' | 'done' | 'not_summarizable' | 'failed';
+export type AnalysisStatus = 'pending' | 'done' | 'not_summarizable' | 'refused' | 'failed';
 
 export interface ReadingLink {
   id: string;

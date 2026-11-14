@@ -97,6 +97,26 @@ describe('content', () => {
     expect(screen.getByText(/HTTP 403/)).toBeInTheDocument();
   });
 
+  it('marks a link the site refused, with why', () => {
+    render(
+      readingLink({
+        summary: null,
+        analysis_status: 'refused',
+        last_error: 'The site blocks automated reading',
+      }),
+    );
+    expect(screen.getByText('Blocked by site')).toHaveAttribute(
+      'title',
+      'The site blocks automated reading',
+    );
+    expect(
+      screen.getByText(
+        'The site blocks automated reading, so it was filed from its address only. Open it to read it.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry analysis' })).toBeInTheDocument();
+  });
+
   it('never makes a link of an unsafe URL', () => {
     render(readingLink({ url: 'javascript:alert(1)', title: 'Bad' }));
     expect(screen.queryByRole('link', { name: 'Bad' })).not.toBeInTheDocument();

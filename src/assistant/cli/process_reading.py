@@ -109,11 +109,13 @@ def main(argv: list[str] | None = None) -> int:
         session_factory, analyzer, user_id=args.user_id, link_id=args.link_id
     )
     logger.info(
-        "Analyzed %d links: %d summarized, %d not summarizable, %d failed, "
+        "Analyzed %d links: %d summarized, %d not summarizable, %d refused by "
+        "the site, %d failed, "
         "%d still pending, %d skipped",
         sum(outcomes.values()),
         outcomes[Outcome.DONE],
         outcomes[Outcome.NOT_SUMMARIZABLE],
+        outcomes[Outcome.REFUSED],
         outcomes[Outcome.FAILED],
         outcomes[Outcome.RETRY],
         outcomes[Outcome.SKIPPED],

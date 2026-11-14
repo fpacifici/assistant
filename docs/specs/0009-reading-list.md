@@ -69,7 +69,8 @@ appears at once, marked as being analyzed, and fills in when it is done.
 |---|---|
 | `pending` | waiting for or under analysis |
 | `done` | categorized and summarized |
-| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types, a site that refuses the request, or a document with too little text: under 200 characters) |
+| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types, or a document with too little text: under 200 characters) |
+| `refused` | the site refused the request: categorized from the URL only, no summary, not retried. The card marks it **Blocked by site** and says why |
 | `failed` | could not be fetched or analyzed after 3 attempts: no summary, Unfiled unless the user chose a category |
 
 - The type is decided before any fetch for YouTube (by host:
@@ -88,7 +89,9 @@ appears at once, marked as being analyzed, and fills in when it is done.
 - **A site that refuses the request** (an HTTP 4xx such as the 403 of a bot
   challenge, other than a timeout or rate limit) is not retried: the link is
   categorized from its URL only, as a web page (a PDF when the URL ends in
-  `.pdf`), and not summarized.
+  `.pdf`), and not summarized: it is `refused`, with the reason: "The site
+  blocks automated reading" when it answered with a bot check, "The site
+  answered HTTP <status>" otherwise.
 - The model only chooses among the user's existing categories, by name and
   description, or none (Unfiled). It never creates a category.
 - Text is untrusted: the model call has no tools and only returns
