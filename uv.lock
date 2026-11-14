@@ -6,12 +6,6 @@ resolution-markers = [
     "python_full_version < '3.14'",
 ]
 
-[manifest]
-members = [
-    "assistant",
-    "assistant-rust",
-]
-
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
@@ -195,7 +189,6 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "argon2-cffi" },
-    { name = "assistant-rust" },
     { name = "beautifulsoup4" },
     { name = "defusedxml" },
     { name = "email-validator" },
@@ -242,7 +235,6 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "argon2-cffi", specifier = ">=23.1.0" },
-    { name = "assistant-rust", editable = "rust" },
     { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.7.5" },
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "defusedxml", specifier = ">=0.7.1" },
@@ -281,11 +273,6 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
 ]
 provides-extras = ["dev"]
-
-[[package]]
-name = "assistant-rust"
-version = "0.1.0"
-source = { editable = "rust" }
 
 [[package]]
 name = "asyncpg"

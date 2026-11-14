@@ -21,11 +21,12 @@ uv pip install -e ".[dev]"
 pre-commit install
 ```
 
-## Rust toolchain
+## Go toolchain
 
-`uv sync` compiles the Rust extension, so it needs
-[rustup](https://rustup.rs). rustup installs the pinned version from
-`rust/rust-toolchain.toml` on first use.
+`make go-build` compiles the Go shared library into `src/assistant/golib/`, so
+it needs [Go](https://go.dev/dl/) at the version in `go/go.mod` and a C
+compiler for cgo (Xcode command line tools on macOS, `gcc` on Linux).
+`make test`, `make server` and `make dev` build it first.
 
 ## Code quality checks
 

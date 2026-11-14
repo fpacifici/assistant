@@ -41,14 +41,14 @@ repos:
         files: ^src/
         pass_filenames: false
 
-  # Rust formatting and static checks
+  # Go formatting and static checks
   - repo: local
     hooks:
-      - id: rust-lint
-        name: rust-lint
-        entry: make rust-lint
+      - id: go-lint
+        name: go-lint
+        entry: make go-lint
         language: system
-        files: ^rust/
+        files: ^go/
         pass_filenames: false
 
   # Check for common security issues

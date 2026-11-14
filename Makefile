@@ -1,4 +1,4 @@
-.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server rust-build rust-lint rust-test rust-check frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
+.PHONY: help install-uv setup sync install test typecheck lint format check clean pre-commit-install pre-commit-run services-up services-down server docker-build docker-server go-build go-lint go-test go-check frontend-install frontend-dev frontend-build frontend-lint frontend-test frontend-check docker-build-frontend docker-frontend dev dev-stop db-migrate db-rollback reindex-search reindex-vectors process-blogs
 
 # Default target
 help:
@@ -11,11 +11,11 @@ help:
 	@echo "  make typecheck           - Run mypy type checker"
 	@echo "  make lint                - Run ruff linter"
 	@echo "  make format              - Format code with ruff"
-	@echo "  make check               - Run all checks (typecheck, lint, rust-check, test)"
-	@echo "  make rust-build          - Build the Rust extension into the virtual environment"
-	@echo "  make rust-lint           - Check Rust code with rustfmt and clippy"
-	@echo "  make rust-test           - Run the Rust tests"
-	@echo "  make rust-check          - Run all Rust checks (lint, test)"
+	@echo "  make check               - Run all checks (typecheck, lint, go-check, test)"
+	@echo "  make go-build            - Build the Go shared library into src/assistant/golib"
+	@echo "  make go-lint             - Check Go code with gofmt and go vet"
+	@echo "  make go-test             - Run the Go tests"
+	@echo "  make go-check            - Run all Go checks (lint, test)"
 	@echo "  make pre-commit-install  - Install pre-commit hooks"
 	@echo "  make pre-commit-run      - Run pre-commit on all files"
 	@echo "  make services-up         - Ensure Docker Compose services (e.g. Postgres) are running; no-op if already up"
@@ -65,28 +65,35 @@ install:
 	@uv pip install -e ".[dev]"
 	@echo "✅ Package installed"
 
-# Build the Rust extension into .venv. uv rebuilds it only when its sources change.
-rust-build:
-	@echo "Building Rust extension..."
-	@uv sync --all-extras --inexact --quiet
+# The Go shared library, loaded by src/assistant/golib with ctypes. It is named
+# .so on every platform: dlopen does not care, and Python finds it by one name.
+GO_LIB := src/assistant/golib/libassistant_go.so
+GO_SOURCES := $(shell find go -name '*.go' -not -name '*_test.go') go/go.mod $(wildcard go/go.sum)
 
-# Check Rust code with rustfmt and clippy
-rust-lint:
-	@echo "Linting Rust code..."
-	@cd rust && cargo fmt --check
-	@cd rust && cargo clippy --all-targets -- -D warnings
+$(GO_LIB): $(GO_SOURCES)
+	@echo "Building Go library..."
+	@cd go && CGO_ENABLED=1 go build -trimpath -buildmode=c-shared -o ../$(GO_LIB) ./bindings
 
-# Run the Rust tests
-rust-test:
-	@echo "Running Rust tests..."
-	@cd rust && cargo test
+# Build the Go library. make rebuilds it only when its sources change.
+go-build: $(GO_LIB)
 
-# Run all Rust checks
-rust-check: rust-lint rust-test
-	@echo "✅ Rust checks passed"
+# Check Go code with gofmt and go vet
+go-lint:
+	@echo "Linting Go code..."
+	@test -z "$$(gofmt -l go)" || { gofmt -l go; echo "❌ Run gofmt -w go"; exit 1; }
+	@cd go && go vet ./...
+
+# Run the Go tests
+go-test:
+	@echo "Running Go tests..."
+	@cd go && go test ./...
+
+# Run all Go checks
+go-check: go-lint go-test
+	@echo "✅ Go checks passed"
 
 # Run all tests
-test: rust-build
+test: go-build
 	@echo "Running tests..."
 	pytest tests
 
@@ -108,7 +115,7 @@ format:
 	@echo "✅ Code formatted"
 
 # Run all checks
-check: typecheck lint rust-check test
+check: typecheck lint go-check test
 	@echo "✅ All checks passed"
 
 # Install pre-commit hooks (uses project .venv)
@@ -174,13 +181,13 @@ clean:
 	@rm -rf .ruff_cache/
 	@rm -rf htmlcov/
 	@rm -rf .coverage
-	@rm -rf rust/target/
+	@rm -f src/assistant/golib/libassistant_go.so src/assistant/golib/libassistant_go.h
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete
 	@echo "✅ Cleanup complete"
 
 # Start the FastAPI API server
-server: rust-build
+server: go-build
 	@echo "Starting API server on http://localhost:8000 ..."
 	@.venv/bin/python -m assistant.cli.api_server
 
@@ -254,7 +261,7 @@ frontend-check: frontend-lint frontend-test
 	@echo "✅ Frontend checks passed"
 
 # Start both backend and frontend dev servers
-dev: rust-build
+dev: go-build
 	@echo "Starting backend and frontend..."
 	@.venv/bin/python -m assistant.cli.api_server & cd frontend && npm run dev
 
@@ -266,7 +273,7 @@ dev-stop:
 	@echo "Dev servers stopped"
 
 # Quick development setup (run once)
-dev-setup: setup install pre-commit-install frontend-install
+dev-setup: setup install go-build pre-commit-install frontend-install
 	@echo ""
 	@echo "✅ Development environment ready!"
 	@echo ""

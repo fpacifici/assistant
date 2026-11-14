@@ -1,4 +1,4 @@
-"""Schemas for the Rust-backed endpoints."""
+"""Schemas for the Go-backed endpoints."""
 
 from __future__ import annotations
 

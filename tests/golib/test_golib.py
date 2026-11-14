@@ -1,16 +1,18 @@
-"""Tests for calling the real Rust extension."""
+"""Tests for calling the real Go library."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from assistant_rust import greet
+
+from assistant.golib import GoLibraryError, greet
+from assistant.golib._library import call_string
 
 # --- Round trip ---
 
 
-def test_greet_returns_the_rust_result() -> None:
+def test_greet_returns_the_go_result() -> None:
     assert greet("Ada") == "Hello, Ada!"
 
 
@@ -28,9 +30,24 @@ def test_concurrent_calls() -> None:
     assert greetings == [f"Hello, {name}!" for name in names]
 
 
+def test_many_calls_do_not_leak_or_crash() -> None:
+    for i in range(10_000):
+        assert greet(str(i)) == f"Hello, {i}!"
+
+
 # --- Errors ---
 
 
-def test_rust_errors_are_raised() -> None:
+def test_go_errors_are_raised() -> None:
+    with pytest.raises(GoLibraryError, match="name must not be empty"):
+        greet("")
+
+
+def test_go_errors_are_value_errors() -> None:
     with pytest.raises(ValueError, match="name must not be empty"):
         greet("")
+
+
+def test_undeclared_functions_are_rejected() -> None:
+    with pytest.raises(RuntimeError, match="not declared"):
+        call_string("AssistantMissing", "Ada")
