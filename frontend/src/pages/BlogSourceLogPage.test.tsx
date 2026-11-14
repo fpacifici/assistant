@@ -218,6 +218,44 @@ describe('BlogSourceLogPage', () => {
     expect(await screen.findByText(/Showing 1 of 900 entries/)).toBeInTheDocument();
   });
 
+  it('leaves out runs that listed nothing, but not failures', async () => {
+    vi.mocked(fetchRuns).mockResolvedValue([
+      run('r4', { outcome: 'not_modified', entries_found: 0, verdicts: {} }),
+      run('r3', { outcome: 'failed', error: 'HTTP 500', entries_found: 0, verdicts: {} }),
+      run('r2'),
+      run('r1', { entries_found: 0, verdicts: {} }),
+    ]);
+    render();
+    const runs = await screen.findByRole('navigation', { name: 'Runs' });
+
+    const buttons = within(runs).getAllByRole('button');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0]).toHaveTextContent('Failed');
+    expect(buttons[1]).toHaveTextContent('2 listed · 1 new');
+    await waitFor(() => expect(fetchRun).toHaveBeenCalledWith('s1', 'r3'));
+  });
+
+  it('keeps an empty run listed while it is open', async () => {
+    vi.mocked(fetchRuns).mockResolvedValue([
+      run('r2', { outcome: 'not_modified', entries_found: 0, verdicts: {} }),
+      run('r1'),
+    ]);
+    render('/blogs/sources/s1/log?run=r2');
+    const runs = await screen.findByRole('navigation', { name: 'Runs' });
+
+    expect(within(runs).getAllByRole('button')).toHaveLength(2);
+  });
+
+  it('says when no run listed anything', async () => {
+    vi.mocked(fetchRuns).mockResolvedValue([
+      run('r1', { outcome: 'not_modified', entries_found: 0, verdicts: {} }),
+    ]);
+    render();
+
+    expect(await screen.findByText('No recent run listed anything.')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Runs' })).not.toBeInTheDocument();
+  });
+
   it('says when there is no run yet', async () => {
     vi.mocked(fetchRuns).mockResolvedValue([]);
     render();

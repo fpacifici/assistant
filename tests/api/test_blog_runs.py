@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, update
 from sqlalchemy.orm import Session
 
 from assistant.api.app import create_app
@@ -19,8 +19,9 @@ from assistant.api.dependencies import get_session
 from assistant.blogs import pipeline as pipeline_module
 from assistant.blogs.pipeline import BlogPipeline, advisory_lock
 from assistant.blogs.refresh import BlogRefresher
+from assistant.blogs.runs import RUN_TTL
 from assistant.blogs.text_store import TextStore
-from assistant.models.schema import BlogSource, BlogSourceKind, User
+from assistant.models.schema import BlogCollectionRun, BlogSource, BlogSourceKind, User
 from tests.api.conftest import make_auth_headers
 from tests.blogs.fakes import FakeAnalyzer, FakeWeb
 
@@ -180,6 +181,27 @@ def test_the_log_lists_runs_newest_first_with_counts(
     assert runs[0]["outcome"] == "collected"
     assert runs[0]["finished_at"] is not None
     assert runs[0]["entries_found"] == 2
+
+
+def test_the_log_hides_expired_runs(
+    client: TestClient,
+    headers: Headers,
+    source: BlogSource,
+    pg_session: Session,
+) -> None:
+    old = _refresh(client, headers, source)
+    new = _refresh(client, headers, source)
+    pg_session.execute(
+        update(BlogCollectionRun)
+        .where(BlogCollectionRun.id == uuid.UUID(old["id"]))
+        .values(started_at=datetime.now(UTC) - RUN_TTL - timedelta(minutes=1))
+    )
+    pg_session.flush()
+
+    runs = client.get(f"/blog/source/{source.id}/run", headers=headers).json()
+    assert [run["id"] for run in runs] == [new["id"]]
+    expired = client.get(f"/blog/source/{source.id}/run/{old['id']}", headers=headers)
+    assert expired.status_code == 404
 
 
 def test_a_run_shows_each_entry_and_what_the_model_did(

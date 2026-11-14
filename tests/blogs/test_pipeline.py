@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func, select, update
 from sqlalchemy.orm import Session
 
 from assistant.blogs import pipeline as pipeline_module
@@ -25,7 +25,7 @@ from assistant.blogs.pipeline import (
     RunReport,
     advisory_lock,
 )
-from assistant.blogs.runs import MAX_RUNS_PER_SOURCE, start_run
+from assistant.blogs.runs import MAX_RUNS_PER_SOURCE, RUN_TTL, start_run
 from assistant.blogs.service import set_post_state
 from assistant.blogs.store import post_chunk_embedding
 from assistant.blogs.text_store import TextStore
@@ -1125,6 +1125,51 @@ def test_only_the_latest_runs_are_kept(job: Job) -> None:
     for _ in range(MAX_RUNS_PER_SOURCE + 2):
         job.run()
     assert len(job.runs(source)) == MAX_RUNS_PER_SOURCE
+
+
+def _age(job: Job, run_id: uuid.UUID, age: timedelta) -> None:
+    with job.factory() as session:
+        session.execute(
+            update(BlogCollectionRun)
+            .where(BlogCollectionRun.id == run_id)
+            .values(started_at=datetime.now(UTC) - age)
+        )
+        session.commit()
+
+
+def test_runs_expire_after_their_ttl_with_their_entries(job: Job) -> None:
+    source = job.source()
+    job.web.pages[FEED] = _rss(_item("one"))
+    job.web.pages[f"{SITE}/one"] = _page()
+    job.run()
+    job.run()
+    expired, kept = (run.id for run in job.runs(source))
+    _age(job, expired, RUN_TTL + timedelta(minutes=1))
+    _age(job, kept, RUN_TTL - timedelta(minutes=1))
+
+    job.run()
+
+    runs = [run.id for run in job.runs(source)]
+    assert len(runs) == 2
+    assert runs[0] == kept
+    leftover = job.session.scalar(
+        select(func.count())
+        .select_from(BlogCollectionEntry)
+        .where(BlogCollectionEntry.run_id == expired)
+    )
+    assert leftover == 0
+
+
+def test_expired_runs_of_paused_sources_go_too(job: Job) -> None:
+    paused = job.source(enabled=False)
+    with job.factory() as session:
+        old = start_run(session, paused.id, BlogRunTrigger.JOB)
+        session.commit()
+    _age(job, old.id, RUN_TTL + timedelta(minutes=1))
+
+    job.run()
+
+    assert job.runs(paused) == []
 
 
 def test_dry_run_logs_nothing(job: Job) -> None:

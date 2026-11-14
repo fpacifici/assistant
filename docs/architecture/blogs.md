@@ -16,7 +16,7 @@ function loads the row filtered by owner, so another user's row is a 404.
 | `blog_sources` | What to collect (`feed_url`, `kind`, `collect_since`), the user's fields, and the last collection (`etag`, `last_modified`, `last_fetched_at`, `last_error`, `consecutive_failures`). Unique on owner and `feed_url` among sources not archived. |
 | `blog_posts` | `post_key`, unique per source, metadata and analysis. `status` is the pipeline, `state` the user's verdict, `read_at` when the user marked it read. |
 | `post_tags` | Tags on posts, from the same per-user vocabulary as notes. |
-| `blog_collection_runs` | The collection log: one row per source each time the job or a refresh reads it. `outcome` is null while the source is read, `finished_at` while its posts are analyzed. The latest 20 per source are kept. |
+| `blog_collection_runs` | The collection log: one row per source each time the job or a refresh reads it. `outcome` is null while the source is read, `finished_at` while its posts are analyzed. Runs expire after 24 hours (`RUN_TTL`), and within that the latest 20 per source are kept. |
 | `blog_collection_entries` | One row per entry the source listed in a run: link, date, `verdict`, `post_id` (`SET NULL` when the post goes), then the analysis: `text_source`, `text_chars`, outcome, error, and a copy of the model's summary, match level and motivation. |
 | `post_chunk_embedding` | Not mapped (Postgres-only, pgvector). One row per chunk of a useful post, same shape as `note_chunk_embedding`, with `post_id`, `source_id`, `owner_id`. HNSW cosine index. No feature reads it yet. |
 
@@ -174,6 +174,9 @@ post. The runs are finished together once analysis and embedding are done.
 - Failing to write the analysis log is logged and never fails the post.
 - Holding the advisory lock means no other run is going, so every run starts
   by closing the unfinished ones as `interrupted`.
+- Runs expire after 24 hours: every job or refresh deletes the expired runs
+  of all sources (entries go with them, by cascade), and the API never
+  returns one, even before the next job deletes it.
 - `--dry-run` writes no log.
 
 ## Refresh
