@@ -866,7 +866,7 @@ def test_blog_defaults(tmp_path: Path) -> None:
 
 def test_reading_defaults(tmp_path: Path) -> None:
     config = Config(config_path=tmp_path / "missing.yaml")
-    assert config.get_reading_config() == {"summary_words": 100}
+    assert config.get_reading_config() == {"summary_words": 35}
 
 
 def test_reading_settings_from_yaml_and_env(

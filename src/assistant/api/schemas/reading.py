@@ -30,7 +30,10 @@ LinkNotes = Annotated[str, StringConstraints(max_length=10_000)]
 
 
 class LinkCreate(BaseModel):
+    """A link to save, with the user's notes on it (blank is none)."""
+
     url: LinkUrl
+    user_notes: LinkNotes | None = None
 
 
 class LinkUpdate(BaseModel):

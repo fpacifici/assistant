@@ -121,9 +121,33 @@ describe('adding a link', () => {
     const calls = vi.mocked(fetchLinkCounts).mock.calls.length;
     await user.type(screen.getByLabelText('Link to add'), 'https://new.example.com/a');
     await user.click(screen.getByRole('button', { name: 'Add link' }));
-    await waitFor(() => expect(addLink).toHaveBeenCalledWith('https://new.example.com/a'));
+    await waitFor(() => expect(addLink).toHaveBeenCalledWith('https://new.example.com/a', ''));
     await waitFor(() => expect(vi.mocked(fetchLinkCounts).mock.calls.length).toBeGreaterThan(calls));
     expect(screen.getByLabelText('Link to add')).toHaveValue('');
+  });
+
+  it('saves the notes written with the link, then clears them', async () => {
+    vi.mocked(addLink).mockResolvedValue(readingLink({ analysis_status: 'pending' }));
+    const user = userEvent.setup();
+    render('/reading', 'to_read');
+    await user.type(screen.getByLabelText('Link to add'), 'https://new.example.com/a');
+    await user.type(screen.getByLabelText('Notes on the link'), 'Read section 3');
+    await user.click(screen.getByRole('button', { name: 'Add link' }));
+    await waitFor(() =>
+      expect(addLink).toHaveBeenCalledWith('https://new.example.com/a', 'Read section 3'),
+    );
+    await waitFor(() => expect(screen.getByLabelText('Notes on the link')).toHaveValue(''));
+  });
+
+  it('keeps the notes when the link is refused', async () => {
+    vi.mocked(addLink).mockRejectedValue(new ApiError(422, 'Enter an http or https URL'));
+    const user = userEvent.setup();
+    render('/reading', 'to_read');
+    await user.type(screen.getByLabelText('Link to add'), 'https://x');
+    await user.type(screen.getByLabelText('Notes on the link'), 'Keep me');
+    await user.click(screen.getByRole('button', { name: 'Add link' }));
+    expect(await screen.findByText('Enter an http or https URL')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes on the link')).toHaveValue('Keep me');
   });
 
   it('points to the link already saved', async () => {

@@ -263,7 +263,7 @@ python -m assistant.cli.api_client delete-note --notebook-id <id> --note-id <id>
 
 ```bash
 # Reading list (signs a token with the local JWT_SECRET, for a dev server)
-python -m assistant.cli.api_client add-link --url https://example.com/post --user-id <uid>
+python -m assistant.cli.api_client add-link --url https://example.com/post --user-id <uid> [--notes "Section 3"]
 python -m assistant.cli.api_client list-links --user-id <uid> [--state to_read|discarded|promoted] [--category-id <id> | --unfiled]
 ```
 

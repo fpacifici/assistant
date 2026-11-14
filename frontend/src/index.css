@@ -3793,6 +3793,17 @@ ul {
   margin: 0;
 }
 
+.add-link textarea {
+  flex-basis: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
 .reading-section h2 {
   margin: 16px 0 8px;
   font-size: 15px;
@@ -4013,6 +4024,7 @@ ul {
 }
 
 [data-layout="mobile"] .add-link input,
+[data-layout="mobile"] .add-link textarea,
 [data-layout="mobile"] .link-notes,
 [data-layout="mobile"] .link-category select,
 [data-layout="mobile"] .promote-row input,

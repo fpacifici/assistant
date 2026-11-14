@@ -47,7 +47,7 @@ to choose one.
 | Title | system, editable | see [Titles](#titles) |
 | Type | system | `web`, `pdf`, `text`, `youtube` or `other` |
 | Category | AI, editable | nullable: Unfiled |
-| Summary | AI | about 100 words, in the document's language; empty when not summarizable or failed |
+| Summary | AI | about 35 words, in the document's language; empty when not summarizable or failed |
 | Notes | user | plain text, optional. A scratchpad on the link, never copied anywhere |
 | Added | system | creation time |
 | Note | system | the note it was promoted to, if any |
@@ -57,7 +57,8 @@ to choose one.
   any state, is refused and points to the existing link.
 - The content of the link is never stored: only the fields above.
 - Links are added from an **Add link** box in the Reading tab, from the API,
-  and from the API client CLI.
+  and from the API client CLI. The user can write their notes as they add
+  it.
 
 ### Analysis
 
