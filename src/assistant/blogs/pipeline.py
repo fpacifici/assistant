@@ -46,6 +46,7 @@ from assistant.blogs.identity import is_http_url, post_key
 from assistant.blogs.runs import (
     LoggedEntry,
     close_interrupted_runs,
+    drop_expired_runs,
     entry_for_post,
     record_entries,
     start_run,
@@ -413,6 +414,7 @@ class BlogPipeline:
             close_interrupted_runs(
                 session, keep=[refresh_run_id] if refresh_run_id else []
             )
+            drop_expired_runs(session)
             session.commit()
 
     def _finish_runs(self) -> None:

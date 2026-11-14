@@ -4,6 +4,9 @@
  * collection made of each entry, and what the model answered for the posts it
  * analyzed. `?run=` picks a run; the newest by default.
  *
+ * Runs that listed nothing (0 listed, 0 new) are left out of the history,
+ * unless they failed, were interrupted or are still going.
+ *
  * Refresh now collects the source in the background and opens its run, which
  * is polled until it finishes, so entries and summaries appear as they come.
  */
@@ -64,6 +67,20 @@ function runStatus(run: CollectionRun): string {
   if (run.outcome === 'not_modified') return 'Not modified since the last run';
   if (run.outcome === 'failed') return 'Failed';
   return 'Collected';
+}
+
+/**
+ * A finished run that listed nothing and failed at nothing, like a feed not
+ * modified since the last run: it says nothing worth a line in the history.
+ */
+export function isEmptyRun(run: CollectionRun): boolean {
+  return (
+    !isRunning(run) &&
+    !run.interrupted &&
+    run.outcome !== 'failed' &&
+    run.entries_found === 0 &&
+    (run.verdicts.new ?? 0) === 0
+  );
 }
 
 function runCounts(run: CollectionRun): string {
@@ -280,9 +297,13 @@ export default function BlogSourceLogPage() {
     },
   });
 
-  const list = runs.data ?? [];
-  const selected = searchParams.get('run') ?? list[0]?.id;
-  const busy = refresh.isPending || list.some(isRunning);
+  const all = runs.data ?? [];
+  const requested = searchParams.get('run');
+  // The run asked for stays listed, so a refresh that finds nothing does not
+  // vanish while it is open.
+  const list = all.filter((run) => run.id === requested || !isEmptyRun(run));
+  const selected = requested ?? list[0]?.id;
+  const busy = refresh.isPending || all.some(isRunning);
 
   return (
     <div className="app-shell" data-layout={mode}>
@@ -310,8 +331,11 @@ export default function BlogSourceLogPage() {
           </button>
           {refresh.isError && <p className="auth-error">{refresh.error.message}</p>}
         </div>
-        {runs.isSuccess && list.length === 0 && (
+        {runs.isSuccess && all.length === 0 && (
           <p className="empty">No collection yet. The job or Refresh now will log one here.</p>
+        )}
+        {all.length > 0 && list.length === 0 && (
+          <p className="empty">No recent run listed anything.</p>
         )}
         {list.length > 0 && (
           <div className="log-layout">

@@ -5,7 +5,9 @@ The job and a manual refresh write a `BlogCollectionRun` per source, with one
 analysis as each post goes through the model. The user reads it to see why a
 post was or wasn't collected, and what the model made of it.
 
-Only the latest `MAX_RUNS_PER_SOURCE` runs of a source are kept, and at most
+Runs live for `RUN_TTL` (24 hours): every job or refresh deletes the older
+ones, and the readers never return them. Within that, only the latest
+`MAX_RUNS_PER_SOURCE` runs of a source are kept, and at most
 `MAX_LOGGED_ENTRIES` entries of a run: a big sitemap lists thousands of pages
 it has already collected, so those are the ones left out first.
 
@@ -15,7 +17,7 @@ Nothing commits here except where noted: callers own the transaction.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, update
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
 
     from assistant.models.schema import User
 
+RUN_TTL = timedelta(hours=24)
 MAX_RUNS_PER_SOURCE = 20
 MAX_LOGGED_ENTRIES = 300
 _MAX_URL_LENGTH = 2048
@@ -110,6 +113,25 @@ def close_interrupted_runs(session: Session, keep: Collection[uuid.UUID] = ()) -
     )
     if keep:
         stmt = stmt.where(BlogCollectionRun.id.not_in(list(keep)))
+    return session.execute(stmt).rowcount  # type: ignore[attr-defined, no-any-return]
+
+
+def _expiry(now: datetime | None = None) -> datetime:
+    """Runs started before this are expired."""
+    return (now or datetime.now(UTC)) - RUN_TTL
+
+
+def drop_expired_runs(session: Session, now: datetime | None = None) -> int:
+    """Delete every source's runs older than `RUN_TTL`, with their entries.
+
+    Args:
+        session: The session.
+        now: The current time, for tests.
+
+    Returns:
+        How many runs were deleted.
+    """
+    stmt = delete(BlogCollectionRun).where(BlogCollectionRun.started_at < _expiry(now))
     return session.execute(stmt).rowcount  # type: ignore[attr-defined, no-any-return]
 
 
@@ -248,7 +270,7 @@ def verdict_counts(
 def list_runs(
     session: Session, owner: User, source_id: uuid.UUID
 ) -> list[BlogCollectionRun]:
-    """The runs of one of `owner`'s sources, newest first.
+    """The unexpired runs of one of `owner`'s sources, newest first.
 
     Raises:
         BlogNotFoundError: If the source is missing, archived or someone else's.
@@ -256,7 +278,10 @@ def list_runs(
     source = get_source(session, owner, source_id)
     stmt = (
         select(BlogCollectionRun)
-        .where(BlogCollectionRun.source_id == source.id)
+        .where(
+            BlogCollectionRun.source_id == source.id,
+            BlogCollectionRun.started_at >= _expiry(),
+        )
         .order_by(BlogCollectionRun.started_at.desc(), BlogCollectionRun.id.desc())
     )
     return list(session.scalars(stmt))
@@ -268,10 +293,11 @@ def get_run(
     """One run of one of `owner`'s sources, with its entries.
 
     Raises:
-        BlogNotFoundError: If the source or the run is not the caller's.
+        BlogNotFoundError: If the source or the run is not the caller's, or
+            the run has expired.
     """
     source = get_source(session, owner, source_id)
     run = session.get(BlogCollectionRun, run_id)
-    if run is None or run.source_id != source.id:
+    if run is None or run.source_id != source.id or run.started_at < _expiry():
         raise BlogNotFoundError(str(run_id))
     return run
