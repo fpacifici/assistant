@@ -598,8 +598,8 @@ DELETE /reading/link/{id}                    -> 204 (from discarded or promoted 
 
 - A new link is analyzed in the background when AI is enabled; until then
   it stays `pending`. See [`reading.md`](reading.md).
-- `retry` works from any state: attempts start over and the category is
-  chosen again, but a title the user edited is kept.
+- `retry` works from any state: attempts start over, and a title or
+  category the user set is kept.
 - The URL must be `http` or `https`, otherwise a 422. Tracking parameters are
   dropped before it is stored.
 - A URL the caller already saved, in any state, is a 409 whose body has the

@@ -10,7 +10,6 @@ import pytest
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-from assistant.fetch import FetchError, FetchResult
 from assistant.models.schema import ReadingLinkType
 from assistant.reading.extraction import (
     FETCH_TIMEOUT_SECONDS,
@@ -20,6 +19,7 @@ from assistant.reading.extraction import (
     is_youtube,
     read_pdf,
 )
+from assistant.web.fetch import FetchError, FetchResult
 
 ARTICLE = "https://example.com/article"
 

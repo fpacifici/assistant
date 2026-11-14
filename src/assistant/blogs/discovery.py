@@ -14,7 +14,6 @@ import io
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.robotparser import RobotFileParser
@@ -26,12 +25,14 @@ from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import ParseError
 
 from assistant.blogs.exceptions import SourceResolutionError
-from assistant.fetch import FetchError, fetch
 from assistant.models.schema import BlogSourceKind
+from assistant.web.fetch import FetchError, fetch
+from assistant.web.pages import parse_date
 from assistant.web.urls import canonical_path
 
 if TYPE_CHECKING:
     # Only a type: all parsing goes through defusedxml.
+    from datetime import datetime
     from xml.etree.ElementTree import Element  # nosec B405
 
 logger = logging.getLogger(__name__)
@@ -86,17 +87,6 @@ def parse_feed(content: bytes) -> Any | None:  # noqa: ANN401
     if not parsed.entries and not parsed.feed.get("title"):
         return None
     return parsed
-
-
-def parse_date(value: str | None) -> datetime | None:
-    """Parse an ISO 8601 date or datetime, as UTC when it has no zone."""
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.strip())
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def _local_name(element: Element) -> str:

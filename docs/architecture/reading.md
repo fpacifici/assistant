@@ -31,7 +31,7 @@ Deleting a user cascades to their links.
 
 `reading/service.py`. `url_key` is the SHA-256 of the lowercase host (with a
 non-default port) and the path and query normalized as for blog posts
-(`blogs/identity.py`): tracking parameters (`utm_*`, `fbclid`, ...), the order
+(`web/urls.py`): tracking parameters (`utm_*`, `fbclid`, ...), the order
 of the other parameters, a trailing slash and the fragment don't count, nor
 does the scheme. Unlike a post key it keeps the host, since links come from
 many sites. Saving a URL whose key the user already has, in any state, is
@@ -72,7 +72,8 @@ off, or left when the server stopped. The CLI tries each link until it is no
 longer pending and exits with 1 if any failed.
 
 **Fetching and reading** (`reading/extraction.py`) goes through the shared
-safe fetcher (`assistant/fetch.py`, see [Blogs](blogs.md#safe-fetcher)) with
+`assistant/web/` package: the safe fetcher (`web/fetch.py`, see
+[Blogs](blogs.md#safe-fetcher)) and page extraction (`web/pages.py`), with
 25 MB and 30 s per link instead of 5 MB and 10 s, because of PDFs.
 
 | Type | Decided by | What is read |
@@ -103,8 +104,9 @@ processor reads the link and the categories, works, then reloads the row with
 `FOR UPDATE` and gives up if it is gone or no longer `pending`. Then:
 
 - the title is the link's own, else the model's, unless `title_edited`;
-- the category is the model's choice, unless `category_set_by_user` (set by
-  the user while the model ran) or the category was deleted meanwhile.
+- the category is the model's choice, unless `category_set_by_user` (the user
+  chose it, before or while the model ran) or the category was deleted
+  meanwhile.
 
 **Failures.** Any failure increments `attempts` and stores a generic
 `last_error` (a fetch or extraction message, or `Could not analyze
@@ -114,9 +116,11 @@ it is `failed`: no summary, and Unfiled unless the user chose a category.
 Retries waiting at shutdown are dropped; the links stay pending for the CLI.
 
 **Retry** (`POST /reading/link/{id}/retry`), from any state, resets the link
-to `pending` with `attempts = 0` and clears `category_set_by_user`, so the
-model files it again (after the user edited category descriptions, say). A
-title the user edited is kept.
+to `pending` with `attempts = 0`. What the user chose still wins: a title
+they edited and a category they set (Unfiled included) are kept, so only a
+link the AI filed is filed again, after the user edited category
+descriptions, say. To let the AI file a link again, it would need a "reset"
+the UI doesn't offer.
 
 ## Configuration
 

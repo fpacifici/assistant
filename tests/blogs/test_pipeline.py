@@ -28,7 +28,6 @@ from assistant.blogs.runs import MAX_RUNS_PER_SOURCE, RUN_TTL, start_run
 from assistant.blogs.service import set_post_state
 from assistant.blogs.store import post_chunk_embedding
 from assistant.blogs.text_store import TextStore
-from assistant.fetch import FetchError
 from assistant.models.schema import (
     BlogCollectionEntry,
     BlogCollectionRun,
@@ -42,6 +41,7 @@ from assistant.models.schema import (
     User,
 )
 from assistant.vectors.store import EMBEDDING_DIMENSIONS
+from assistant.web.fetch import FetchError
 from tests.blogs.fakes import FakeAnalyzer, FakeWeb
 
 pytestmark = pytest.mark.postgres

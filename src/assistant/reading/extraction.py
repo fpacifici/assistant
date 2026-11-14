@@ -23,9 +23,9 @@ from urllib.parse import quote, urlsplit
 from pypdf import PasswordType, PdfReader
 from pypdf.errors import PyPdfError
 
-from assistant.blogs.extraction import extract_page
-from assistant.fetch import FetchError, FetchResult, fetch
 from assistant.models.schema import ReadingLinkType
+from assistant.web.fetch import FetchError, FetchResult, fetch
+from assistant.web.pages import extract_page
 
 logger = logging.getLogger(__name__)
 

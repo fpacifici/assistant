@@ -28,7 +28,6 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from assistant.config import Config
-from assistant.fetch import FetchError
 from assistant.models.schema import (
     Category,
     ReadingAnalysisStatus,
@@ -41,6 +40,7 @@ from assistant.reading.extraction import (
     ExtractionError,
     extract_link,
 )
+from assistant.web.fetch import FetchError
 
 if TYPE_CHECKING:
     import uuid

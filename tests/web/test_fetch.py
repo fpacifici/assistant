@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from assistant import fetch as fetch_module
-from assistant.fetch import (
+from assistant.web import fetch as fetch_module
+from assistant.web.fetch import (
     MAX_BYTES,
     MAX_REDIRECTS,
     BlockedUrlError,

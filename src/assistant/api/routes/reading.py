@@ -123,7 +123,7 @@ def restore_link_endpoint(
 def retry_link_endpoint(
     link_id: uuid.UUID, session: SessionDep, user: CurrentUser
 ) -> LinkResponse:
-    """Analyze a link again. A title the user edited is kept; the category is not."""
+    """Analyze a link again. A title or category the user set is kept."""
     return LinkResponse.model_validate(retry_analysis(session, user, link_id))
 
 

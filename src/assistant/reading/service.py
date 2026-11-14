@@ -105,7 +105,7 @@ def normalize_url(url: str) -> str:
 def url_key(url: str) -> str:
     """The identity of a link: the same for spelling variants of one URL.
 
-    Like a blog post's key (`assistant.blogs.identity`), it ignores tracking
+    Like a blog post's key (`assistant.web.urls.canonical_path`), it ignores tracking
     parameters, the order of the others, a trailing slash and the fragment,
     but it keeps the host, since links come from many sites. The scheme and
     a default port are ignored.
@@ -175,9 +175,9 @@ def add_link(session: Session, owner: User, url: str) -> ReadingLink:
 def retry_analysis(session: Session, owner: User, link_id: uuid.UUID) -> ReadingLink:
     """Analyze a link again, in any state, after the transaction commits.
 
-    Attempts start over, and the analysis chooses the category again (after
-    the user edited category descriptions, say), even one the user set. A
-    title the user edited is kept.
+    Attempts start over. What the user chose wins, as on the first analysis:
+    an edited title and a category they set (Unfiled included) are kept, so
+    only a link the AI filed is filed again.
 
     Raises:
         LinkNotFoundError: If the link is missing or someone else's.
@@ -186,7 +186,6 @@ def retry_analysis(session: Session, owner: User, link_id: uuid.UUID) -> Reading
     link.analysis_status = ReadingAnalysisStatus.PENDING
     link.attempts = 0
     link.last_error = None
-    link.category_set_by_user = False
     session.flush()
     queue_for_analysis(session, link.id)
     return link

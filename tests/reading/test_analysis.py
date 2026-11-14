@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from assistant.config import Config
-from assistant.fetch import FetchError
 from assistant.models.schema import (
     Category,
     ReadingAnalysisStatus,
@@ -32,6 +31,7 @@ from assistant.reading.analysis import (
     error_message,
 )
 from assistant.reading.extraction import MAX_TEXT_CHARS, ExtractedLink, ExtractionError
+from assistant.web.fetch import FetchError
 
 if TYPE_CHECKING:
     from collections.abc import Callable

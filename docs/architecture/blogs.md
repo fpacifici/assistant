@@ -67,7 +67,7 @@ read posts, or only those still to read, in any view.
 
 ## Safe fetcher
 
-`assistant/fetch.py` is the only code that opens a URL a user gave. Blogs and
+`assistant/web/fetch.py` is the only code that opens a URL a user gave. Blogs and
 the [reading list](reading.md) share it.
 
 - `http` and `https` only, no credentials in the URL.
@@ -86,7 +86,7 @@ sitemaps are parsed with `defusedxml`, with DTDs refused.
 
 ## Post identity
 
-`blogs/identity.py`: `post_key` is the SHA-256 of the guid or, without one or
+`blogs/identity.py`, on top of `web/urls.py`: `post_key` is the SHA-256 of the guid or, without one or
 when the guid is a URL, of the URL path. The domain is ignored, so a blog can
 move. Tracking parameters (`utm_*`, `fbclid`, ...) are dropped and any other
 query parameter counts, which errs on the side of keeping two posts apart.

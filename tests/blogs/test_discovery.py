@@ -10,14 +10,13 @@ import pytest
 
 from assistant.blogs import discovery
 from assistant.blogs.discovery import (
-    parse_date,
     parse_feed,
     parse_sitemap,
     resolve_source,
 )
 from assistant.blogs.exceptions import SourceResolutionError
-from assistant.fetch import BlockedUrlError, FetchError
 from assistant.models.schema import BlogSourceKind
+from assistant.web.fetch import BlockedUrlError, FetchError
 from tests.blogs.fakes import FakeWeb
 
 SITE = "https://blog.example.com"
@@ -234,10 +233,3 @@ def test_entity_expansion_is_refused() -> None:
         b"<url><loc>&lol;</loc></url></urlset>"
     )
     assert parse_sitemap(bomb) is None
-
-
-def test_parse_date() -> None:
-    assert parse_date("2024-03-01T10:00:00Z") == datetime(2024, 3, 1, 10, tzinfo=UTC)
-    assert parse_date("2024-03-01") == datetime(2024, 3, 1, tzinfo=UTC)
-    assert parse_date("soon") is None
-    assert parse_date(None) is None

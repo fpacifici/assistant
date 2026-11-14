@@ -22,7 +22,8 @@ assistant/
 │       ├── notes/              # Notes service layer (CRUD, positions, users)
 │       ├── reading/            # Reading list: links, analysis, background worker
 │       ├── tui/                # Terminal UI (Textual chat app)
-│       └── vectors/            # Note embeddings (pgvector), indexer, worker
+│       ├── vectors/            # Note embeddings (pgvector), indexer, worker
+│       └── web/                # Safe fetcher, URL identity, HTML page extraction
 ├── go/                         # Go module, built into a C shared library
 │   ├── bindings/               # C ABI exports (package main, cgo)
 │   └── greeting/               # Logic packages, free of cgo

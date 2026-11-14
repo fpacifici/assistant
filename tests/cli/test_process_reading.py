@@ -33,11 +33,14 @@ def _link(session: Session, owner: User, status: ReadingAnalysisStatus) -> Readi
         owner_id=owner.uid,
         url="https://example.com/a",
         url_key=uuid.uuid4().hex,
-        analysis_status=status.value,
+        analysis_status=status,
     )
     session.add(link)
     session.flush()
     return link
+
+
+# --- Pending links ---
 
 
 def test_only_pending_links_are_listed(db_session: Session, owner: User) -> None:
@@ -48,6 +51,9 @@ def test_only_pending_links_are_listed(db_session: Session, owner: User) -> None
     assert process_reading.pending_link_ids(db_session, link_id=pending.id) == [
         pending.id
     ]
+
+
+# --- Processing ---
 
 
 def test_each_link_is_tried_until_it_is_no_longer_pending(
@@ -70,6 +76,9 @@ def test_each_link_is_tried_until_it_is_no_longer_pending(
         )
     assert outcomes == {Outcome.DONE: 1, Outcome.FAILED: 1}
     assert processor.process.call_count == 2 + MAX_ATTEMPTS
+
+
+# --- Exit codes ---
 
 
 def test_ai_disabled_fails(monkeypatch: pytest.MonkeyPatch) -> None:

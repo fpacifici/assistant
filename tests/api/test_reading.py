@@ -384,7 +384,8 @@ def test_retry_starts_the_analysis_over(
     db_session.refresh(link)
     assert link.attempts == 0
     assert link.title_edited
-    assert not link.category_set_by_user
+    assert link.category_set_by_user
+    assert link.category_id == category.id
 
 
 def test_retry_of_another_users_link_is_not_found(

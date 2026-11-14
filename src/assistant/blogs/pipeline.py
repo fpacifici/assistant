@@ -39,7 +39,6 @@ from assistant.blogs.discovery import (
     parse_robots,
     parse_sitemap,
 )
-from assistant.blogs.extraction import extract_page, html_to_text
 from assistant.blogs.identity import post_key
 from assistant.blogs.runs import (
     LoggedEntry,
@@ -50,7 +49,6 @@ from assistant.blogs.runs import (
     start_run,
 )
 from assistant.blogs.store import replace_post_chunks
-from assistant.fetch import FetchError, fetch
 from assistant.models.schema import (
     BlogCollectionRun,
     BlogEmbedStatus,
@@ -66,6 +64,8 @@ from assistant.models.schema import (
     BlogSourceKind,
     BlogTextSource,
 )
+from assistant.web.fetch import FetchError, fetch
+from assistant.web.pages import extract_page, html_to_text
 from assistant.web.urls import is_http_url
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
     from assistant.blogs.analysis import PostAnalysis, PostAnalyzer
     from assistant.blogs.text_store import TextStore
-    from assistant.fetch import FetchResult
+    from assistant.web.fetch import FetchResult
 
     type SessionFactory = Callable[[], AbstractContextManager[Session]]
 
