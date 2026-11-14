@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -430,6 +430,55 @@ def test_a_failed_link_keeps_the_users_category(
     assert processor.process(link.id) is Outcome.FAILED
     db_session.refresh(link)
     assert link.category_id == category.id
+
+
+def test_a_refused_link_is_filed_from_its_url_without_retries(
+    db_session_factory: Callable[[], AbstractContextManager[Session]],
+    db_session: Session,
+    link: ReadingLink,
+    category: Category,
+) -> None:
+    extract = FakeExtract(ExtractedLink(ReadingLinkType.WEB))
+    processor, structured = _processor(
+        db_session_factory,
+        extract,
+        LinkAnalysis(title="Scaling git", category_id="c1", summary="Invented."),
+    )
+    assert processor.process(link.id) is Outcome.NOT_SUMMARIZABLE
+    db_session.refresh(link)
+    assert link.analysis_status == ReadingAnalysisStatus.NOT_SUMMARIZABLE.value
+    assert link.attempts == 0
+    assert link.category_id == category.id
+    assert link.summary is None
+    assert link.title == "Scaling git"
+    assert "https://example.com/a" in _prompts(structured)[1]
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [FetchError("The server answered HTTP 503"), ExtractionError("Could not read")],
+)
+def test_site_and_document_failures_are_not_sent_to_sentry(
+    db_session_factory: Callable[[], AbstractContextManager[Session]],
+    link: ReadingLink,
+    exc: Exception,
+) -> None:
+    processor, _ = _processor(db_session_factory, FakeExtract(exc))
+    with patch("assistant.reading.analysis.sentry_sdk.capture_exception") as capture:
+        assert processor.process(link.id) is Outcome.RETRY
+    capture.assert_not_called()
+
+
+def test_our_own_failures_are_sent_to_sentry(
+    db_session_factory: Callable[[], AbstractContextManager[Session]],
+    link: ReadingLink,
+) -> None:
+    extract = FakeExtract(ExtractedLink(ReadingLinkType.WEB, text=TEXT))
+    processor, structured = _processor(db_session_factory, extract)
+    structured.invoke.side_effect = RuntimeError("rate limited")
+    with patch("assistant.reading.analysis.sentry_sdk.capture_exception") as capture:
+        assert processor.process(link.id) is Outcome.RETRY
+    capture.assert_called_once()
 
 
 def test_a_model_failure_counts_as_an_attempt(

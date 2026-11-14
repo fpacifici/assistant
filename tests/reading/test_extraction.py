@@ -14,6 +14,7 @@ from assistant.models.schema import ReadingLinkType
 from assistant.reading.extraction import (
     FETCH_TIMEOUT_SECONDS,
     MAX_LINK_BYTES,
+    ExtractedLink,
     ExtractionError,
     extract_link,
     is_youtube,
@@ -134,9 +135,46 @@ def test_links_are_fetched_with_the_pdf_limits() -> None:
     }
 
 
-def test_http_error_raises() -> None:
-    with pytest.raises(FetchError, match="HTTP 404"):
-        extract_link(ARTICLE, FakeFetcher())
+@pytest.mark.parametrize("status", [500, 503, 408, 425, 429])
+def test_errors_worth_retrying_raise(status: int) -> None:
+    with pytest.raises(FetchError, match=f"HTTP {status}"):
+        extract_link(ARTICLE, FakeFetcher({ARTICLE: status}))
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 410, 451])
+def test_a_refused_link_is_a_web_page_with_nothing_to_read(status: int) -> None:
+    assert extract_link(ARTICLE, FakeFetcher({ARTICLE: status})) == ExtractedLink(
+        ReadingLinkType.WEB
+    )
+
+
+@pytest.mark.parametrize("status", [403, 503])
+def test_a_rejection_is_logged_with_why(
+    status: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    def fetcher(url: str, **_: object) -> FetchResult:
+        return FetchResult(
+            url=url,
+            status=status,
+            content=b"<title>Just a moment...</title>",
+            headers={"server": "cloudflare", "cf-mitigated": "challenge"},
+        )
+
+    with caplog.at_level("WARNING", logger="assistant.reading.extraction"):
+        try:
+            extract_link(ARTICLE, fetcher)
+        except FetchError:
+            assert status == 503
+    (record,) = caplog.records
+    assert "cloudflare_challenge" in record.getMessage()
+    assert ARTICLE in record.getMessage()
+    assert record.__dict__["rejection.blocker"] == "cloudflare_challenge"
+    assert record.__dict__["http.status"] == status
+
+
+def test_a_refused_pdf_is_typed_from_its_path() -> None:
+    url = "https://example.com/papers/Paper.PDF"
+    assert extract_link(url, FakeFetcher({url: 403})).link_type is ReadingLinkType.PDF
 
 
 # --- Web pages and text ---

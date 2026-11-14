@@ -6,6 +6,11 @@ response's `Content-Type` otherwise. Only web pages, text files and PDFs
 yield text to summarize; YouTube and other types are categorized from their
 title and URL.
 
+A site that refuses the request (a 4xx other than a timeout or rate limit,
+like the 403 of a bot challenge) will refuse it again, so the link is not
+retried: it is categorized from its URL alone, as a web page, or a PDF when
+the path says so.
+
 PDFs are read page by page, in order, only until there is enough text for the
 model: the rest of the document is never parsed. A body larger than
 `MAX_LINK_BYTES` fails at the fetcher.
@@ -26,6 +31,7 @@ from pypdf.errors import PyPdfError
 from assistant.models.schema import ReadingLinkType
 from assistant.web.fetch import FetchError, FetchResult, fetch
 from assistant.web.pages import extract_page
+from assistant.web.rejection import describe_rejection, summarize_rejection
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +53,9 @@ _PDF_TYPE = "application/pdf"
 _UNNAMED_TYPES = frozenset({None, "application/octet-stream", "binary/octet-stream"})
 _PDF_MAGIC = b"%PDF-"
 _MAX_TITLE_CHARS = 300
+# 4xx answers worth trying again later: timeout, too early, rate limited.
+_TRANSIENT_CLIENT_ERRORS = frozenset({408, 425, 429})
+_HTTP_CLIENT_ERRORS = range(400, 500)
 
 type Fetcher = Callable[..., FetchResult]
 
@@ -203,8 +212,23 @@ def _link_type(result: FetchResult) -> ReadingLinkType:
     return ReadingLinkType.OTHER
 
 
+def _refused(status: int) -> bool:
+    """Whether the site refused the request for good: asking again won't help."""
+    return status in _HTTP_CLIENT_ERRORS and status not in _TRANSIENT_CLIENT_ERRORS
+
+
+def _type_from_url(url: str) -> ReadingLinkType:
+    """The type of a link that can't be fetched, from its path."""
+    if urlsplit(url).path.lower().endswith(".pdf"):
+        return ReadingLinkType.PDF
+    return ReadingLinkType.WEB
+
+
 def extract_link(url: str, fetcher: Fetcher = fetch) -> ExtractedLink:
     """Fetch a link and read what it is and what it says.
+
+    A site that refuses the request yields the type guessed from the URL and
+    nothing else, so the link is categorized from its URL.
 
     Args:
         url: The link.
@@ -214,12 +238,24 @@ def extract_link(url: str, fetcher: Fetcher = fetch) -> ExtractedLink:
         What the link yields.
 
     Raises:
-        FetchError: If it can't be fetched, or answers an HTTP error.
+        FetchError: If it can't be fetched, or answers an error worth
+            retrying (5xx, 408, 425, 429).
         ExtractionError: If a PDF can't be read.
     """
     if is_youtube(url):
         return _youtube(url, fetcher)
     result = fetcher(url, max_bytes=MAX_LINK_BYTES, timeout=FETCH_TIMEOUT_SECONDS)
+    if not result.ok:
+        # Why the site said no: bot protection, mostly. Logs only.
+        details = describe_rejection(result)
+        logger.warning(
+            "Reading link rejected: %s (%s)",
+            url,
+            summarize_rejection(details),
+            extra=details,
+        )
+    if _refused(result.status):
+        return ExtractedLink(_type_from_url(url))
     result.raise_for_status()
     link_type = _link_type(result)
     if link_type is ReadingLinkType.WEB:

@@ -69,7 +69,7 @@ appears at once, marked as being analyzed, and fills in when it is done.
 |---|---|
 | `pending` | waiting for or under analysis |
 | `done` | categorized and summarized |
-| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types, or a document with too little text: under 200 characters) |
+| `not_summarizable` | categorized from title and URL only, no summary (YouTube, other types, a site that refuses the request, or a document with too little text: under 200 characters) |
 | `failed` | could not be fetched or analyzed after 3 attempts: no summary, Unfiled unless the user chose a category |
 
 - The type is decided before any fetch for YouTube (by host:
@@ -85,11 +85,15 @@ appears at once, marked as being analyzed, and fills in when it is done.
   Categorized, never summarized.
 - **Other types** (images, archives, media files): categorized from title
   and URL, never summarized.
+- **A site that refuses the request** (an HTTP 4xx such as the 403 of a bot
+  challenge, other than a timeout or rate limit) is not retried: the link is
+  categorized from its URL only, as a web page (a PDF when the URL ends in
+  `.pdf`), and not summarized.
 - The model only chooses among the user's existing categories, by name and
   description, or none (Unfiled). It never creates a category.
 - Text is untrusted: the model call has no tools and only returns
   structured fields.
-- A failed attempt is retried automatically: 3 attempts in all, 30 s and
+- Any other failed attempt is retried automatically: 3 attempts in all, 30 s and
   then 120 s apart. Only then is the link `failed`.
 - A failed link stays in the list. The user can set the category and title
   by hand, or **Retry analysis**. Retry is also available on any analyzed

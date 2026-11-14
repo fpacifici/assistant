@@ -334,8 +334,10 @@ class LinkProcessor:
     def process(self, link_id: uuid.UUID) -> Outcome:
         """Analyze a link if it is still pending.
 
-        A failure is logged, sent to Sentry, and counted on the link: it stays
-        pending until its `MAX_ATTEMPTS`-th failure, then it is `failed`.
+        A failure is logged and counted on the link: it stays pending until
+        its `MAX_ATTEMPTS`-th failure, then it is `failed`. Only failures of
+        our own go to Sentry, not a site that can't be reached or a document
+        that can't be read.
         """
         snapshot = self._snapshot(link_id)
         if snapshot is None:
@@ -357,7 +359,8 @@ class LinkProcessor:
             )
         except Exception as exc:
             logger.warning("Could not analyze reading link %s", link_id, exc_info=True)
-            sentry_sdk.capture_exception(exc)
+            if not isinstance(exc, FetchError | ExtractionError):
+                sentry_sdk.capture_exception(exc)
             return self._record_failure(link_id, exc)
         return self._write(
             snapshot, link_id, extracted, verdict, summarized=text is not None
