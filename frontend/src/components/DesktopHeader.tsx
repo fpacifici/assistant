@@ -1,5 +1,5 @@
-/** Desktop header: app title, the top-level sections (Notes, and Blogs when AI is
- * enabled), search box, Ask AI (when AI is enabled), Invites, Settings and TUI-layout
+/** Desktop header: app title, the top-level sections (Notes, and Blogs and Reading
+ * when AI is enabled), search box, Ask AI (when AI is enabled), Invites, Settings and TUI-layout
  * links, quota, theme picker, user name and Logout. */
 
 import { Link, useLocation } from 'react-router';
@@ -43,6 +43,7 @@ export default function DesktopHeader() {
         <nav className="app-sections" aria-label="Sections">
           {section('/notebooks', '/notebooks', 'Notes')}
           {askEnabled && section('/blogs/triage', '/blogs', 'Blogs')}
+          {askEnabled && section('/reading', '/reading', 'Reading')}
         </nav>
       </div>
       <SearchBox key={location.search} initialQuery={currentQuery} />

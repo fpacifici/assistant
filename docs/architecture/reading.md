@@ -122,6 +122,30 @@ link the AI filed is filed again, after the user edited category
 descriptions, say. To let the AI file a link again, it would need a "reset"
 the UI doesn't offer.
 
+## Promotion
+
+`POST /reading/link/{id}/promote`, from `to_read` only, with either
+`{note_id}` or `{notebook_id, title}`. The request schema checks there is
+exactly one target and hands `promote_link` an `ExistingNote` or a `NewNote`. An existing note needs `update`
+(`require_note_access`: 404 if invisible, 403 if view only); a new one is
+created by `notes.service.create_note`, which checks `create_notes` on the
+notebook. The link becomes `promoted` with `decided_at` and `note_id` in the
+same transaction, and the answer has the note and notebook ids so the client
+opens it. Nothing is written into the note: a new note has only its title.
+
+**Suggestions** (`GET /reading/link/{id}/suggestions`) search the note
+embeddings with `NoteSearcher` (see [Vector search](vectors.md)): the summary
+is the query, else the title, else the URL. The search is limited to
+`notes.permissions.editable_scope`: notebooks where the user has `own_notes`
+(which grants `update` on their notes) and notes with a direct `update`
+grant. 20 chunks are fetched and grouped by note, best first, keeping 5, each
+with its best passage cut at 300 characters. Without AI the app has no
+searcher and the route answers 503.
+
+## Frontend
+
+See [Web frontend](frontend.md#reading-list).
+
 ## Configuration
 
 ```yaml

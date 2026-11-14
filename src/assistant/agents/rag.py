@@ -34,7 +34,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from assistant.agents.tools import Source, build_tools, unique_sources
 from assistant.config import Config
 from assistant.models.database import get_database_url
-from assistant.vectors.search import NoteSearcher
+from assistant.vectors.search import NoteSearcher, create_note_searcher
 
 if TYPE_CHECKING:
     import uuid
@@ -321,13 +321,11 @@ def create_ask_agent(
     config: Config | None = None,
 ) -> AskAgent | None:
     """Build the agent from config, or `None` when AI is disabled."""
-    ai_config = (config or Config()).get_ai_config()
-    if not ai_config["enabled"]:
+    config = config or Config()
+    searcher = create_note_searcher(config)
+    if searcher is None:
         return None
-    from langchain_openai import OpenAIEmbeddings  # noqa: PLC0415
-
-    searcher = NoteSearcher(OpenAIEmbeddings(model=ai_config["embedding_model"]))
-    return AskAgent(session_factory, searcher, ai_config["chat_model"])
+    return AskAgent(session_factory, searcher, config.get_ai_config()["chat_model"])
 
 
 def event_payload(event: AskEvent) -> str:

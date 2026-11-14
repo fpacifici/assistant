@@ -6,14 +6,20 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from assistant.models.schema import (
     ReadingAnalysisStatus,
     ReadingLinkState,
     ReadingLinkType,
 )
-from assistant.reading.service import MAX_TITLE_LENGTH, MAX_URL_LENGTH
+from assistant.reading.service import (
+    MAX_TITLE_LENGTH,
+    MAX_URL_LENGTH,
+    ExistingNote,
+    NewNote,
+    PromoteTarget,
+)
 
 LinkUrl = Annotated[
     str,
@@ -41,7 +47,10 @@ class LinkUpdate(BaseModel):
 
 
 class LinkResponse(BaseModel):
-    """A link. `title` is null until something names it: show the URL."""
+    """A link. `title` is null until something names it: show the URL.
+
+    `note_notebook_id` is the notebook of the promoted note, to link to it.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,6 +65,7 @@ class LinkResponse(BaseModel):
     last_error: str | None
     state: ReadingLinkState
     note_id: uuid.UUID | None
+    note_notebook_id: uuid.UUID | None = None
     created_at: datetime
     decided_at: datetime | None
 
@@ -70,3 +80,54 @@ class CategoryCount(BaseModel):
 
     category_id: uuid.UUID | None
     count: int
+
+
+NoteTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+]
+
+
+class NoteSuggestionResponse(BaseModel):
+    """A note the caller can edit, with the passage that matched."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    note_id: uuid.UUID
+    notebook_id: uuid.UUID
+    title: str
+    notebook_name: str
+    passage: str
+
+
+class PromoteRequest(BaseModel):
+    """Either an existing note, or a notebook and a title for a new one."""
+
+    note_id: uuid.UUID | None = None
+    notebook_id: uuid.UUID | None = None
+    title: NoteTitle | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self) -> PromoteRequest:
+        existing = self.note_id is not None
+        new_fields = [self.notebook_id is not None, self.title is not None]
+        # Exactly one target: a note, or both fields of a new note.
+        if existing == any(new_fields) or (any(new_fields) and not all(new_fields)):
+            msg = "Give note_id, or notebook_id and title"
+            raise ValueError(msg)
+        return self
+
+    def target(self) -> PromoteTarget:
+        """The validated target, for `promote_link`."""
+        if self.note_id is not None:
+            return ExistingNote(self.note_id)
+        assert self.notebook_id is not None
+        assert self.title is not None
+        return NewNote(self.notebook_id, self.title)
+
+
+class PromoteResponse(BaseModel):
+    """The promoted link, and where its note is."""
+
+    link: LinkResponse
+    note_id: uuid.UUID
+    notebook_id: uuid.UUID

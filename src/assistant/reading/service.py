@@ -23,9 +23,18 @@ from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import selectinload
 
 from assistant.categories.service import get_category
-from assistant.models.schema import ReadingAnalysisStatus, ReadingLink, ReadingLinkState
+from assistant.models.schema import (
+    Note,
+    PermissionName,
+    ReadingAnalysisStatus,
+    ReadingLink,
+    ReadingLinkState,
+)
+from assistant.notes.permissions import editable_scope, require_note_access
+from assistant.notes.service import create_note
 from assistant.reading.exceptions import (
     DuplicateLinkError,
     InvalidLinkQueryError,
@@ -44,15 +53,21 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import InstrumentedAttribute, Session
 
     from assistant.models.schema import User
+    from assistant.vectors.search import NoteSearcher
 
 MAX_URL_LENGTH = 2048
 MAX_TITLE_LENGTH = 1024
+MAX_SUGGESTIONS = 5
+# Chunks fetched for suggestions: several can come from one note.
+SUGGESTION_CHUNKS = 20
+MAX_PASSAGE_CHARS = 300
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 # What each action can start from.
 _DISCARDABLE = frozenset({ReadingLinkState.TO_READ})
 _RESTORABLE = frozenset({ReadingLinkState.DISCARDED})
 _DELETABLE = frozenset({ReadingLinkState.DISCARDED, ReadingLinkState.PROMOTED})
+_PROMOTABLE = frozenset({ReadingLinkState.TO_READ})
 # A cursor is the last link's sort value and id: JSON, then base64.
 _CURSOR = TypeAdapter(tuple[datetime, uuid.UUID])
 
@@ -71,6 +86,17 @@ class LinkPage:
 
     links: list[ReadingLink]
     next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteSuggestion:
+    """A note the user can edit that talks about the link's topic."""
+
+    note_id: uuid.UUID
+    notebook_id: uuid.UUID
+    title: str
+    notebook_name: str
+    passage: str
 
 
 class LinkChanges(TypedDict, total=False):
@@ -295,8 +321,10 @@ def list_links(  # noqa: PLR0913
         CategoryNotFoundError: If a filter names someone else's category.
     """
     order = _ORDERS[state]
-    stmt = select(ReadingLink).where(
-        ReadingLink.owner_id == owner.uid, ReadingLink.state == state
+    stmt = (
+        select(ReadingLink)
+        .options(selectinload(ReadingLink.note))
+        .where(ReadingLink.owner_id == owner.uid, ReadingLink.state == state)
     )
     stmt = _filtered(session, owner, stmt, filters or LinkFilters())
     if cursor is not None:
@@ -419,3 +447,96 @@ def delete_link(session: Session, owner: User, link_id: uuid.UUID) -> None:
     _require_state(link, _DELETABLE, "deleted")
     session.delete(link)
     session.flush()
+
+
+# --- Promotion ---
+
+
+def _passage(text: str) -> str:
+    single = " ".join(text.split())
+    if len(single) <= MAX_PASSAGE_CHARS:
+        return single
+    return single[: MAX_PASSAGE_CHARS - 1].rstrip() + "…"
+
+
+def suggest_notes(
+    session: Session, owner: User, link_id: uuid.UUID, searcher: NoteSearcher
+) -> list[NoteSuggestion]:
+    """Up to `MAX_SUGGESTIONS` notes the user can edit about the link's topic.
+
+    Semantic search with the summary as the query, or the title (else the
+    URL) when there is none. Chunks are grouped by note, best first.
+
+    Raises:
+        LinkNotFoundError: If the link is missing or someone else's.
+    """
+    link = get_link(session, owner, link_id)
+    query = link.summary or link.title or link.url
+    scope = editable_scope(session, owner)
+    if scope.is_empty:
+        return []
+    hits = searcher.search(session, owner, query, k=SUGGESTION_CHUNKS, scope=scope)
+    suggestions: dict[uuid.UUID, NoteSuggestion] = {}
+    for hit in hits:
+        if hit.note_id in suggestions:
+            continue
+        suggestions[hit.note_id] = NoteSuggestion(
+            note_id=hit.note_id,
+            notebook_id=hit.notebook_id,
+            title=hit.title,
+            notebook_name=hit.notebook_name,
+            passage=_passage(hit.content),
+        )
+        if len(suggestions) == MAX_SUGGESTIONS:
+            break
+    return list(suggestions.values())
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingNote:
+    """Promote to a note the user can edit."""
+
+    note_id: uuid.UUID
+
+
+@dataclass(frozen=True, slots=True)
+class NewNote:
+    """Promote to a new note, with only a title, in a notebook."""
+
+    notebook_id: uuid.UUID
+    title: str
+
+
+type PromoteTarget = ExistingNote | NewNote
+
+
+def promote_link(
+    session: Session, owner: User, link_id: uuid.UUID, target: PromoteTarget
+) -> tuple[ReadingLink, Note]:
+    """Promote a link to an existing note, or to a new one. Promotion is final.
+
+    Nothing is written into the note: a new note has only its title.
+
+    Returns:
+        The link and its note.
+
+    Raises:
+        LinkNotFoundError: If the link is missing or someone else's.
+        InvalidLinkStateError: If the link is not to read.
+        NoteNotFoundError, NotebookNotFoundError: If the note or notebook
+            can't be seen.
+        PermissionDeniedError: If the note can't be edited, or the notebook
+            doesn't take new notes from the user.
+    """
+    link = get_link(session, owner, link_id, lock=True)
+    _require_state(link, _PROMOTABLE, "promoted")
+    match target:
+        case ExistingNote(note_id=note_id):
+            note = require_note_access(session, note_id, owner, PermissionName.UPDATE)
+        case NewNote(notebook_id=notebook_id, title=title):
+            note = create_note(session, notebook_id, owner, title)
+    link.state = ReadingLinkState.PROMOTED
+    link.decided_at = datetime.now(UTC)
+    link.note_id = note.id
+    session.flush()
+    return link, note

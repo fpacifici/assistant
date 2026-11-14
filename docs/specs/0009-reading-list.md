@@ -148,7 +148,9 @@ If the note is later deleted, the link stays promoted without a note.
 ### Reading tab
 
 A new top-level tab **Reading**, next to Notes and Blogs, hidden when AI
-is disabled like Blogs.
+is disabled like Blogs. The API still accepts links then: they wait for
+analysis, and the list says so instead of showing them as being analyzed,
+until AI is enabled and the analysis command runs.
 
 | Route | View |
 |---|---|
@@ -156,13 +158,16 @@ is disabled like Blogs.
 | `/reading/archive` | **Archive**: discarded links, most recently discarded first |
 | `/reading/promoted` | **Promoted**: promoted links, most recently promoted first, each linking to its note |
 
-- A category sidebar jumps to or filters by a category, in every view.
+- A category sidebar jumps to or filters by a category, in every view, with
+  the count of each category, and opens Manage categories.
+- Adding a link already saved points to that link, in its view.
 - A card shows title, domain, type icon, added date, analysis status,
   summary, a category picker, the notes field, and the actions valid for
   its state: Open (the URL in a new tab), Promote, Discard, Restore, Delete,
   Retry analysis.
 - On mobile the layout follows the [mobile layout spec](0006-mobile-layout.md),
-  as Blogs does: the sidebar becomes a category picker.
+  as Blogs does: the sidebar becomes a category picker, with the same
+  counts, and Manage categories sits next to it.
 
 ## Out of scope
 

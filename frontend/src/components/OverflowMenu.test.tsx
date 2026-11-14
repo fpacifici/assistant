@@ -125,7 +125,7 @@ describe('OverflowMenu', () => {
     expect(await screen.findByRole('menuitem', { name: 'Ask AI' })).toHaveAttribute('href', '/ask');
   });
 
-  it('links to Notes and, when AI is enabled, to Blogs', async () => {
+  it('links to Notes and, when AI is enabled, to Blogs and Reading', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchAskStatus).mockResolvedValue({ enabled: true });
     renderMenu();
@@ -136,6 +136,10 @@ describe('OverflowMenu', () => {
     expect(await screen.findByRole('menuitem', { name: 'Blogs' })).toHaveAttribute(
       'href',
       '/blogs/triage',
+    );
+    expect(screen.getByRole('menuitem', { name: 'Reading' })).toHaveAttribute(
+      'href',
+      '/reading',
     );
   });
 

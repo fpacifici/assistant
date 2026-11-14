@@ -36,6 +36,7 @@ from assistant.observability import init_sentry
 from assistant.reading.analysis import LinkProcessor, create_link_analyzer
 from assistant.reading.worker import ReadingAnalysisWorker
 from assistant.vectors.indexer import create_vector_indexer
+from assistant.vectors.search import NoteSearcher, create_note_searcher
 from assistant.vectors.worker import VectorIndexWorker
 
 if TYPE_CHECKING:
@@ -92,6 +93,7 @@ def create_app(  # noqa: PLR0913
     ask_agent: AskAgent | None = None,
     blog_refresher: BlogRefresher | None = None,
     reading_worker: ReadingAnalysisWorker | None = None,
+    note_searcher: NoteSearcher | None = None,
 ) -> FastAPI:
     """Build the API application.
 
@@ -110,6 +112,9 @@ def create_app(  # noqa: PLR0913
         reading_worker: Analyzes reading links after they are saved, started
             and stopped with the app. Defaults to one built from config, or
             none when AI is disabled (links then stay pending).
+        note_searcher: Semantic search over notes, for the reading list's
+            note suggestions. Defaults to one built from config, or none
+            when AI is disabled (suggestions answer 503).
     """
     # First, so the SDK's FastAPI/Starlette/SQLAlchemy integrations are active
     # before anything below is built. No-op without a DSN (tests, local dev).
@@ -142,6 +147,7 @@ def create_app(  # noqa: PLR0913
     app.state.session_factory = session_factory
     app.state.vector_worker = worker
     app.state.reading_worker = link_worker
+    app.state.note_searcher = note_searcher or create_note_searcher()
     app.state.ask_agent = ask_agent or create_ask_agent(session_factory)
     app.state.blog_refresher = blog_refresher or create_blog_refresher(session_factory)
 
