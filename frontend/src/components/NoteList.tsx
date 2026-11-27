@@ -96,6 +96,8 @@ export default function NoteList() {
     mutationFn: (title: string) => createNote(notebookId!, title),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+      // The notebook list is ordered by my last edit.
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] });
       setNewTitle('');
     },
   });
@@ -104,6 +106,8 @@ export default function NoteList() {
     mutationFn: (id: string) => deleteNote(notebookId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+      // The notebook list is ordered by my last edit.
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] });
     },
   });
 

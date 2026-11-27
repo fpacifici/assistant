@@ -233,6 +233,8 @@ export default function PromoteDialog({
     mutationFn: (target: PromoteTarget) => promoteLink(link.id, target),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: [...READING_KEY] });
+      // The notebook list is ordered by my last edit.
+      void queryClient.invalidateQueries({ queryKey: ['notebooks'] });
       onClose();
       navigate(`/notebooks/${result.notebook_id}/notes/${result.note_id}`);
     },

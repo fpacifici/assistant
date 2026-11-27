@@ -378,7 +378,7 @@ On mobile it shows one level at a time; see [Responsive layout](#responsive-layo
 
 ### NotebookList
 
-Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL. Notebooks are sorted by name by the API and loaded page by page (see [Pagination](#pagination)).
+Lists the user's notebooks with create/delete support (`components/NotebookList.tsx`). Uses React Query to fetch and mutate notebooks. Clicking a notebook navigates to its notes route. The active notebook is highlighted based on the URL. Notebooks are sorted by the API with the ones the user last edited a note in first (then by name) and loaded page by page (see [Pagination](#pagination)). Every note mutation (save, title, create, delete, promote from the reading list) invalidates `['notebooks']`, so the edited notebook moves to the top.
 
 It also opens `ImportDialog` (an "Import" button in its header on desktop, an "Import from Evernote" entry in the `⋯` menu on mobile). The dialog uploads an Evernote export zip with `XMLHttpRequest` for progress, runs the import, then shows the report with links to notes that were kept because the user edited them, and invalidates the notebooks and notes queries.
 

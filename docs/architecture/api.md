@@ -99,8 +99,11 @@ just this one.
 List notebooks visible to the current user: notebooks they have an
 entitlement on directly, plus any notebook containing at least one note
 they have an entitlement on (only that note is then visible when listing
-its notes). Sorted by name, case-insensitively (ties by id, so pages are
-stable). Supports pagination via query parameters:
+its notes). Sorted by when the current user last created, edited or
+deleted a note in the notebook, most recent first; reading a note and
+other users' edits do not count. Notebooks the user never edited in come
+last, by name case-insensitively (ties by id, so pages are stable).
+Supports pagination via query parameters:
 - `offset` (default: 0)
 - `limit` (default: 20, max: 100)
 

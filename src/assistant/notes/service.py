@@ -80,7 +80,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, exists, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from assistant.models.schema import (
@@ -92,6 +93,7 @@ from assistant.models.schema import (
     NodeType,
     Note,
     Notebook,
+    NotebookActivity,
     NoteImport,
     PermissionName,
     RoleName,
@@ -204,26 +206,47 @@ def list_notebooks(
     offset: int = 0,
     limit: int | None = None,
 ) -> list[Notebook]:
-    """Notebooks visible to the caller, sorted by name (case-insensitive).
+    """Notebooks visible to the caller, the ones they last edited in first.
 
-    Either directly (any entitlement on the notebook itself) or because the
-    notebook contains at least one note the caller holds any entitlement on.
+    Visible either directly (any entitlement on the notebook itself) or
+    because the notebook contains at least one note the caller holds any
+    entitlement on.
+
+    Sorted by when the caller last created, changed or deleted a note in
+    the notebook (`NotebookActivity`); reads and other users' edits do not
+    count. Notebooks the caller never edited in come last, by name
+    (case-insensitive).
     """
-    stmt = select(Notebook).where(
-        or_(
-            exists().where(
-                Entitlement.principal_id == caller.uid,
-                Entitlement.notebook_id == Notebook.id,
+    stmt = (
+        select(Notebook)
+        .outerjoin(
+            NotebookActivity,
+            and_(
+                NotebookActivity.notebook_id == Notebook.id,
+                NotebookActivity.user_id == caller.uid,
             ),
-            exists().where(
-                Entitlement.principal_id == caller.uid,
-                Entitlement.note_id == Note.id,
-                Note.notebook_id == Notebook.id,
+        )
+        .where(
+            or_(
+                exists().where(
+                    Entitlement.principal_id == caller.uid,
+                    Entitlement.notebook_id == Notebook.id,
+                ),
+                exists().where(
+                    Entitlement.principal_id == caller.uid,
+                    Entitlement.note_id == Note.id,
+                    Note.notebook_id == Notebook.id,
+                ),
             ),
-        ),
+        )
+        # The id tiebreak keeps pages stable.
+        .order_by(
+            NotebookActivity.last_updated_at.desc().nulls_last(),
+            func.lower(Notebook.name),
+            Notebook.id,
+        )
+        .offset(offset)
     )
-    # Case-insensitive by name; the id tiebreak keeps pages stable.
-    stmt = stmt.order_by(func.lower(Notebook.name), Notebook.id).offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(session.scalars(stmt))
@@ -279,15 +302,17 @@ def create_note(
     external_id: str | None = None,
 ) -> Note:
     require_notebook_access(session, notebook_id, owner, PermissionName.CREATE_NOTES)
+    now = datetime.now(UTC)
     note = Note(
         notebook_id=notebook_id,
         owner_id=owner.uid,
         title=title,
         external_id=external_id,
-        update_timestamp=datetime.now(UTC),
+        update_timestamp=now,
     )
     session.add(note)
     session.flush()
+    _record_notebook_activity(session, owner, notebook_id, now)
     _grant_owner_entitlement(session, owner, RoleName.NOTE_OWNER, note_id=note.id)
     index_note(session, note.id)
     mark_notes_stale(session, [note.id])
@@ -356,7 +381,7 @@ def update_note(
     note = require_note_access(session, note_id, caller, PermissionName.UPDATE)
     if title is not None:
         note.title = title
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, caller)
     session.flush()
     return note
 
@@ -367,6 +392,7 @@ def delete_note(
     caller: User,
 ) -> None:
     note = require_note_delete_access(session, note_id, caller)
+    _record_notebook_activity(session, caller, note.notebook_id, datetime.now(UTC))
     session.delete(note)
     session.flush()
 
@@ -377,16 +403,48 @@ def _ensure_text_node(node: Node) -> None:
         raise InvalidNodeTypeError(msg)
 
 
-def _touch_note(session: Session, note_id: uuid.UUID) -> None:
-    """Mark a note as changed: bump its timestamp and reindex it for search.
+def _record_notebook_activity(
+    session: Session,
+    editor: User,
+    notebook_id: uuid.UUID,
+    when: datetime,
+) -> None:
+    """Record that `editor` changed a note in `notebook_id` at `when`.
 
-    Every note mutation goes through here, which is what keeps the search
-    index in step with the content (see `assistant.search.indexer`), and
-    marks its embeddings stale (see `assistant.vectors.staleness`).
+    This is what orders `list_notebooks`: only the caller's own edits
+    count, so it is keyed by the user who made the change.
     """
-    session.execute(
-        update(Note).where(Note.id == note_id).values(update_timestamp=datetime.now(UTC)),
+    stmt = pg_insert(NotebookActivity).values(
+        user_id=editor.uid,
+        notebook_id=notebook_id,
+        last_updated_at=when,
     )
+    session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[NotebookActivity.user_id, NotebookActivity.notebook_id],
+            set_={"last_updated_at": stmt.excluded.last_updated_at},
+        ),
+    )
+
+
+def _touch_note(session: Session, note_id: uuid.UUID, editor: User) -> None:
+    """Mark a note as changed by `editor`.
+
+    Bumps its timestamp, reindexes it for search and records the editor's
+    activity on its notebook. Every note mutation goes through here, which
+    is what keeps the search index in step with the content (see
+    `assistant.search.indexer`), marks its embeddings stale (see
+    `assistant.vectors.staleness`) and keeps the notebook list ordered by
+    the caller's last edit (see `list_notebooks`).
+    """
+    now = datetime.now(UTC)
+    notebook_id = session.execute(
+        update(Note)
+        .where(Note.id == note_id)
+        .values(update_timestamp=now)
+        .returning(Note.notebook_id),
+    ).scalar_one()
+    _record_notebook_activity(session, editor, notebook_id, now)
     index_note(session, note_id)
     mark_notes_stale(session, [note_id])
 
@@ -568,7 +626,7 @@ def add_text_node(
         payload=payload,
     )
     session.add(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, author)
     session.flush()
     return node
 
@@ -613,7 +671,7 @@ def add_attachment_node(
         payload=payload,
     )
     session.add(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, author)
     session.flush()
     return node
 
@@ -661,7 +719,7 @@ def insert_text_node(  # noqa: PLR0913
         payload=payload,
     )
     session.add(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, author)
     session.flush()
     return node
 
@@ -707,7 +765,7 @@ def add_markdown_node(
         block_type=validated_bt.value,
     )
     session.add(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, author)
     session.flush()
     return node
 
@@ -756,7 +814,7 @@ def insert_markdown_node(  # noqa: PLR0913
         block_type=validated_bt.value,
     )
     session.add(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, author)
     session.flush()
     return node
 
@@ -797,7 +855,7 @@ def update_markdown_node(  # noqa: PLR0913
     session.expire_all()
     refreshed = session.get(Node, node_id)
     assert refreshed is not None
-    _touch_note(session, refreshed.note_id)
+    _touch_note(session, refreshed.note_id, caller)
     session.flush()
     return refreshed
 
@@ -839,7 +897,7 @@ def update_text_node(
     session.expire_all()
     node = session.get(Node, node_id)
     assert node is not None
-    _touch_note(session, node.note_id)
+    _touch_note(session, node.note_id, caller)
     session.flush()
     return node
 
@@ -895,7 +953,7 @@ def split_text_node(
         payload=right_payload,
     )
     session.add(new_node)
-    _touch_note(session, node.note_id)
+    _touch_note(session, node.note_id, author)
     session.flush()
     return node, new_node
 
@@ -939,7 +997,7 @@ def merge_text_nodes(  # noqa: PLR0913
     target.version += 1
     target.update_timestamp = datetime.now(UTC)
     session.delete(source)
-    _touch_note(session, target.note_id)
+    _touch_note(session, target.note_id, caller)
     session.flush()
     return target
 
@@ -960,7 +1018,7 @@ def replace_markdown_nodes(
     require_note_access(session, note_id, author, PermissionName.UPDATE)
     session.execute(delete(Node).where(Node.note_id == note_id))
     if not blocks:
-        _touch_note(session, note_id)
+        _touch_note(session, note_id, author)
         session.flush()
         return []
     return [
@@ -987,6 +1045,6 @@ def delete_node(
     attachment_id = node.attachment_id if node.node_type == NodeType.ATTACHMENT else None
     note_id = node.note_id
     session.delete(node)
-    _touch_note(session, note_id)
+    _touch_note(session, note_id, caller)
     session.flush()
     return attachment_id
