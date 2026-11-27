@@ -336,6 +336,29 @@ Response (201):
 
 Deletes a node. Idempotent — returns 204 whether or not the node existed.
 
+### Presence and live updates
+
+How these are used: [Notes service](notesservice.md#live-updates-and-presence).
+
+```
+PUT    /notebook/{nb}/note/{note}/presence/{client_id}   body {"cursor": {"node_id", "offset"} | null}  -> 204
+DELETE /notebook/{nb}/note/{note}/presence/{client_id}                                                -> 204
+GET    /notebook/{nb}/note/{note}/live?since=<revision>                                               -> 200
+GET    /notebook/{nb}/presence                                                                        -> 200
+```
+
+- `PUT .../presence/{client_id}` is the heartbeat of one browser tab, with
+  its caret. It needs `view_note` (404 otherwise), and answers 409 when
+  another user holds `client_id`.
+- `DELETE` removes the caller's own tab and is idempotent.
+- `live` answers `{revision, title, nodes, presence}`. `nodes` is the note's
+  nodes in order (as `GET .../node`), or null when `since` is the current
+  revision.
+- Each presence is `{user_id, name, initial, cursor}`, for users other than
+  the caller who beat in the last 30 s. The notebook route answers
+  `[{note_id, users}]` for the notes the caller can view that someone else
+  has open.
+
 ### Sharing
 
 Granting/revoking access — one pair of mirrored endpoint sets, nested under

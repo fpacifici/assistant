@@ -41,6 +41,7 @@ from assistant.notes.exceptions import (
     NodeVersionConflictError,
     NotesServiceError,
     PermissionDeniedError,
+    PresenceClientTakenError,
     UserNotFoundError,
 )
 from assistant.reading.exceptions import (
@@ -72,6 +73,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(CollectionBusyError)
     @app.exception_handler(SourcePausedError)
     @app.exception_handler(InvalidLinkStateError)
+    @app.exception_handler(PresenceClientTakenError)
     async def blog_duplicate_handler(
         request: Request,  # noqa: ARG001
         exc: Exception,

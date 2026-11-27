@@ -213,6 +213,40 @@ client surfaces the conflict so the user can re-apply their edit.
 | Two users insert at the same position | No conflict — server generates unique positions |
 | Two users delete the same node | Idempotent — deleting an already-deleted node is a no-op |
 
+### Live updates and presence
+
+People with the same note open see each other's saved edits, where each
+other's caret is, and who is there. Code: `notes/presence.py`, routes in
+`api/routes/presence.py`, client in `markdown/liveMerge.ts`. The plan is
+in [`docs/plans/live_collaboration.md`](../plans/live_collaboration.md).
+
+It works by polling, like the reading list. There is no push channel.
+
+- **Presence.** An open note beats (`PUT .../presence/{client_id}`) every
+  10 s while the page is visible, and on cursor moves at most once a second.
+  `client_id` is per browser tab. Rows live in `note_presence`, keyed by
+  `(note_id, client_id)`, with the caret as `(cursor_node_id,
+  cursor_offset)`: the node and the character offset in it. A row older
+  than `PRESENCE_TTL` (30 s, three missed beats) is inactive, and any
+  heartbeat deletes such rows. Leaving the note deletes its row. Lists show
+  each other user once, with their most recent cursor, and never the caller.
+  A heartbeat needs `view_note`.
+- **Changes.** The open note polls `GET .../live?since=<revision>` every 2 s.
+  The revision is the note's `update_timestamp`, which `_touch_note` bumps on
+  every change. The server compares it for difference, not order, and sends
+  the nodes only when it differs. The note list polls `GET
+  /notebook/{id}/presence` every 10 s for the avatars on its rows.
+- **Merging** follows the version rule above, per block: the first writer
+  wins. A block with no unsaved edits takes the new content. A block with
+  unsaved edits becomes a *conflict*: it keeps the local text, is left out
+  of saves, and is outlined, with **Keep mine** (re-apply on top of their
+  version) and **Use theirs**. A save answered 409 polls at once, which
+  turns that block into a conflict. Saving the other blocks goes on. Nodes
+  fetched while a save ran are dropped, since they may predate blocks the
+  save just created. Remote edits are kept out of the local undo history.
+- Nodes record their creator, not their last editor, so a conflict doesn't
+  say who made the change.
+
 ### Limitations (acceptable for V1)
 
 This strategy does not support real-time keystroke-level collaboration

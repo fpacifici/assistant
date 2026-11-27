@@ -4045,3 +4045,94 @@ ul {
 [data-layout="mobile"] .add-link button {
   min-height: 44px;
 }
+
+/* Live collaboration: who else is on a note, their carets, conflicts */
+
+.presence-avatars {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.presence-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+}
+
+.presence-avatar + .presence-avatar {
+  margin-left: -6px;
+}
+
+.note-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The remote carets are placed in it. */
+.note-body {
+  position: relative;
+}
+
+.remote-cursors {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.remote-cursor {
+  position: absolute;
+  border-left: 2px solid;
+  transition: top 0.2s, left 0.2s;
+}
+
+.remote-cursor .presence-avatar {
+  position: absolute;
+  top: -20px;
+  left: -11px;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  border-width: 1px;
+}
+
+.conflict-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--conflict, #d97706);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.conflict-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.conflict-show {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}

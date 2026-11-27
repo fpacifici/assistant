@@ -25,6 +25,7 @@ from assistant.api.routes.invites import router as invites_router
 from assistant.api.routes.nodes import router as nodes_router
 from assistant.api.routes.notebooks import router as notebooks_router
 from assistant.api.routes.notes import router as notes_router
+from assistant.api.routes.presence import router as presence_router
 from assistant.api.routes.reading import router as reading_router
 from assistant.api.routes.search import router as search_router
 from assistant.api.routes.tags import router as tags_router
@@ -73,6 +74,7 @@ def _include_routers(app: FastAPI) -> None:
     app.include_router(notebooks_router, prefix="/notebook", tags=["notebooks"])
     app.include_router(notes_router, prefix="/notebook", tags=["notes"])
     app.include_router(nodes_router, prefix="/notebook", tags=["nodes"])
+    app.include_router(presence_router, prefix="/notebook", tags=["presence"])
     app.include_router(files_router, tags=["files"])
     app.include_router(imports_router, prefix="/imports", tags=["imports"])
     app.include_router(tags_router, prefix="/tag", tags=["tags"])

@@ -17,7 +17,12 @@ vi.mock('../api/notebooks', () => ({
   }),
 }));
 
+vi.mock('../api/presence', () => ({
+  fetchNotebookPresence: vi.fn().mockResolvedValue([]),
+}));
+
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
+import { fetchNotebookPresence } from '../api/presence';
 import { PAGE_SIZE } from '../api/pagination';
 import type { Note } from '../types';
 import { mockIntersectionObserver, scrollIntoView } from '../test/intersectionObserver';
@@ -48,6 +53,22 @@ describe('NoteList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIntersectionObserver();
+  });
+
+  it('shows the avatars of people on a note', async () => {
+    mockFetchNotes.mockResolvedValue([makeNote(1), makeNote(2)]);
+    vi.mocked(fetchNotebookPresence).mockResolvedValueOnce([
+      {
+        note_id: 'note-2',
+        users: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+      },
+    ]);
+    renderNoteList();
+
+    const avatar = await screen.findByRole('img', { name: 'Bob Builder' });
+    expect(avatar).toHaveTextContent('B');
+    expect(avatar.closest('li')).toHaveTextContent('Note 2');
+    expect(screen.getAllByRole('img')).toHaveLength(1);
   });
 
   it('titles the list with the notebook name', async () => {

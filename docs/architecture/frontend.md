@@ -279,6 +279,38 @@ Blogs, gated on `useAskEnabled()` like Blogs in the `Sections` nav, the mobile
   notebook with `create_notes` (every page of notebooks is loaded), and Copy
   as markdown (`lib/readingLinks.ts`). Promoting navigates to the note.
 
+## Live collaboration
+
+Other people on the same note, by polling
+([backend](notesservice.md#live-updates-and-presence)). Code:
+`api/presence.ts`, `hooks/useNotePresence.ts`, `hooks/useLiveNote.ts`,
+`markdown/liveMerge.ts`, `markdown/cursors.ts`, `components/presence/`.
+
+- **`useNotePresence`** gives the tab a `client_id`. It beats every
+  `HEARTBEAT_MS` (10 s) while the page is visible, sends cursor moves
+  (`editor.onSelectionChange`) at most every `CURSOR_THROTTLE_MS`, and
+  leaves on unmount and `pagehide` with a `keepalive` request.
+- **`useLiveNote`** polls `live` every `LIVE_POLL_MS` (2 s) with React
+  Query, which pauses while the page is hidden. It hands nodes to the editor
+  only when no save overlapped the request. `NoteEditor` keeps `saveEpoch`,
+  which is odd while saving.
+- **`planLiveMerge`** is pure. It turns the server nodes, the document, the
+  registry and the snapshot into update, remove, insert and conflict
+  operations. `applyLiveMerge` applies them in one transaction, outside the
+  undo history, and keeps the registry and snapshot in step so merged blocks
+  don't look edited. `NoteEditor` ignores the editor changes it causes
+  (`applyingRemote`).
+- **Conflicts** (`ConflictBar`) are blocks with unsaved edits that someone
+  else changed or deleted. `executeSave` skips them, and a `<style>` rule
+  outlines them. Keep mine moves the block to their version and saves the
+  local text. Use theirs replaces it. Leaving the note with a conflict asks
+  first.
+- **Avatars** (`PresenceAvatars`): the first initial on a colour derived from
+  the user id. They appear in the editor's toolbar (the top bar on mobile)
+  and on `NoteList` rows, which poll the notebook's presence every 10 s.
+  `RemoteCursors` draws each caret in `.note-body` with
+  `prosemirrorView.coordsAtPos`, in the scroller's content coordinates.
+
 ## Theming
 
 Both layouts support six themes: the neutral `light` and `dark`, plus four
