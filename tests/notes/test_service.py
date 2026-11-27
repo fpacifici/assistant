@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -203,7 +204,9 @@ def test_list_notes(db_session: Session) -> None:
     assert len(list_notes(db_session, nb.id, user)) == 2
 
 
-def test_list_notebooks_sorted_by_name_case_insensitive(db_session: Session) -> None:
+def test_list_notebooks_never_edited_sorted_by_name_case_insensitive(
+    db_session: Session,
+) -> None:
     user = _make_user(db_session)
     for name in ["beta", "Alpha", "gamma", "Delta"]:
         create_notebook(db_session, name, user)
@@ -221,6 +224,95 @@ def test_list_notebooks_pages_follow_sort_order(db_session: Session) -> None:
     second = [nb.name for nb in list_notebooks(db_session, user, offset=2, limit=2)]
     third = [nb.name for nb in list_notebooks(db_session, user, offset=4, limit=2)]
     assert (first, second, third) == (["a", "b"], ["c", "d"], ["e"])
+
+
+# --- Notebook order by the caller's last edit ---
+
+
+def _notebook_names(session: Session, user: User) -> list[str]:
+    return [nb.name for nb in list_notebooks(session, user)]
+
+
+def test_list_notebooks_last_edited_first(db_session: Session) -> None:
+    user = _make_user(db_session)
+    a = create_notebook(db_session, "a", user)
+    b = create_notebook(db_session, "b", user)
+    create_notebook(db_session, "c", user)
+    note_a = create_note(db_session, a.id, user, "in a")
+    create_note(db_session, b.id, user, "in b")
+    assert _notebook_names(db_session, user) == ["b", "a", "c"]
+
+    add_text_node(db_session, note_a.id, user, "edit")
+
+    assert _notebook_names(db_session, user) == ["a", "b", "c"]
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda s, note, u: update_note(s, note.id, u, title="t"),
+        lambda s, note, u: add_markdown_node(s, note.id, u, "x", "paragraph"),
+        lambda s, note, u: replace_markdown_nodes(s, note.id, u, []),
+        lambda s, note, u: delete_note(s, note.id, u),
+    ],
+    ids=["title", "node", "replace", "delete_note"],
+)
+def test_list_notebooks_every_note_change_counts(
+    db_session: Session,
+    edit: Callable[[Session, Note, User], object],
+) -> None:
+    user = _make_user(db_session)
+    a = create_notebook(db_session, "a", user)
+    b = create_notebook(db_session, "b", user)
+    note_a = create_note(db_session, a.id, user, "in a")
+    create_note(db_session, b.id, user, "in b")
+
+    edit(db_session, note_a, user)
+
+    assert _notebook_names(db_session, user) == ["a", "b"]
+
+
+def test_list_notebooks_reading_does_not_count(db_session: Session) -> None:
+    user = _make_user(db_session)
+    a = create_notebook(db_session, "a", user)
+    b = create_notebook(db_session, "b", user)
+    note_a = create_note(db_session, a.id, user, "in a")
+    create_note(db_session, b.id, user, "in b")
+
+    get_note(db_session, note_a.id, user)
+    get_ordered_nodes(db_session, note_a.id, user)
+    list_notes(db_session, a.id, user)
+
+    assert _notebook_names(db_session, user) == ["b", "a"]
+
+
+def test_list_notebooks_other_users_edits_do_not_count(db_session: Session) -> None:
+    me = _make_user(db_session, "me@test.com")
+    other = _make_user(db_session, "other@test.com")
+    a = create_notebook(db_session, "a", me)
+    b = create_notebook(db_session, "b", me)
+    note_a = create_note(db_session, a.id, me, "in a")
+    create_note(db_session, b.id, me, "in b")
+    _grant(db_session, other, notebook_id=a.id, role_name=RoleName.NOTEBOOK_EDITOR)
+
+    add_text_node(db_session, note_a.id, other, "their edit")
+
+    assert _notebook_names(db_session, me) == ["b", "a"]
+    assert _notebook_names(db_session, other) == ["a"]
+
+
+def test_list_notebooks_shared_notebook_never_edited_comes_after_edited(
+    db_session: Session,
+) -> None:
+    me = _make_user(db_session, "me@test.com")
+    other = _make_user(db_session, "other@test.com")
+    shared = create_notebook(db_session, "a-shared", other)
+    create_note(db_session, shared.id, other, "theirs")
+    _grant(db_session, me, notebook_id=shared.id, role_name=RoleName.NOTEBOOK_VIEWER)
+    mine = create_notebook(db_session, "z-mine", me)
+    create_note(db_session, mine.id, me, "mine")
+
+    assert _notebook_names(db_session, me) == ["z-mine", "a-shared"]
 
 
 def test_list_notes_sorted_by_last_update_desc(db_session: Session) -> None:

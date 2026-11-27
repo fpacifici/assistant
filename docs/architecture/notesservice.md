@@ -264,6 +264,17 @@ entitlement, or because the user holds any entitlement on at least one note
 inside it (`can_view_notebook`) — sharing a single note surfaces its parent
 notebook without granting any notebook-level permission.
 
+### Notebook Order
+
+`list_notebooks` puts first the notebooks the caller last changed a note
+in. The `notebook_activity` table holds one row per (user, notebook) with
+the time of that user's last note mutation there. `_touch_note` (which
+every note edit goes through), `create_note` and `delete_note` upsert the
+editing user's row, so reads and other users' edits never move a notebook
+in someone's list. Notebooks without a row sort after, by name. Rows go
+with their user or notebook through `ON DELETE CASCADE`. Tagging a note
+does not count: tags are the caller's private labels, not note changes.
+
 ## Notes Service
 
 The Notes service is a python module (`/src/assistant/notes`). It exposes

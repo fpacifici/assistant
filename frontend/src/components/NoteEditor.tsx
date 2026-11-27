@@ -88,6 +88,8 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
     });
     // The saved note moves to the top of the list with a fresh preview.
     queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+    // The notebook list is ordered by my last edit.
+    queryClient.invalidateQueries({ queryKey: ['notebooks'] });
   }, [notebookId, noteId, editor, queryClient]);
 
   const [conflict, setConflict] = useState(false);
@@ -111,6 +113,8 @@ export default function NoteEditor({ standalone = false }: { standalone?: boolea
     queryClient.setQueryData(['note', notebookId, noteId], updated);
     // The saved note moves to the top of the list.
     queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+    // The notebook list is ordered by my last edit.
+    queryClient.invalidateQueries({ queryKey: ['notebooks'] });
     // Show the saved title, unless the user kept typing meanwhile.
     if (titleDraftRef.current === draft) setDraft(null);
   }, [notebookId, noteId, queryClient, setDraft]);

@@ -481,6 +481,35 @@ class Notebook(Base):
     )
 
 
+class NotebookActivity(Base):
+    """When one user last changed a note in one notebook.
+
+    One row per (user, notebook), bumped by every note mutation the user
+    makes (creating, editing, deleting a note). Reads and other users'
+    edits leave it alone, so it orders the notebook list by the caller's
+    own recent work. Rows go with their user or notebook (database-level
+    cascade).
+    """
+
+    __tablename__ = "notebook_activity"
+    __table_args__ = ({"schema": "assistant"},)
+
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    notebook_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notebooks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+
 class Note(Base):
     """Note model."""
 

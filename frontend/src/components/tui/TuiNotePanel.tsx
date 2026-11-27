@@ -98,6 +98,8 @@ export default function TuiNotePanel() {
     mutationFn: (title: string) => createNote(notebookId!, title),
     onSuccess: (note) => {
       queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+      // The notebook list is ordered by my last edit.
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] });
       navigate(`/notebooks/${notebookId}/notes/${note.id}`);
       focus('editor');
     },
@@ -107,6 +109,8 @@ export default function TuiNotePanel() {
     mutationFn: (id: string) => deleteNote(notebookId!, id),
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['notes', notebookId] });
+      // The notebook list is ordered by my last edit.
+      queryClient.invalidateQueries({ queryKey: ['notebooks'] });
       if (id === noteId) navigate(`/notebooks/${notebookId}/notes`);
     },
   });
