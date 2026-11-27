@@ -78,9 +78,9 @@ owner role, in the same transaction as the subject's own insert (see
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import and_, delete, exists, func, or_, select, update
+from sqlalchemy import Table, and_, delete, exists, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
@@ -413,8 +413,13 @@ def _record_notebook_activity(
 
     This is what orders `list_notebooks`: only the caller's own edits
     count, so it is keyed by the user who made the change.
+
+    The upsert targets the Core table, not the mapped class: an ORM DML
+    statement renders the mapper's cached copy of the table, which keeps
+    the schema it had when first built (the SQLite test fixture strips
+    schemas from the tables afterwards).
     """
-    stmt = pg_insert(NotebookActivity).values(
+    stmt = pg_insert(cast("Table", NotebookActivity.__table__)).values(
         user_id=editor.uid,
         notebook_id=notebook_id,
         last_updated_at=when,

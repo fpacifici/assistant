@@ -8,7 +8,7 @@ latest node a user authored in the notebook, or the latest note they
 created there.
 
 Revision ID: f5a1c7e9b342
-Revises: e3b7c9d2a518
+Revises: 4a7f2c9e1b58
 Create Date: 2026-11-27 10:00:00.000000
 
 """
@@ -20,7 +20,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f5a1c7e9b342"
-down_revision: str | Sequence[str] | None = "e3b7c9d2a518"
+down_revision: str | Sequence[str] | None = "4a7f2c9e1b58"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
