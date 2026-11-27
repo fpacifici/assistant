@@ -44,6 +44,13 @@ const editorMock = {
   setTextCursorPosition: vi.fn(),
 };
 
+vi.mock('../api/presence', () => ({
+  sendHeartbeat: vi.fn().mockResolvedValue(undefined),
+  leaveNote: vi.fn(),
+  fetchLiveNote: vi.fn().mockResolvedValue({ revision: 'r1', title: 'Title', nodes: null, presence: [] }),
+  fetchNotebookPresence: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@blocknote/react', () => ({
   useCreateBlockNote: () =>
     ({
@@ -52,6 +59,7 @@ vi.mock('@blocknote/react', () => ({
       replaceBlocks: vi.fn(),
       tryParseMarkdownToBlocks: vi.fn(() => []),
       onChange: vi.fn(() => () => {}),
+      onSelectionChange: vi.fn(() => () => {}),
       focus: editorMock.focus,
       setTextCursorPosition: editorMock.setTextCursorPosition,
     }) as unknown as BlockNoteEditor,

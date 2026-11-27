@@ -4,6 +4,9 @@
  *
  * Notes come most recently updated first, `PAGE_SIZE` at a time; the next
  * page loads when the user scrolls to the end of the list.
+ *
+ * A note someone else has open shows their avatars, polled every
+ * `NOTEBOOK_PRESENCE_POLL_MS`.
  */
 
 import { useMemo, useState } from 'react';
@@ -11,11 +14,16 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useNavigate, useParams } from 'react-router';
 import { fetchNotes, createNote, deleteNote } from '../api/notes';
 import { fetchNotebook } from '../api/notebooks';
+import { fetchNotebookPresence } from '../api/presence';
 import { nextPageOffset } from '../api/pagination';
 import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
-import type { Note, Tag } from '../types';
+import type { ActiveUser, Note, Tag } from '../types';
 import ShareDialog from './ShareDialog';
 import ConfirmDialog from './ConfirmDialog';
+import PresenceAvatars from './presence/PresenceAvatars';
+
+/** As often as the open notes beat. */
+export const NOTEBOOK_PRESENCE_POLL_MS = 10_000;
 
 const NOTE_ROLE_OPTIONS = ['note_viewer', 'note_editor', 'note_owner'];
 const MAX_VISIBLE_TAGS = 3;
@@ -73,6 +81,17 @@ export default function NoteList() {
     enabled: !!notebookId,
   });
 
+  const { data: presence } = useQuery({
+    queryKey: ['presence', notebookId],
+    queryFn: () => fetchNotebookPresence(notebookId!),
+    enabled: !!notebookId,
+    refetchInterval: NOTEBOOK_PRESENCE_POLL_MS,
+  });
+  const activeUsers = useMemo(
+    () => new Map<string, ActiveUser[]>((presence ?? []).map((p) => [p.note_id, p.users])),
+    [presence],
+  );
+
   const createMutation = useMutation({
     mutationFn: (title: string) => createNote(notebookId!, title),
     onSuccess: () => {
@@ -120,7 +139,13 @@ export default function NoteList() {
               onClick={() => navigate(`/notebooks/${notebookId}/notes/${note.id}`)}
             >
               <span className="note-date">{formatNoteDate(note.update_timestamp)}</span>
-              <span className="item-name">{note.title || 'Untitled'}</span>
+              <span className="note-title-row">
+                <span className="item-name">{note.title || 'Untitled'}</span>
+                <PresenceAvatars
+                  users={activeUsers.get(note.id) ?? []}
+                  label="On this note now"
+                />
+              </span>
               {note.preview && <span className="note-preview">{note.preview}</span>}
               <NoteTags tags={note.tags} />
             </span>

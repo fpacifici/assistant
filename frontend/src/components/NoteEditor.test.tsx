@@ -43,6 +43,13 @@ vi.mock('../api/invites', () => ({
   }),
 }));
 
+vi.mock('../api/presence', () => ({
+  sendHeartbeat: vi.fn().mockResolvedValue(undefined),
+  leaveNote: vi.fn(),
+  fetchLiveNote: vi.fn().mockResolvedValue({ revision: 'r1', title: 'Title', nodes: null, presence: [] }),
+  fetchNotebookPresence: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@blocknote/react', () => ({
   useCreateBlockNote: () => {
     onChangeCallback = undefined;
@@ -55,6 +62,7 @@ vi.mock('@blocknote/react', () => ({
         onChangeCallback = cb;
         return () => {};
       }),
+      onSelectionChange: vi.fn(() => () => {}),
     } as unknown as BlockNoteEditor;
   },
 }));
@@ -66,10 +74,13 @@ vi.mock('@blocknote/mantine', () => ({
 import { fetchNote } from '../api/notes';
 import { fetchNodes } from '../api/nodes';
 import { executeSave } from '../markdown/reconcile';
+import { fetchLiveNote } from '../api/presence';
+import { ApiError } from '../api/client';
 
 const mockFetchNote = vi.mocked(fetchNote);
 const mockFetchNodes = vi.mocked(fetchNodes);
 const mockExecuteSave = vi.mocked(executeSave);
+const mockFetchLiveNote = vi.mocked(fetchLiveNote);
 
 function makeNote(permissions: string[]): Note {
   return {
@@ -192,17 +203,34 @@ describe('NoteEditor auto-save', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('stops auto-saving after a conflict', async () => {
-    mockExecuteSave.mockRejectedValue(new Error('409 Conflict'));
+  it('polls for changes right away after a save conflict and keeps auto-saving', async () => {
+    mockExecuteSave.mockRejectedValueOnce(new ApiError(409, 'Version conflict'));
+    mockExecuteSave.mockResolvedValue(new Map());
     renderEditor();
+    await waitFor(() => expect(mockFetchLiveNote).toHaveBeenCalled());
     await makeDirty();
+    const polls = mockFetchLiveNote.mock.calls.length;
     await elapseAutosave();
 
-    expect(await screen.findByRole('status')).toHaveTextContent(/^Conflict/);
+    await waitFor(() => expect(mockFetchLiveNote.mock.calls.length).toBeGreaterThan(polls));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
     await makeDirty();
     await elapseAutosave();
-    expect(mockExecuteSave).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockExecuteSave).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows who else is on the note', async () => {
+    mockFetchLiveNote.mockResolvedValue({
+      revision: 'r1',
+      title: 'Title',
+      nodes: null,
+      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+    });
+    renderEditor();
+
+    const avatars = await screen.findByLabelText('Also on this note');
+    expect(within(avatars).getByRole('img', { name: 'Bob Builder' })).toHaveTextContent('B');
   });
 });
 
@@ -247,16 +275,19 @@ describe('NoteEditor on mobile', () => {
     expect(container.querySelector('.editor-toolbar')).toBeNull();
   });
 
-  it('shows a conflict in the status line', async () => {
+  it('shows who else is on the note in the top bar', async () => {
     mockFetchNote.mockResolvedValue(makeNote(['view_note', 'update']));
-    mockExecuteSave.mockRejectedValue(new Error('409 Conflict'));
+    mockFetchLiveNote.mockResolvedValue({
+      revision: 'r1',
+      title: 'Title',
+      nodes: null,
+      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+    });
     renderMobileEditor();
 
-    await makeDirty();
-    await elapseAutosave();
-
-    expect(await screen.findByRole('status')).toHaveTextContent(/^Conflict/);
-    expect(within(topBar()).getByText('Not saved')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(topBar()).getByRole('img', { name: 'Bob Builder' })).toBeInTheDocument(),
+    );
   });
 
   it('offers Share and Debug in the menu with share_note permission', async () => {

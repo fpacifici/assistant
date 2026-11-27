@@ -36,6 +36,11 @@ export class ServerRegistry {
     }
   }
 
+  /** Drop the block's mapping without deleting its node on the next save. */
+  forget(blockId: string): void {
+    this.map.delete(blockId);
+  }
+
   consumeDeletedIds(): string[] {
     const ids = this.deleted;
     this.deleted = [];

@@ -23,6 +23,7 @@ export async function executeSave(
   editor: BlockNoteEditor,
   registry: ServerRegistry,
   snapshot: Map<string, string>,
+  skip: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, string>> {
   const currentBlocks = editor.document;
   const currentIds = new Set(currentBlocks.map((b) => b.id));
@@ -42,6 +43,8 @@ export async function executeSave(
   // 3. Create new blocks and update changed blocks in document order
   for (let i = 0; i < currentBlocks.length; i++) {
     const block = currentBlocks[i];
+    // A conflicted block waits for the user; it is not saved meanwhile.
+    if (skip.has(block.id)) continue;
     const serialized = editor.blocksToMarkdownLossy([block]).trim();
     const state = registry.get(block.id);
 
@@ -92,7 +95,13 @@ export async function executeSave(
   // Return updated snapshot
   const newSnapshot = new Map<string, string>();
   for (const block of currentBlocks) {
-    newSnapshot.set(block.id, editor.blocksToMarkdownLossy([block]).trim());
+    const previous = snapshot.get(block.id);
+    if (skip.has(block.id)) {
+      // Still unsaved: keep what was saved so it still reads as edited.
+      if (previous !== undefined) newSnapshot.set(block.id, previous);
+    } else {
+      newSnapshot.set(block.id, editor.blocksToMarkdownLossy([block]).trim());
+    }
   }
   return newSnapshot;
 }

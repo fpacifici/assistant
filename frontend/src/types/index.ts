@@ -263,3 +263,31 @@ export interface PromoteResult {
   note_id: string;
   notebook_id: string;
 }
+
+/** A caret: the server node holding it and the character offset in that node. */
+export interface PresenceCursor {
+  node_id: string;
+  offset: number;
+}
+
+/** Another user who has a note open. */
+export interface ActiveUser {
+  user_id: string;
+  name: string;
+  initial: string;
+  cursor: PresenceCursor | null;
+}
+
+/** The other users active on one note of a notebook. */
+export interface NotePresence {
+  note_id: string;
+  users: ActiveUser[];
+}
+
+/** What an open note polls for; `nodes` is null when `revision` is the one asked about. */
+export interface LiveNote {
+  revision: string;
+  title: string;
+  nodes: NoteNode[] | null;
+  presence: ActiveUser[];
+}

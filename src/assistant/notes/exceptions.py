@@ -72,6 +72,14 @@ class PermissionDeniedError(NotesServiceError):
         )
 
 
+class PresenceClientTakenError(NotesServiceError):
+    """Raised when a heartbeat reuses a presence client id another user holds."""
+
+    def __init__(self, client_id: uuid.UUID) -> None:
+        self.client_id = client_id
+        super().__init__(f"Presence client {client_id} belongs to another user")
+
+
 class NodeVersionConflictError(NotesServiceError):
     """Raised when optimistic locking detects a version conflict."""
 

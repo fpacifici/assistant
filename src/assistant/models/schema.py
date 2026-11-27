@@ -582,6 +582,45 @@ class NoteImport(Base):
     note: Mapped[Note] = relationship("Note", back_populates="import_record")
 
 
+class NotePresence(Base):
+    """A browser tab that has a note open, and where its cursor is.
+
+    One row per (note, client): `client_id` is made by the tab, so two tabs
+    of one user are two rows. The tab beats every few seconds; a row whose
+    `last_seen` is older than `notes.presence.PRESENCE_TTL` is no longer
+    active and is deleted on a later heartbeat (see `notes/presence.py`).
+
+    `cursor_node_id` has no foreign key: the node may be deleted while the
+    cursor points at it, which simply hides the cursor.
+    """
+
+    __tablename__ = "note_presence"
+    __table_args__ = (
+        Index("ix_note_presence_last_seen", "last_seen"),
+        {"schema": "assistant"},
+    )
+
+    note_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    client_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )
+    user_id: Mapped[uuid_module.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assistant.users.uid", ondelete="CASCADE"),
+        nullable=False,
+    )
+    cursor_node_id: Mapped[uuid_module.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+    cursor_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class NoteSearchIndex(Base):
     """Keyword search index entry for one note (title + whole body).
 

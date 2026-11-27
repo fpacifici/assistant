@@ -39,6 +39,13 @@ vi.mock('../markdown/reconcile', () => ({ executeSave: vi.fn() }));
 let renderedBlockIds: string[] = [];
 let rerenderView: (() => void) | undefined;
 
+vi.mock('../api/presence', () => ({
+  sendHeartbeat: vi.fn().mockResolvedValue(undefined),
+  leaveNote: vi.fn(),
+  fetchLiveNote: vi.fn().mockResolvedValue({ revision: 'r1', title: 'Title', nodes: null, presence: [] }),
+  fetchNotebookPresence: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@blocknote/react', () => ({
   useCreateBlockNote: () =>
     ({
@@ -52,6 +59,7 @@ vi.mock('@blocknote/react', () => ({
       },
       blocksToMarkdownLossy: () => '',
       onChange: () => () => {},
+      onSelectionChange: () => () => {},
     }) as unknown as BlockNoteEditor,
 }));
 
