@@ -275,6 +275,8 @@ export interface ActiveUser {
   user_id: string;
   name: string;
   initial: string;
+  /** CSS colour of the avatar and cursor, the same for every viewer. */
+  color: string;
   cursor: PresenceCursor | null;
 }
 

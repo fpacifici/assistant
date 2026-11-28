@@ -225,7 +225,7 @@ describe('NoteEditor auto-save', () => {
       revision: 'r1',
       title: 'Title',
       nodes: null,
-      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', color: '#ab2b76', cursor: null }],
     });
     renderEditor();
 
@@ -281,7 +281,7 @@ describe('NoteEditor on mobile', () => {
       revision: 'r1',
       title: 'Title',
       nodes: null,
-      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+      presence: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', color: '#ab2b76', cursor: null }],
     });
     renderMobileEditor();
 

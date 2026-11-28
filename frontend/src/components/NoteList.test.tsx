@@ -60,7 +60,7 @@ describe('NoteList', () => {
     vi.mocked(fetchNotebookPresence).mockResolvedValueOnce([
       {
         note_id: 'note-2',
-        users: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', cursor: null }],
+        users: [{ user_id: 'u2', name: 'Bob Builder', initial: 'B', color: '#ab2b76', cursor: null }],
       },
     ]);
     renderNoteList();

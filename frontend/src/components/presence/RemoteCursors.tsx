@@ -6,7 +6,6 @@ import { caretBox, type CaretBox } from '../../markdown/cursors';
 import type { ServerRegistry } from '../../markdown/serverRegistry';
 import type { ActiveUser } from '../../types';
 import { Avatar } from './PresenceAvatars';
-import { avatarColor } from './style';
 
 interface Placed extends CaretBox {
   user: ActiveUser;
@@ -53,7 +52,7 @@ export default function RemoteCursors({
           key={user.user_id}
           className="remote-cursor"
           data-testid={`remote-cursor-${user.user_id}`}
-          style={{ top, left, height, borderColor: avatarColor(user.user_id) }}
+          style={{ top, left, height, borderColor: user.color }}
         >
           <Avatar user={user} />
         </div>

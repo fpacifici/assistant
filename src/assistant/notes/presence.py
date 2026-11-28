@@ -24,6 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from assistant.models.schema import Note, NotePresence, PermissionName, User
+from assistant.notes.avatar_colors import avatar_color
 from assistant.notes.exceptions import NotebookNotFoundError, PresenceClientTakenError
 from assistant.notes.permissions import (
     can_view_notebook,
@@ -59,6 +60,8 @@ class ActiveUser:
     user_id: uuid.UUID
     name: str
     initial: str
+    color: str
+    """CSS colour of the avatar and cursor, the same for every viewer."""
     cursor: Cursor | None
 
 
@@ -184,6 +187,7 @@ def _per_user(rows: Iterable[tuple[NotePresence, User]]) -> list[ActiveUser]:
                 user_id=user.uid,
                 name=_display_name(user),
                 initial=_initial(user),
+                color=avatar_color(user.uid, user.avatar_color),
                 cursor=cursor,
             ),
         )
