@@ -28,6 +28,8 @@ class ActiveUserResponse(BaseModel):
     user_id: uuid.UUID
     name: str
     initial: str
+    color: str
+    """CSS colour of the avatar and cursor, the same for every viewer."""
     cursor: CursorSchema | None
 
 

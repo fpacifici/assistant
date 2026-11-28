@@ -248,6 +248,11 @@ class User(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=UserStatus.ACTIVE.value
     )
+    avatar_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """Preferred avatar colour, a name in `notes.avatar_colors.AVATAR_COLORS`.
+
+    None picks a colour from the user id.
+    """
 
     notebooks: Mapped[list[Notebook]] = relationship(
         "Notebook",

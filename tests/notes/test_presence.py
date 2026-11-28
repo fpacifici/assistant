@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from assistant.models.schema import Note, NotePresence, RoleName, User
+from assistant.notes.avatar_colors import AVATAR_COLORS, avatar_color
 from assistant.notes.entitlements import grant_entitlement
 from assistant.notes.exceptions import (
     NotebookNotFoundError,
@@ -32,6 +33,7 @@ from assistant.notes.service import (
     create_notebook,
     update_note,
 )
+from assistant.notes.user_service import set_avatar_color
 
 NOW = datetime(2026, 11, 27, 12, 0, tzinfo=UTC)
 
@@ -218,6 +220,32 @@ def test_initial_falls_back_to_the_email(
     [user] = active_on_note(db_session, note.id, owner, now=NOW)
 
     assert user.initial == "Z"
+
+
+def test_color_is_the_preferred_one_for_every_viewer(
+    db_session: Session, note: Note, owner: User, editor: User
+) -> None:
+    set_avatar_color(db_session, editor.uid, "pink")
+    set_avatar_color(db_session, owner.uid, "blue")
+    heartbeat(db_session, note.id, editor, uuid.uuid4(), None, now=NOW)
+    heartbeat(db_session, note.id, owner, uuid.uuid4(), None, now=NOW)
+
+    [seen_by_owner] = active_on_note(db_session, note.id, owner, now=NOW)
+    [seen_by_editor] = active_on_note(db_session, note.id, editor, now=NOW)
+
+    assert seen_by_owner.color == AVATAR_COLORS["pink"]
+    assert seen_by_editor.color == AVATAR_COLORS["blue"]
+
+
+def test_color_without_a_preference_comes_from_the_palette(
+    db_session: Session, note: Note, owner: User, editor: User
+) -> None:
+    heartbeat(db_session, note.id, editor, uuid.uuid4(), None, now=NOW)
+
+    [user] = active_on_note(db_session, note.id, owner, now=NOW)
+
+    assert user.color == avatar_color(editor.uid, None)
+    assert user.color in AVATAR_COLORS.values()
 
 
 # --- active_in_notebook ---

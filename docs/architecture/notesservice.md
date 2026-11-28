@@ -231,6 +231,13 @@ It works by polling, like the reading list. There is no push channel.
   heartbeat deletes such rows. Leaving the note deletes its row. Lists show
   each other user once, with their most recent cursor, and never the caller.
   A heartbeat needs `view_note`.
+- **Colours.** Each active user comes with `color`, the CSS colour of their
+  avatar and caret, so every viewer sees a user in the same colour. It is
+  the user's `users.avatar_color` (a name from the palette in
+  `notes/avatar_colors.py`), or, when that is null, a palette colour picked
+  from their id. Admins set it with `python -m assistant.cli.set_avatar_color
+  --email <email> --color <name>` (`--list` shows the names, `--clear`
+  removes the preference).
 - **Changes.** The open note polls `GET .../live?since=<revision>` every 2 s.
   The revision is the note's `update_timestamp`, which `_touch_note` bumps on
   every change. The server compares it for difference, not order, and sends

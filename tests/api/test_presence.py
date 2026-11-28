@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from assistant.models.schema import RoleName
+from assistant.notes.avatar_colors import AVATAR_COLORS
 from assistant.notes.entitlements import grant_entitlement
 from assistant.notes.service import add_markdown_node, create_note, create_notebook
 
@@ -46,6 +47,7 @@ def test_heartbeat_shows_the_user_to_others(
     shared_note: Note,
     other_user: User,
 ) -> None:
+    other_user.avatar_color = "teal"
     node_id = str(uuid.uuid4())
     response = client.put(
         f"{_note_url(shared_note)}/presence/{uuid.uuid4()}",
@@ -60,6 +62,7 @@ def test_heartbeat_shows_the_user_to_others(
             "user_id": str(other_user.uid),
             "name": "Other User",
             "initial": "O",
+            "color": AVATAR_COLORS["teal"],
             "cursor": {"node_id": node_id, "offset": 3},
         },
     ]

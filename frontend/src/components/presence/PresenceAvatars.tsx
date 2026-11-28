@@ -1,13 +1,12 @@
 /** Round avatars with a user's first initial, for the people on a note. */
 
 import type { ActiveUser } from '../../types';
-import { avatarColor } from './style';
 
 export function Avatar({ user }: { user: ActiveUser }) {
   return (
     <span
       className="presence-avatar"
-      style={{ background: avatarColor(user.user_id) }}
+      style={{ background: user.color }}
       title={user.name}
       aria-label={user.name}
       role="img"

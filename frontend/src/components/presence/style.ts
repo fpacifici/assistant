@@ -1,11 +1,7 @@
-/** Colours and styles shared by the presence components. */
-
-/** A stable colour per user, readable behind white text in both themes. */
-export function avatarColor(userId: string): string {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) | 0;
-  return `hsl(${Math.abs(hash) % 360} 60% 42%)`;
-}
+/**
+ * Styles shared by the presence components. A user's colour comes from the
+ * server (`ActiveUser.color`) so every viewer sees the same one.
+ */
 
 /** CSS that outlines the conflicted blocks; a style rule survives re-renders of the block DOM. */
 export function conflictStyle(blockIds: Iterable<string>): string {

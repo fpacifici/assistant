@@ -101,7 +101,7 @@ it('reports a title changed after the first poll', async () => {
 });
 
 it('returns who else is on the note', async () => {
-  const bob = { user_id: 'u2', name: 'Bob', initial: 'B', cursor: null };
+  const bob = { user_id: 'u2', name: 'Bob', initial: 'B', color: '#ab2b76', cursor: null };
   mockFetch.mockResolvedValue(live({ presence: [bob] }));
   const { result } = render();
 
